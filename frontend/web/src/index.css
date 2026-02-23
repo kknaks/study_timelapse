@@ -309,6 +309,80 @@ button.active,
 }
 
 /* ============================================
+   Theme Select Page
+   ============================================ */
+
+.theme-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.theme-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.theme-card:hover {
+  border-color: var(--color-primary);
+}
+
+.theme-card.active {
+  border-color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.theme-emoji {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.theme-label {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.theme-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.color-options {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+}
+
+.color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.active {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-text);
+}
+
+/* ============================================
    Conversion Page
    ============================================ */
 

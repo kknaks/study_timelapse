@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TimerConfig } from '../../packages/shared/types';
+import type { TimerConfig, OverlayConfig } from '../../packages/shared/types';
 import { setApiBaseUrl } from '../../packages/shared/constants';
 import { SetupPage } from './pages/SetupPage';
 
@@ -9,17 +9,19 @@ if (import.meta.env.VITE_API_BASE_URL) {
 }
 
 import { RecordingPage } from './pages/RecordingPage';
+import { ThemeSelectPage } from './pages/ThemeSelectPage';
 import { ConversionPage } from './pages/ConversionPage';
 import { CompletePage } from './pages/CompletePage';
 import './index.css';
 
-type AppStep = 'setup' | 'recording' | 'conversion' | 'complete';
+type AppStep = 'setup' | 'recording' | 'themeSelect' | 'conversion' | 'complete';
 
 export default function App() {
   const [step, setStep] = useState<AppStep>('setup');
   const [config, setConfig] = useState<TimerConfig | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const [overlayConfig, setOverlayConfig] = useState<OverlayConfig | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
 
   const handleStart = (timerConfig: TimerConfig) => {
@@ -30,7 +32,19 @@ export default function App() {
   const handleRecordingComplete = (blob: Blob, elapsedSeconds: number) => {
     setVideoBlob(blob);
     setRecordingSeconds(elapsedSeconds);
+    setStep('themeSelect');
+  };
+
+  const handleThemeSelect = (config: OverlayConfig) => {
+    setOverlayConfig(config);
     setStep('conversion');
+  };
+
+  const handleThemeBack = () => {
+    // 녹화 다시 하기
+    setVideoBlob(null);
+    setRecordingSeconds(0);
+    setStep('recording');
   };
 
   const handleConversionComplete = (url: string) => {
@@ -42,6 +56,7 @@ export default function App() {
     setConfig(null);
     setVideoBlob(null);
     setRecordingSeconds(0);
+    setOverlayConfig(null);
     setDownloadUrl('');
     setStep('setup');
   };
@@ -57,6 +72,12 @@ export default function App() {
           onComplete={handleRecordingComplete}
         />
       )}
+      {step === 'themeSelect' && (
+        <ThemeSelectPage
+          onSelect={handleThemeSelect}
+          onBack={handleThemeBack}
+        />
+      )}
       {step === 'conversion' && videoBlob && config && (
         <ConversionPage
           videoBlob={videoBlob}
@@ -69,6 +90,9 @@ export default function App() {
       {step === 'complete' && (
         <CompletePage
           downloadUrl={downloadUrl}
+          overlayConfig={overlayConfig}
+          recordingSeconds={recordingSeconds}
+          outputSeconds={config?.outputSeconds ?? 60}
           onRetry={handleRetry}
         />
       )}

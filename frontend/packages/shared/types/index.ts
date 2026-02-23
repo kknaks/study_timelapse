@@ -74,6 +74,22 @@ export interface UploadResponse {
 /** 출력 비율 */
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
 
+/** 오버레이 테마 */
+export type OverlayTheme =
+  | 'stopwatch'      // 디지털 초시계
+  | 'analog-clock'   // 아날로그 시계
+  | 'progress-bar'   // 프로그레스 바
+  | 'minimal'        // 심플 텍스트
+  | 'none';          // 오버레이 없음
+
+/** 오버레이 설정 */
+export interface OverlayConfig {
+  theme: OverlayTheme;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  color: string;     // hex
+  size: 'sm' | 'md' | 'lg';
+}
+
 /** API 타임랩스 요청 */
 export interface TimelapseRequest {
   /** 업로드된 파일 ID */
