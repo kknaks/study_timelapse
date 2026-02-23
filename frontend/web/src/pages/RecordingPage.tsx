@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { TimerConfig, TimerStatus } from '@shared/types';
-import { formatTime } from '@shared/utils';
+import type { TimerConfig, TimerStatus } from '../../../packages/shared/types';
+import { formatTime } from '../../../packages/shared/utils';
 
 interface RecordingPageProps {
   config: TimerConfig;

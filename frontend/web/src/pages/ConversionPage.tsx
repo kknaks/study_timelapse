@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { UploadStatus, ConversionStatus } from '@shared/types';
-import { uploadVideo, requestTimelapse, pollUntilComplete, getDownloadUrl } from '@shared/api';
+import type { UploadStatus, ConversionStatus } from '../../../packages/shared/types';
+import { uploadVideo, requestTimelapse, pollUntilComplete, getDownloadUrl } from '../../../packages/shared/api';
 
 interface ConversionPageProps {
   videoBlob: Blob;

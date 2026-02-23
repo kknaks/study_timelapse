@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { TimerConfig } from '@shared/types';
-import { SetupPage } from '@/pages/SetupPage';
-import { RecordingPage } from '@/pages/RecordingPage';
-import { ConversionPage } from '@/pages/ConversionPage';
-import { CompletePage } from '@/pages/CompletePage';
+import type { TimerConfig } from '../../packages/shared/types';
+import { SetupPage } from './pages/SetupPage';
+import { RecordingPage } from './pages/RecordingPage';
+import { ConversionPage } from './pages/ConversionPage';
+import { CompletePage } from './pages/CompletePage';
 import './index.css';
 
 type AppStep = 'setup' | 'recording' | 'conversion' | 'complete';

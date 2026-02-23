@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { TimerConfig } from '@shared/types';
+import type { TimerConfig } from '../../../packages/shared/types';
 import {
   OUTPUT_DURATION_OPTIONS,
   DEFAULT_OUTPUT_SECONDS,
   MIN_STUDY_SECONDS,
   MAX_STUDY_SECONDS,
-} from '@shared/constants';
-import { toSeconds } from '@shared/utils';
+} from '../../../packages/shared/constants';
+import { toSeconds } from '../../../packages/shared/utils';
 
 interface SetupPageProps {
   onStart: (config: TimerConfig) => void;
