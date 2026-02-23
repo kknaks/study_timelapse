@@ -179,7 +179,13 @@ export function CompletePage({
           onPlay={handlePlay}
           onPause={handlePause}
           onTimeUpdate={handleTimeUpdate}
-          onLoadedData={() => setVideoReady(true)}
+          onLoadedData={() => {
+            setVideoReady(true);
+            if (videoRef.current && rendererRef.current) {
+              rendererRef.current.setVideoDuration(videoRef.current.duration);
+              console.log(`🎬 영상 duration: ${videoRef.current.duration}초, 원본 녹화: ${recordingSeconds}초`);
+            }
+          }}
         />
         {hasOverlay && videoReady && (
           <canvas

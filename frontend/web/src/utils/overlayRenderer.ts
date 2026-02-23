@@ -8,20 +8,28 @@ export class OverlayRenderer {
   private totalSeconds: number;
   private outputSeconds: number;
 
+  private videoDuration: number = 0;
+
   constructor(config: OverlayConfig, totalSeconds: number, outputSeconds: number) {
     this.config = config;
     this.totalSeconds = totalSeconds;
     this.outputSeconds = outputSeconds;
   }
 
+  /** 실제 타임랩스 영상 길이 설정 (video.duration) */
+  setVideoDuration(duration: number) {
+    this.videoDuration = duration;
+  }
+
   /** 현재 프레임의 경과 시간(초) 기준으로 오버레이 렌더 */
   render(ctx: CanvasRenderingContext2D, width: number, height: number, currentTime: number) {
     const { theme } = this.config;
 
-    // 타임랩스 현재 시간 → 원본 시간으로 매핑
-    // totalSeconds=0이면 currentTime 그대로 사용 (폴백)
-    const speed = this.totalSeconds > 0 ? this.totalSeconds / this.outputSeconds : 1;
-    const originalSeconds = currentTime * speed;
+    // 타임랩스 재생 시간 → 원본 녹화 시간으로 매핑
+    // currentTime(0~videoDuration) → originalSeconds(0~totalSeconds)
+    const duration = this.videoDuration > 0 ? this.videoDuration : this.outputSeconds;
+    const ratio = duration > 0 ? currentTime / duration : 0;
+    const originalSeconds = ratio * this.totalSeconds;
 
     switch (theme) {
       case 'stopwatch':
@@ -173,7 +181,8 @@ export class OverlayRenderer {
     const fontSize = this.getFontSize() * 0.6;
     const barHeight = fontSize * 0.6;
     const barWidth = Math.min(w * 0.4, 200);
-    const progress = this.totalSeconds > 0 ? Math.min(seconds / this.totalSeconds, 1) : 0;
+    const duration = this.videoDuration > 0 ? this.videoDuration : this.outputSeconds;
+    const progress = duration > 0 ? Math.min(seconds / this.totalSeconds, 1) : 0;
 
     const pos = this.getPosition(w, h, barWidth, barHeight + fontSize + 10);
 
