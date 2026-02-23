@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import v1_router
