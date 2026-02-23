@@ -153,22 +153,25 @@ class TimelapseService:
     ) -> None:
         task = task_store[task_id]
         try:
-            if total_frames <= 0:
-                total_frames = int(recording_seconds * 30)
-                logger.warning(f"[{task_id}] ffprobe failed, estimated frames={total_frames}")
+            # ── Pass 1: webm → 깨끗한 mp4 (전체 디코딩) ──
+            clean_path = output_path.replace("_timelapse.mp4", "_clean.mp4")
+            pass1_ok = await self._decode_to_mp4(task_id, input_path, clean_path)
+            if not pass1_ok:
+                task["status"] = "failed"
+                return
+
+            # clean mp4에서 정확한 프레임수/길이 다시 파악
+            if total_frames <= 0 or duration <= 0:
+                total_frames, duration = await self._probe_clean(clean_path, recording_seconds)
+                logger.info(f"[{task_id}] re-probed: frames={total_frames}, duration={duration}s")
 
             case, pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
 
-            # case2: 실제 출력 시간 업데이트
             if case == "case2":
                 actual_output = max(1, total_frames // BASE_FPS)
                 task["output_seconds"] = actual_output
 
-            # crop/scale
-            crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
-
-            # fps 필터로 프레임 샘플링 (select 대신 — webm 호환)
-            # 원본에서 뽑을 fps = 출력에 필요한 프레임수 / 원본 길이
+            # ── Pass 2: clean mp4 → 타임랩스 ──
             source_duration = duration if duration > 0 else recording_seconds
             if source_duration > 0 and case != "case2":
                 needed_frames = actual_fps * output_seconds
@@ -176,7 +179,8 @@ class TimelapseService:
             else:
                 sample_fps = BASE_FPS
 
-            # 필터 체인: fps(샘플링) → crop → setpts(리셋) → scale → pad → drawtext
+            crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
+
             filters = [f"fps={sample_fps:.4f}"]
             if crop_filter:
                 filters.append(crop_filter)
@@ -196,8 +200,7 @@ class TimelapseService:
 
             cmd = [
                 "ffmpeg", "-y",
-                "-fflags", "+genpts",
-                "-i", input_path,
+                "-i", clean_path,
                 "-vf", filter_str,
                 "-r", str(actual_fps),
                 "-an",
@@ -213,28 +216,101 @@ class TimelapseService:
                 output_path,
             ]
 
-            logger.info(f"[{task_id}] [{case}] cmd: {' '.join(cmd)}")
+            logger.info(f"[{task_id}] pass2 cmd: {' '.join(cmd)}")
 
             process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
-
             _, stderr = await process.communicate()
 
             stderr_text = stderr.decode() if stderr else ""
-            logger.info(f"[{task_id}] FFmpeg exit code: {process.returncode}")
+            logger.info(f"[{task_id}] pass2 exit: {process.returncode}")
             if stderr_text:
-                logger.info(f"[{task_id}] FFmpeg stderr (last 500): {stderr_text[-500:]}")
+                logger.info(f"[{task_id}] pass2 stderr (last 500): {stderr_text[-500:]}")
 
             if process.returncode == 0 and os.path.exists(output_path):
                 task["status"] = "completed"
                 task["progress"] = 100
             else:
                 task["status"] = "failed"
-                logger.error(f"[{task_id}] FFmpeg failed (code {process.returncode})")
+                logger.error(f"[{task_id}] pass2 failed (code {process.returncode})")
+
+            # clean 파일 정리
+            if os.path.exists(clean_path):
+                os.remove(clean_path)
 
         except Exception as e:
             task["status"] = "failed"
             logger.exception(f"[{task_id}] Conversion error: {e}")
+
+    async def _decode_to_mp4(self, task_id: str, input_path: str, output_path: str) -> bool:
+        """Pass 1: 입력(webm 등)을 깨끗한 mp4로 전체 디코딩."""
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-an",
+            output_path,
+        ]
+        logger.info(f"[{task_id}] pass1 (decode): {' '.join(cmd)}")
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            stderr_text = stderr.decode() if stderr else ""
+            logger.error(f"[{task_id}] pass1 failed: {stderr_text[-500:]}")
+            return False
+
+        logger.info(f"[{task_id}] pass1 done: {output_path}")
+        return True
+
+    async def _probe_clean(self, file_path: str, fallback_seconds: float) -> tuple[int, float]:
+        """깨끗한 mp4에서 프레임수/길이 파악."""
+        import json
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=nb_frames,duration",
+            "-show_entries", "format=duration",
+            "-of", "json",
+            file_path,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            out, _ = await proc.communicate()
+            data = json.loads(out.decode())
+
+            streams = data.get("streams", [])
+            total_frames = 0
+            duration = 0.0
+
+            if streams:
+                val = streams[0].get("nb_frames", "0")
+                if val and val != "N/A":
+                    total_frames = int(val)
+                val = streams[0].get("duration", "N/A")
+                if val and val != "N/A":
+                    duration = float(val)
+
+            if duration <= 0:
+                val = data.get("format", {}).get("duration", "N/A")
+                if val and val != "N/A":
+                    duration = float(val)
+
+            if duration <= 0:
+                duration = fallback_seconds
+
+            if total_frames <= 0 and duration > 0:
+                total_frames = int(duration * 30)
+
+            return total_frames, duration
+        except Exception:
+            return int(fallback_seconds * 30), fallback_seconds
