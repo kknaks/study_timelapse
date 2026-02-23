@@ -29,7 +29,7 @@ class TimelapseService:
         file_id: str,
         output_seconds: int,
         recording_seconds: float,
-        aspect_ratio: str = "16:9",
+        aspect_ratio: str = "9:16",
     ) -> str:
         file_info = self.upload_service.get_file(file_id)
         if not file_info:
@@ -149,7 +149,7 @@ class TimelapseService:
         total_frames: int,
         duration: float,
         recording_seconds: float,
-        aspect_ratio: str = "16:9",
+        aspect_ratio: str = "9:16",
     ) -> None:
         task = task_store[task_id]
         try:

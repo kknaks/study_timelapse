@@ -25,7 +25,7 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     file_id = request.get("fileId")
     output_seconds = request.get("outputSeconds")
     recording_seconds = request.get("recordingSeconds")
-    aspect_ratio = request.get("aspectRatio", "16:9")
+    aspect_ratio = request.get("aspectRatio", "9:16")
 
     if not file_id or output_seconds not in (30, 60, 90):
         raise HTTPException(status_code=400, detail="Invalid request: outputSeconds must be 30, 60, or 90")
@@ -85,3 +85,24 @@ async def download_timelapse(task_id: str) -> FileResponse:
         media_type="video/mp4",
         filename="timelapse.mp4",
     )
+
+
+@router.post(
+    "/timelapse/{task_id}/save",
+    summary="타임랩스 메타데이터 저장",
+    status_code=200,
+)
+async def save_timelapse_meta(task_id: str, request: dict) -> dict:
+    """프론트에서 오버레이 합성 후 테마 메타데이터를 기록한다."""
+    task = timelapse_service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # 메타데이터 저장 (현재 in-memory, 추후 DB)
+    overlay = request.get("overlay", {})
+    composited = request.get("composited", False)
+
+    task["overlay"] = overlay
+    task["composited"] = composited
+
+    return {"success": True}
