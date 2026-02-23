@@ -4,7 +4,7 @@ import { formatTime } from '../../../packages/shared/utils';
 
 interface RecordingPageProps {
   config: TimerConfig;
-  onComplete: (blob: Blob) => void;
+  onComplete: (blob: Blob, elapsedSeconds: number) => void;
 }
 
 export function RecordingPage({ config, onComplete }: RecordingPageProps) {
@@ -14,6 +14,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const intervalRef = useRef<number | null>(null);
+  const elapsedRef = useRef(0);
 
   const remaining = Math.max(0, config.durationSeconds - elapsed);
 
@@ -65,6 +66,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     intervalRef.current = window.setInterval(() => {
       setElapsed((prev) => {
         const next = prev + 1;
+        elapsedRef.current = next;
         if (next >= config.durationSeconds) {
           handleStop();
         }
@@ -86,7 +88,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
       recorder.stop();
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        onComplete(blob);
+        onComplete(blob, elapsedRef.current);
       };
     }
   }, [onComplete]);

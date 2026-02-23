@@ -75,6 +75,8 @@ export interface TimelapseRequest {
   fileId: string;
   /** 목표 출력 시간 (초) */
   outputSeconds: number;
+  /** 실제 녹화 시간 (초) — 프론트 타이머 기준 */
+  recordingSeconds: number;
 }
 
 /** API 타임랩스 상태 응답 */

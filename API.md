@@ -96,7 +96,8 @@ file: recording.webm (binary)
 ```json
 {
   "fileId": "abc123-def456",
-  "outputSeconds": 60
+  "outputSeconds": 60,
+  "recordingSeconds": 7200
 }
 ```
 
@@ -104,6 +105,7 @@ file: recording.webm (binary)
 |------|------|------|------|
 | `fileId` | string | O | 업로드 API에서 받은 파일 ID |
 | `outputSeconds` | number | O | 목표 출력 시간 (30, 60, 90초) |
+| `recordingSeconds` | number | O | 실제 녹화 시간 (초) — 프론트 타이머 기준 |
 
 **Response — 202 Accepted**
 
@@ -127,7 +129,8 @@ file: recording.webm (binary)
 
 **비즈니스 규칙**
 - `outputSeconds`는 30, 60, 90 중 하나
-- 배속 = 원본 길이 / outputSeconds (자동 계산)
+- 배속 = `recordingSeconds` / `outputSeconds` (백엔드에서 계산)
+- `recordingSeconds`는 프론트 타이머 기준 (ffprobe 불필요 — WebM duration 메타데이터 이슈 회피)
 - 변환은 비동기 처리 (FFmpeg 백그라운드 실행)
 
 ---
@@ -231,7 +234,8 @@ interface UploadResponse {
 // 타임랩스 요청
 interface TimelapseRequest {
   fileId: string;
-  outputSeconds: number;  // 30 | 60 | 90
+  outputSeconds: number;      // 30 | 60 | 90
+  recordingSeconds: number;   // 프론트 타이머 기준 실제 녹화 시간
 }
 
 // 타임랩스 상태 응답

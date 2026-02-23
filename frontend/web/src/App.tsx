@@ -19,6 +19,7 @@ export default function App() {
   const [step, setStep] = useState<AppStep>('setup');
   const [config, setConfig] = useState<TimerConfig | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
 
   const handleStart = (timerConfig: TimerConfig) => {
@@ -26,8 +27,9 @@ export default function App() {
     setStep('recording');
   };
 
-  const handleRecordingComplete = (blob: Blob) => {
+  const handleRecordingComplete = (blob: Blob, elapsedSeconds: number) => {
     setVideoBlob(blob);
+    setRecordingSeconds(elapsedSeconds);
     setStep('conversion');
   };
 
@@ -39,6 +41,7 @@ export default function App() {
   const handleRetry = () => {
     setConfig(null);
     setVideoBlob(null);
+    setRecordingSeconds(0);
     setDownloadUrl('');
     setStep('setup');
   };
@@ -58,6 +61,7 @@ export default function App() {
         <ConversionPage
           videoBlob={videoBlob}
           outputSeconds={config.outputSeconds}
+          recordingSeconds={recordingSeconds}
           onComplete={handleConversionComplete}
         />
       )}

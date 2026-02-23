@@ -5,10 +5,11 @@ import { uploadVideo, requestTimelapse, pollUntilComplete, getDownloadUrl } from
 interface ConversionPageProps {
   videoBlob: Blob;
   outputSeconds: number;
+  recordingSeconds: number;
   onComplete: (downloadUrl: string) => void;
 }
 
-export function ConversionPage({ videoBlob, outputSeconds, onComplete }: ConversionPageProps) {
+export function ConversionPage({ videoBlob, outputSeconds, recordingSeconds, onComplete }: ConversionPageProps) {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [conversionStatus, setConversionStatus] = useState<ConversionStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -25,7 +26,7 @@ export function ConversionPage({ videoBlob, outputSeconds, onComplete }: Convers
 
         // 2. 변환 요청
         setConversionStatus('processing');
-        const { taskId } = await requestTimelapse({ fileId, outputSeconds });
+        const { taskId } = await requestTimelapse({ fileId, outputSeconds, recordingSeconds });
 
         // 3. 변환 완료 대기
         const result = await pollUntilComplete(taskId, (p) => setConversionProgress(p));
@@ -44,7 +45,7 @@ export function ConversionPage({ videoBlob, outputSeconds, onComplete }: Convers
     }
 
     process();
-  }, [videoBlob, outputSeconds, onComplete]);
+  }, [videoBlob, outputSeconds, recordingSeconds, onComplete]);
 
   return (
     <div className="page conversion-page">
