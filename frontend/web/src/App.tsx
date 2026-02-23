@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import type { TimerConfig } from '../../packages/shared/types';
+import { setApiBaseUrl } from '../../packages/shared/constants';
 import { SetupPage } from './pages/SetupPage';
+
+// .env에서 API URL 로드
+if (import.meta.env.VITE_API_BASE_URL) {
+  setApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+}
+
 import { RecordingPage } from './pages/RecordingPage';
 import { ConversionPage } from './pages/ConversionPage';
 import { CompletePage } from './pages/CompletePage';
