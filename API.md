@@ -41,7 +41,7 @@
 | 항목 | 값 |
 |------|---|
 | Content-Type | `multipart/form-data` |
-| Body | `file`: 영상 파일 (webm) |
+| Body | `file`: 영상 파일 (webm, mov, mp4) |
 
 ```
 POST /api/upload
@@ -49,6 +49,17 @@ Content-Type: multipart/form-data
 
 file: recording.webm (binary)
 ```
+
+**지원 입력 포맷**
+
+| 플랫폼 | 확장자 | 코덱 | MIME Type |
+|--------|--------|------|-----------|
+| 웹 (Chrome) | `.webm` | VP9 | `video/webm` |
+| 웹 (Safari) | `.mp4` | H.264 | `video/mp4` |
+| iOS (React Native) | `.mov` | H.264 | `video/quicktime` |
+| Android (React Native) | `.mp4` | H.264 | `video/mp4` |
+
+> 백엔드는 확장자/MIME 기반으로 입력 포맷을 판별하되, FFmpeg가 자동 디코딩하므로 별도 분기 처리 없이 동일 파이프라인으로 처리 가능. 출력은 항상 **MP4 (H.264)**로 통일.
 
 **Response — 200 OK**
 
@@ -68,7 +79,7 @@ file: recording.webm (binary)
 
 | 상태 코드 | 설명 |
 |----------|------|
-| 400 | 파일 누락 또는 잘못된 형식 |
+| 400 | 파일 누락 또는 지원하지 않는 형식 (webm, mp4, mov만 허용) |
 | 413 | 파일 크기 초과 |
 | 500 | 서버 저장 오류 |
 
@@ -239,7 +250,7 @@ interface TimelapseStatusResponse {
 | 항목 | 값 |
 |------|---|
 | 최대 업로드 파일 크기 | TBD (권장: 500MB~2GB) |
-| 영상 포맷 (입력) | WebM (VP9 코덱) |
+| 영상 포맷 (입력) | WebM (VP9), MP4 (H.264), MOV (H.264) |
 | 영상 포맷 (출력) | MP4 (H.264) |
 | 최소 공부 시간 | 60초 (1분) |
 | 최대 공부 시간 | 43,200초 (12시간) |
