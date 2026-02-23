@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import uuid
@@ -22,7 +21,7 @@ class TimelapseService:
     def __init__(self, upload_service: UploadService) -> None:
         self.upload_service = upload_service
 
-    async def create_task(self, file_id: str, output_seconds: int) -> str:
+    async def create_task(self, file_id: str, output_seconds: int, recording_seconds: float) -> str:
         """변환 태스크를 생성하고 백그라운드에서 FFmpeg 실행."""
         file_info = self.upload_service.get_file(file_id)
         if not file_info:
@@ -35,14 +34,14 @@ class TimelapseService:
             "task_id": task_id,
             "file_id": file_id,
             "output_seconds": output_seconds,
+            "recording_seconds": recording_seconds,
             "status": "processing",
             "progress": 0,
             "output_path": output_path,
         }
 
-        # 백그라운드에서 FFmpeg 변환 실행
         asyncio.create_task(
-            self._run_ffmpeg(task_id, file_info["file_path"], output_path, output_seconds)
+            self._run_ffmpeg(task_id, file_info["file_path"], output_path, output_seconds, recording_seconds)
         )
 
         return task_id
@@ -51,28 +50,21 @@ class TimelapseService:
         return task_store.get(task_id)
 
     async def _run_ffmpeg(
-        self, task_id: str, input_path: str, output_path: str, output_seconds: int
+        self,
+        task_id: str,
+        input_path: str,
+        output_path: str,
+        output_seconds: int,
+        recording_seconds: float,
     ) -> None:
         """FFmpeg로 타임랩스 변환."""
         task = task_store[task_id]
         try:
-            logger.info(f"[{task_id}] Starting FFmpeg conversion: {input_path}")
-
-            # 원본 영상 길이 조회
-            duration = await self._get_duration(input_path)
-            logger.info(f"[{task_id}] Input duration: {duration}s")
-
-            if duration <= 0:
-                logger.error(f"[{task_id}] Could not determine video duration")
-                # duration을 못 구하면 기본 배속 사용
-                speed_factor = 10.0
-            else:
-                speed_factor = duration / output_seconds
-
-            logger.info(f"[{task_id}] Speed factor: {speed_factor}x")
+            # 배속 계산: 프론트에서 받은 녹화 시간 사용
+            speed_factor = recording_seconds / output_seconds
+            logger.info(f"[{task_id}] recording={recording_seconds}s, output={output_seconds}s, speed={speed_factor}x")
 
             # FFmpeg 타임랩스 변환 + 경과시간 오버레이
-            # setpts로 배속, drawtext로 경과시간 표시
             filter_str = (
                 f"setpts=PTS/{speed_factor},"
                 f"drawtext=text='%{{pts\\:hms}}':"
@@ -98,7 +90,7 @@ class TimelapseService:
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await process.communicate()
+            _, stderr = await process.communicate()
 
             stderr_text = stderr.decode() if stderr else ""
             logger.info(f"[{task_id}] FFmpeg exit code: {process.returncode}")
@@ -116,87 +108,3 @@ class TimelapseService:
         except Exception as e:
             task["status"] = "failed"
             logger.exception(f"[{task_id}] Conversion error: {e}")
-
-    async def _get_duration(self, file_path: str) -> float:
-        """영상 길이(초) 조회. 여러 방법 시도."""
-        # 방법 1: format.duration
-        duration = await self._probe_format_duration(file_path)
-        if duration > 0:
-            return duration
-
-        # 방법 2: 스트림 디코딩으로 실제 길이 측정 (webm 등 duration 메타데이터 없는 경우)
-        logger.info(f"format.duration failed, trying stream decode for {file_path}")
-        duration = await self._probe_stream_duration(file_path)
-        if duration > 0:
-            return duration
-
-        logger.error(f"Could not determine duration for {file_path}")
-        return 0
-
-    async def _probe_format_duration(self, file_path: str) -> float:
-        """ffprobe format.duration으로 조회."""
-        cmd = [
-            "ffprobe", "-v", "quiet",
-            "-print_format", "json",
-            "-show_format",
-            file_path,
-        ]
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await process.communicate()
-            stdout_text = stdout.decode() if stdout else ""
-            if not stdout_text.strip():
-                return 0
-            data = json.loads(stdout_text)
-            return float(data.get("format", {}).get("duration", 0))
-        except Exception:
-            return 0
-
-    async def _probe_stream_duration(self, file_path: str) -> float:
-        """ffprobe로 스트림을 읽어 실제 길이 측정 (webm 대응)."""
-        cmd = [
-            "ffprobe", "-v", "quiet",
-            "-select_streams", "v:0",
-            "-count_packets",
-            "-show_entries", "stream=duration,nb_read_packets,r_frame_rate",
-            "-print_format", "json",
-            file_path,
-        ]
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await process.communicate()
-            stdout_text = stdout.decode() if stdout else ""
-            logger.info(f"stream probe output: {stdout_text[:500]}")
-            if not stdout_text.strip():
-                return 0
-
-            data = json.loads(stdout_text)
-            streams = data.get("streams", [])
-            if not streams:
-                return 0
-
-            stream = streams[0]
-
-            # stream.duration이 있으면 사용
-            dur = float(stream.get("duration", 0))
-            if dur > 0:
-                return dur
-
-            # nb_read_packets + r_frame_rate로 계산
-            packets = int(stream.get("nb_read_packets", 0))
-            fps_str = stream.get("r_frame_rate", "30/1")
-            num, den = fps_str.split("/")
-            fps = float(num) / float(den) if float(den) != 0 else 30.0
-            if packets > 0 and fps > 0:
-                estimated = packets / fps
-                logger.info(f"Estimated duration from packets: {packets}/{fps} = {estimated}s")
-                return estimated
-
-            return 0
-        except Exception as e:
-            logger.exception(f"stream probe error: {e}")
-            return 0

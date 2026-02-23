@@ -32,7 +32,7 @@ class TestCreateTimelapse:
         # When
         response = await client.post("/api/timelapse", json={
             "fileId": file_id,
-            "outputSeconds": 60,
+            "outputSeconds": 60, "recordingSeconds": 120,
         })
 
         # Then
@@ -73,7 +73,7 @@ class TestCreateTimelapse:
         # When
         response = await client.post("/api/timelapse", json={
             "fileId": "nonexistent-id",
-            "outputSeconds": 60,
+            "outputSeconds": 60, "recordingSeconds": 120,
         })
 
         # Then
@@ -105,7 +105,7 @@ class TestGetTimelapseStatus:
 
         task_res = await client.post("/api/timelapse", json={
             "fileId": file_id,
-            "outputSeconds": 60,
+            "outputSeconds": 60, "recordingSeconds": 120,
         })
         task_id = task_res.json()["taskId"]
 
@@ -173,7 +173,7 @@ class TestDownloadTimelapse:
 
         task_res = await client.post("/api/timelapse", json={
             "fileId": file_id,
-            "outputSeconds": 60,
+            "outputSeconds": 60, "recordingSeconds": 120,
         })
         task_id = task_res.json()["taskId"]
 

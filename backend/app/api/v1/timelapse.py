@@ -24,12 +24,16 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     """업로드된 영상을 타임랩스로 변환하는 작업을 시작한다."""
     file_id = request.get("fileId")
     output_seconds = request.get("outputSeconds")
+    recording_seconds = request.get("recordingSeconds")
 
     if not file_id or output_seconds not in (30, 60, 90):
         raise HTTPException(status_code=400, detail="Invalid request: outputSeconds must be 30, 60, or 90")
 
+    if not recording_seconds or recording_seconds <= 0:
+        raise HTTPException(status_code=400, detail="Invalid request: recordingSeconds is required")
+
     try:
-        task_id = await timelapse_service.create_task(file_id, output_seconds)
+        task_id = await timelapse_service.create_task(file_id, output_seconds, recording_seconds)
         return TimelapseCreateResponse(taskId=task_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
