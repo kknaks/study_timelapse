@@ -229,13 +229,28 @@ button.active,
    Recording Page
    ============================================ */
 
+.recording-page {
+  height: 100vh;
+  max-height: 100dvh;
+  padding: var(--space-sm) var(--space-md);
+  gap: var(--space-sm);
+  justify-content: center;
+  overflow: hidden;
+}
+
+.recording-page h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
 .camera-preview {
   width: 100%;
-  max-width: 400px;
+  max-width: 240px;
+  max-height: 45vh;
   /* aspect-ratio는 인라인 스타일로 동적 적용 */
   border-radius: var(--radius-lg);
   background: #000;
-  object-fit: cover; /* 가로 영상을 선택한 비율로 중앙 크롭 */
+  object-fit: cover;
   border: 2px solid var(--color-border);
 }
 
@@ -249,11 +264,11 @@ button.active,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 2px;
 }
 
 .timer-display .label {
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -261,7 +276,7 @@ button.active,
 
 .timer-display .time {
   font-family: var(--font-mono);
-  font-size: 2.4rem;
+  font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: 2px;
 }
