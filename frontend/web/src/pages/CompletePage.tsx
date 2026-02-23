@@ -23,36 +23,39 @@ export function CompletePage({
   const rendererRef = useRef<OverlayRenderer | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [videoReady, setVideoReady] = useState(false);
 
   const hasOverlay = overlayConfig && overlayConfig.theme !== 'none';
 
-  // 렌더러 초기화
   useEffect(() => {
     if (hasOverlay && overlayConfig) {
       rendererRef.current = new OverlayRenderer(overlayConfig, recordingSeconds, outputSeconds);
     }
   }, [overlayConfig, recordingSeconds, outputSeconds, hasOverlay]);
 
-  // 비디오 위에 Canvas 오버레이 실시간 렌더
+  // Canvas 오버레이 렌더 루프
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const renderer = rendererRef.current;
 
-    if (!video || !canvas || !renderer || video.paused || video.ended) return;
+    if (!video || !canvas || !renderer) return;
+    if (video.paused && video.currentTime === 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Canvas를 비디오 위에 정확히 겹치기 위해 사이즈 맞춤
+    const rect = video.getBoundingClientRect();
+    canvas.width = video.videoWidth || rect.width;
+    canvas.height = video.videoHeight || rect.height;
 
-    // 비디오 프레임 그리기
-    ctx.drawImage(video, 0, 0);
-    // 오버레이 그리기
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     renderer.render(ctx, canvas.width, canvas.height, video.currentTime);
 
-    animFrameRef.current = requestAnimationFrame(renderFrame);
+    if (!video.paused && !video.ended) {
+      animFrameRef.current = requestAnimationFrame(renderFrame);
+    }
   }, []);
 
   const handlePlay = () => {
@@ -63,35 +66,40 @@ export function CompletePage({
 
   const handlePause = () => {
     cancelAnimationFrame(animFrameRef.current);
+    // 마지막 프레임 유지
+    renderFrame();
+  };
+
+  const handleTimeUpdate = () => {
+    if (hasOverlay && videoRef.current?.paused) {
+      renderFrame();
+    }
   };
 
   useEffect(() => {
     return () => cancelAnimationFrame(animFrameRef.current);
   }, []);
 
-  // 합성 영상 내보내기 (Canvas → MediaRecorder → Blob)
+  // 합성 영상 내보내기
   const handleExport = async () => {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
     const renderer = rendererRef.current;
 
-    if (!video || !canvas || !renderer) return;
+    if (!video || !renderer) return;
 
     setIsExporting(true);
     setExportProgress(0);
 
-    // 비디오를 처음부터 재생
+    // 오프스크린 캔버스로 합성
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = video.videoWidth;
+    offCanvas.height = video.videoHeight;
+    const ctx = offCanvas.getContext('2d')!;
+
     video.currentTime = 0;
     video.muted = true;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Canvas에서 MediaRecorder로 녹화
-    const stream = canvas.captureStream(30); // 30fps
+    const stream = offCanvas.captureStream(30);
     const chunks: Blob[] = [];
 
     const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
@@ -107,54 +115,48 @@ export function CompletePage({
       if (e.data.size > 0) chunks.push(e.data);
     };
 
-    return new Promise<void>((resolve) => {
-      recorder.onstop = () => {
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        const blob = new Blob(chunks, { type: mimeType });
-        // 다운로드 트리거
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `study-timelapse.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setIsExporting(false);
-        resolve();
-      };
+    recorder.onstop = () => {
+      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `study-timelapse.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setIsExporting(false);
+    };
 
-      recorder.start(100);
+    recorder.start(100);
 
-      // 재생하면서 프레임 캡처
-      const captureFrame = () => {
-        if (video.ended || video.paused) {
-          recorder.stop();
-          return;
-        }
-
-        ctx.drawImage(video, 0, 0);
-        renderer.render(ctx, canvas.width, canvas.height, video.currentTime);
-
-        setExportProgress(Math.round((video.currentTime / video.duration) * 100));
-        requestAnimationFrame(captureFrame);
-      };
-
-      video.play().then(() => {
-        captureFrame();
-      });
-
-      video.onended = () => {
+    const captureFrame = () => {
+      if (video.ended || video.paused) {
         setTimeout(() => recorder.stop(), 200);
-      };
-    });
+        return;
+      }
+
+      ctx.drawImage(video, 0, 0);
+      renderer.render(ctx, offCanvas.width, offCanvas.height, video.currentTime);
+      setExportProgress(Math.round((video.currentTime / video.duration) * 100));
+      requestAnimationFrame(captureFrame);
+    };
+
+    await video.play();
+    captureFrame();
+
+    video.onended = () => {
+      setTimeout(() => recorder.stop(), 200);
+    };
   };
 
-  // 오버레이 없으면 기존 방식
   const handleDirectDownload = () => {
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = 'study-timelapse.mp4';
     a.click();
   };
+
+  const mins = Math.floor(recordingSeconds / 60);
 
   return (
     <div className="page complete-page">
@@ -173,11 +175,13 @@ export function CompletePage({
           controls
           playsInline
           crossOrigin="anonymous"
-          className={`timelapse-preview ${hasOverlay ? 'hidden-video' : ''}`}
+          className="timelapse-preview"
           onPlay={handlePlay}
           onPause={handlePause}
+          onTimeUpdate={handleTimeUpdate}
+          onLoadedData={() => setVideoReady(true)}
         />
-        {hasOverlay && (
+        {hasOverlay && videoReady && (
           <canvas
             ref={canvasRef}
             className="overlay-canvas"
@@ -185,9 +189,9 @@ export function CompletePage({
         )}
       </div>
 
-      <p>
-        {recordingSeconds > 0 && `${Math.floor(recordingSeconds / 60)}분 녹화 → ${outputSeconds}초 타임랩스`}
-      </p>
+      {mins > 0 && (
+        <p>{mins}분 녹화 → {outputSeconds}초 타임랩스</p>
+      )}
 
       {isExporting && (
         <div className="export-progress">
@@ -202,7 +206,7 @@ export function CompletePage({
         {hasOverlay ? (
           <button
             onClick={handleExport}
-            disabled={isExporting}
+            disabled={isExporting || !videoReady}
             className="download-button"
           >
             {isExporting ? '합성 중...' : '📥 오버레이 합성 다운로드'}
