@@ -12,15 +12,10 @@ from app.services.upload_service import UploadService
 
 logger = logging.getLogger(__name__)
 
-# In-memory 태스크 저장소
 task_store: dict[str, dict] = {}
 
-OUTPUT_FPS = 30
-
-# 자연스러운 타임랩스를 위한 배속 범위
-# pick_every가 이 범위 안에 있어야 자연스러움
-MIN_PICK_EVERY = 2    # 최소 2프레임당 1개 (너무 원본에 가까우면 타임랩스 느낌 없음)
-MAX_PICK_EVERY = 60   # 최대 60프레임당 1개 (2초에 1프레임, 이 이상이면 뚝뚝 끊김)
+BASE_FPS = 30
+MAX_PICK_EVERY = 60  # 이 이상이면 뚝뚝 끊김 → fps 올려서 보상
 
 
 class TimelapseService:
@@ -36,7 +31,6 @@ class TimelapseService:
         recording_seconds: float,
         aspect_ratio: str = "16:9",
     ) -> str:
-        """변환 태스크를 생성하고 백그라운드에서 FFmpeg 실행."""
         file_info = self.upload_service.get_file(file_id)
         if not file_info:
             raise FileNotFoundError(f"File {file_id} not found")
@@ -62,7 +56,7 @@ class TimelapseService:
 
         asyncio.create_task(
             self._run_ffmpeg(task_id, file_info["file_path"], output_path,
-                             output_seconds, total_frames, duration, aspect_ratio)
+                             output_seconds, total_frames, recording_seconds, aspect_ratio)
         )
 
         return task_id
@@ -74,50 +68,52 @@ class TimelapseService:
 
     def _calc_timelapse_params(
         self, total_frames: int, output_seconds: int
-    ) -> tuple[int, int]:
+    ) -> tuple[str, int, int]:
         """
-        자연스러운 타임랩스를 위한 (pick_every, output_fps) 계산.
+        Returns (case, pick_every, output_fps)
 
-        output_seconds는 유저가 정한 값 그대로 유지.
-        pick_every가 MAX_PICK_EVERY를 넘으면 output_fps를 올려서 보상.
-
-        pick_every = total_frames / output_frames
-        output_frames = output_fps * output_seconds
+        case1: 정상 — pick_every <= MAX, 30fps로 충분
+        case2: 프레임 부족 — 전부 사용, 짧게 출력
+        case3: 프레임 과다 — pick_every 고정, fps 올려서 빽빽하게
         """
-        if total_frames <= 0:
-            return 1, OUTPUT_FPS
+        needed_frames = BASE_FPS * output_seconds  # 30fps * 30s = 900
 
-        # 기본 30fps로 계산
-        output_frames = OUTPUT_FPS * output_seconds
-        pick_every = math.floor(total_frames / output_frames) if output_frames > 0 else 1
+        # case2: 프레임 부족 → 전부 사용
+        if total_frames <= needed_frames:
+            # 있는 프레임 전부 30fps로 출력 → 자연스럽게 짧은 영상
+            actual_seconds = max(1, total_frames // BASE_FPS)
+            logger.info(
+                f"case2: frames={total_frames} <= needed={needed_frames}, "
+                f"output={actual_seconds}s (all frames @ {BASE_FPS}fps)"
+            )
+            return "case2", 1, BASE_FPS
 
+        pick_every = math.floor(total_frames / needed_frames)
+
+        # case1: 정상 범위
         if pick_every <= MAX_PICK_EVERY:
-            # 자연스러운 범위 → 30fps 그대로
-            return max(pick_every, 1), OUTPUT_FPS
+            logger.info(f"case1: pick_every={pick_every}, {BASE_FPS}fps → {output_seconds}s")
+            return "case1", pick_every, BASE_FPS
 
-        # pick_every가 너무 큼 → output_fps를 올려서 프레임 빽빽하게
-        # pick_every = MAX_PICK_EVERY로 고정, output_fps를 역산
-        # output_frames = total_frames / MAX_PICK_EVERY
-        # output_fps = output_frames / output_seconds
-        adjusted_output_frames = math.ceil(total_frames / MAX_PICK_EVERY)
-        adjusted_fps = math.ceil(adjusted_output_frames / output_seconds)
-        adjusted_fps = min(adjusted_fps, 240)  # 최대 240fps (대부분 플레이어 지원)
+        # case3: 프레임 과다 → fps 올려서 보상
+        # pick_every를 MAX_PICK_EVERY로 고정, fps를 역산
+        usable_frames = total_frames // MAX_PICK_EVERY
+        adjusted_fps = math.ceil(usable_frames / output_seconds)
+        adjusted_fps = min(adjusted_fps, 240)  # 플레이어 호환 최대
 
-        # adjusted_fps로 다시 pick_every 계산
-        actual_output_frames = adjusted_fps * output_seconds
-        pick_every = math.floor(total_frames / actual_output_frames)
+        # 역산한 fps로 다시 pick_every 확인
+        actual_needed = adjusted_fps * output_seconds
+        pick_every = max(1, math.floor(total_frames / actual_needed))
 
         logger.info(
-            f"high frame density: pick_every={pick_every}, "
-            f"output_fps={adjusted_fps} (was {OUTPUT_FPS})"
+            f"case3: frames={total_frames}, pick_every={pick_every}, "
+            f"{adjusted_fps}fps → {output_seconds}s"
         )
-        return max(pick_every, 1), adjusted_fps
+        return "case3", pick_every, adjusted_fps
 
     # ── 비율별 crop/scale ──
 
     def _get_crop_and_scale(self, aspect_ratio: str) -> tuple[str, str, str]:
-        """비율별 crop → scale → pad 필터 반환."""
-        # crop 값을 2의 배수로 내림 (h264 짝수 해상도 필수)
         configs = {
             "9:16": (
                 "crop=trunc(ih*9/16/2)*2:ih:(iw-trunc(ih*9/16/2)*2)/2:0",
@@ -151,36 +147,29 @@ class TimelapseService:
         output_path: str,
         output_seconds: int,
         total_frames: int,
-        duration: float,
+        recording_seconds: float,
         aspect_ratio: str = "16:9",
     ) -> None:
-        """FFmpeg로 타임랩스 변환 (균등 프레임 추출 방식)."""
         task = task_store[task_id]
         try:
-            # 출력에 필요한 프레임 수
-            output_frames = OUTPUT_FPS * output_seconds  # e.g. 30 * 30 = 900
-
             if total_frames <= 0:
-                recording_seconds = task.get("recording_seconds", 0)
                 total_frames = int(recording_seconds * 30)
                 logger.warning(f"[{task_id}] ffprobe failed, estimated frames={total_frames}")
 
-            # 타임랩스 파라미터 계산 (output_seconds 고정, fps 동적)
-            pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
+            case, pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
 
-            min_required = actual_fps * output_seconds
-            if total_frames <= min_required:
-                pick_every = 1
+            # case2: 실제 출력 시간 업데이트
+            if case == "case2":
+                actual_output = max(1, total_frames // BASE_FPS)
+                task["output_seconds"] = actual_output
+
+            # select 필터
+            if pick_every <= 1:
                 select_filter = "select='1'"
-                logger.warning(f"[{task_id}] not enough frames: {total_frames}, using all")
             else:
                 select_filter = f"select='not(mod(n\\,{pick_every}))'"
-                logger.info(
-                    f"[{task_id}] timelapse: {total_frames} frames, "
-                    f"pick every {pick_every}th, {actual_fps}fps → {output_seconds}s"
-                )
 
-            # 비율별 crop/scale
+            # crop/scale
             crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
 
             # 필터 체인: select → crop → setpts → scale → pad → drawtext
@@ -218,7 +207,7 @@ class TimelapseService:
                 output_path,
             ]
 
-            logger.info(f"[{task_id}] FFmpeg cmd: {' '.join(cmd)}")
+            logger.info(f"[{task_id}] [{case}] cmd: {' '.join(cmd)}")
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -236,7 +225,6 @@ class TimelapseService:
             if process.returncode == 0 and os.path.exists(output_path):
                 task["status"] = "completed"
                 task["progress"] = 100
-                logger.info(f"[{task_id}] Conversion completed: {output_path}")
             else:
                 task["status"] = "failed"
                 logger.error(f"[{task_id}] FFmpeg failed (code {process.returncode})")
