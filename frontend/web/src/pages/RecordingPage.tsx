@@ -41,9 +41,14 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
           videoRef.current.srcObject = stream;
         }
 
+        // 브라우저가 지원하면 mp4, 아니면 vp8 fallback
+        const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
+          ? 'video/mp4;codecs=avc1'
+          : 'video/webm;codecs=vp8';
+
         const recorder = new MediaRecorder(stream, {
-          mimeType: 'video/webm;codecs=vp9',
-          videoBitsPerSecond: 2_500_000, // 2.5Mbps — 용량 절약
+          mimeType,
+          videoBitsPerSecond: 2_500_000,
         });
 
         recorder.ondataavailable = (e) => {
@@ -96,7 +101,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         onComplete(blob, elapsedRef.current);
       };
     }

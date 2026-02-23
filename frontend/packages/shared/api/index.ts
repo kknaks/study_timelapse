@@ -20,7 +20,8 @@ export async function uploadVideo(
   onProgress?: (percentage: number) => void,
 ): Promise<UploadResponse> {
   const formData = new FormData();
-  formData.append('file', file, 'recording.webm');
+  const ext = file.type.includes('mp4') ? 'mp4' : 'webm';
+  formData.append('file', file, `recording.${ext}`);
 
   // XMLHttpRequest로 진행률 추적 (fetch는 upload progress 미지원)
   return new Promise((resolve, reject) => {
