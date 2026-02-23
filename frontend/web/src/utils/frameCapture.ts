@@ -1,4 +1,5 @@
-const TARGET_FPS = 30;
+const BASE_FPS = 30;
+const MAX_PICK_EVERY = 60;
 
 interface FrameCaptureOptions {
   /** 총 녹화 예정 시간 (초) */
@@ -7,11 +8,64 @@ interface FrameCaptureOptions {
   outputSeconds: number;
 }
 
+type TimelapseCase = 'case1' | 'case2' | 'case3';
+
+/**
+ * 타임랩스 파라미터 계산 (백엔드 로직 그대로)
+ * 
+ * case1: 정상 — pick_every <= MAX, 30fps로 충분
+ * case2: 프레임 부족 — 전부 사용, 짧게 출력
+ * case3: 프레임 과다 — pick_every 고정, fps 올려서 빽빽하게
+ */
+function calcTimelapseParams(totalFrames: number, outputSeconds: number): {
+  case_: TimelapseCase;
+  pickEvery: number;
+  outputFps: number;
+  actualOutputSeconds: number;
+} {
+  const neededFrames = BASE_FPS * outputSeconds;
+
+  // case2: 프레임 부족 → 전부 사용
+  if (totalFrames <= neededFrames) {
+    const actualSeconds = Math.max(1, Math.floor(totalFrames / BASE_FPS));
+    console.log(
+      `📊 case2: frames=${totalFrames} <= needed=${neededFrames}, ` +
+      `output=${actualSeconds}s (all frames @ ${BASE_FPS}fps)`
+    );
+    return { case_: 'case2', pickEvery: 1, outputFps: BASE_FPS, actualOutputSeconds: actualSeconds };
+  }
+
+  let pickEvery = Math.floor(totalFrames / neededFrames);
+
+  // case1: 정상 범위
+  if (pickEvery <= MAX_PICK_EVERY) {
+    console.log(`📊 case1: pickEvery=${pickEvery}, ${BASE_FPS}fps → ${outputSeconds}s`);
+    return { case_: 'case1', pickEvery, outputFps: BASE_FPS, actualOutputSeconds: outputSeconds };
+  }
+
+  // case3: 프레임 과다 → fps 올려서 보상
+  const usableFrames = Math.floor(totalFrames / MAX_PICK_EVERY);
+  let adjustedFps = Math.ceil(usableFrames / outputSeconds);
+  adjustedFps = Math.min(adjustedFps, 240);
+
+  const actualNeeded = adjustedFps * outputSeconds;
+  pickEvery = Math.max(1, Math.floor(totalFrames / actualNeeded));
+
+  console.log(
+    `📊 case3: frames=${totalFrames}, pickEvery=${pickEvery}, ` +
+    `${adjustedFps}fps → ${outputSeconds}s`
+  );
+  return { case_: 'case3', pickEvery, outputFps: adjustedFps, actualOutputSeconds: outputSeconds };
+}
+
 /**
  * 녹화 중 일정 간격으로 프레임을 캡처하는 클래스
  * 
+ * 백엔드의 3케이스 로직을 캡처 간격 계산에 적용:
+ * - case1/case3: 설정된 간격으로 캡처
+ * - case2: 가능한 많이 캡처 (프레임 부족 대비)
+ * 
  * 원본 영상을 저장하지 않고, 필요한 프레임만 캡처 → 메모리 절약
- * 녹화 종료 후 캡처된 프레임으로 바로 타임랩스 생성
  */
 export class FrameCapture {
   private canvas: HTMLCanvasElement;
@@ -19,7 +73,7 @@ export class FrameCapture {
   private frames: Blob[] = [];
   private captureInterval: number | null = null;
   private intervalMs: number;
-  private totalNeededFrames: number;
+  private outputSeconds: number;
   private videoElement: HTMLVideoElement | null = null;
 
   /** 현재까지 캡처된 프레임 수 */
@@ -35,20 +89,36 @@ export class FrameCapture {
   constructor(options: FrameCaptureOptions) {
     this.canvas = document.createElement('canvas');
     this.ctx = this.canvas.getContext('2d')!;
+    this.outputSeconds = options.outputSeconds;
 
-    // 필요한 총 프레임 수
-    this.totalNeededFrames = TARGET_FPS * options.outputSeconds;
+    // 예상 프레임 수 (30fps 기준)
+    const estimatedTotalFrames = options.durationSeconds * BASE_FPS;
 
-    // 캡처 간격 계산
-    // 예: 3600초 녹화, 60초 출력, 30fps → 1800프레임 필요 → 2초마다 캡처
-    this.intervalMs = (options.durationSeconds / this.totalNeededFrames) * 1000;
+    // 백엔드 로직으로 파라미터 계산
+    const { case_, pickEvery, outputFps } = calcTimelapseParams(
+      estimatedTotalFrames,
+      options.outputSeconds,
+    );
 
-    // 최소 간격 33ms (30fps 실시간 캡처)
-    this.intervalMs = Math.max(this.intervalMs, 1000 / TARGET_FPS);
+    // 캡처 간격 계산 (pickEvery 프레임마다 1개 = pickEvery / fps 초)
+    // case2: 최대한 많이 캡처 (33ms 간격 = 30fps)
+    if (case_ === 'case2') {
+      this.intervalMs = 1000 / BASE_FPS;
+    } else {
+      // pickEvery 프레임마다 캡처 → 초 단위로 변환
+      this.intervalMs = (pickEvery / BASE_FPS) * 1000;
+    }
+
+    // 최소 33ms, 최대 10초
+    this.intervalMs = Math.max(this.intervalMs, 1000 / BASE_FPS);
+    this.intervalMs = Math.min(this.intervalMs, 10000);
+
+    const neededFrames = outputFps * options.outputSeconds;
 
     console.log(
-      `📸 FrameCapture: ${options.durationSeconds}초 → ${options.outputSeconds}초, ` +
-      `${this.totalNeededFrames}프레임 필요, ${(this.intervalMs / 1000).toFixed(2)}초 간격`
+      `📸 FrameCapture [${case_}]: ${options.durationSeconds}초 → ${options.outputSeconds}초\n` +
+      `   pickEvery=${pickEvery}, outputFps=${outputFps}, ` +
+      `needed=${neededFrames}프레임, interval=${(this.intervalMs / 1000).toFixed(2)}초`
     );
   }
 
@@ -94,8 +164,8 @@ export class FrameCapture {
   private captureFrame() {
     if (!this.videoElement) return;
 
-    // 캔버스 크기 업데이트 (해상도 변경 대응)
-    if (this.canvas.width !== this.videoElement.videoWidth) {
+    // 캔버스 크기 업데이트
+    if (this.canvas.width !== this.videoElement.videoWidth && this.videoElement.videoWidth > 0) {
       this.canvas.width = this.videoElement.videoWidth;
       this.canvas.height = this.videoElement.videoHeight;
     }
@@ -107,13 +177,15 @@ export class FrameCapture {
         if (blob) this.frames.push(blob);
       },
       'image/jpeg',
-      0.85, // 품질 85% — 메모리 절약
+      0.85,
     );
   }
 
   /**
    * 캡처된 프레임으로 타임랩스 영상 생성
-   * Canvas에 프레임을 순서대로 그리고 MediaRecorder로 캡처
+   * 
+   * 백엔드 3케이스 로직 적용:
+   * - 프레임 수에 따라 fps와 출력 시간 자동 조절
    */
   async createTimelapse(
     onProgress?: (percent: number) => void,
@@ -121,17 +193,32 @@ export class FrameCapture {
     const totalFrames = this.frames.length;
     if (totalFrames === 0) throw new Error('캡처된 프레임이 없습니다');
 
-    console.log(`🎬 타임랩스 생성: ${totalFrames}프레임 → ${TARGET_FPS}fps`);
+    // 최종 파라미터 계산 (실제 캡처된 프레임 수 기준)
+    const { case_, pickEvery, outputFps, actualOutputSeconds } = calcTimelapseParams(
+      totalFrames,
+      this.outputSeconds,
+    );
 
-    const outputCanvas = document.createElement('canvas');
+    // pickEvery에 따라 프레임 선별
+    const selectedFrames: Blob[] = [];
+    for (let i = 0; i < totalFrames; i += pickEvery) {
+      selectedFrames.push(this.frames[i]);
+    }
+
+    console.log(
+      `🎬 타임랩스 생성 [${case_}]: ${totalFrames}프레임 중 ${selectedFrames.length}개 선택, ` +
+      `${outputFps}fps → ${actualOutputSeconds}초`
+    );
+
     // 첫 프레임으로 크기 설정
-    const firstImg = await createImageBitmap(this.frames[0]);
+    const firstImg = await createImageBitmap(selectedFrames[0]);
+    const outputCanvas = document.createElement('canvas');
     outputCanvas.width = firstImg.width;
     outputCanvas.height = firstImg.height;
     const ctx = outputCanvas.getContext('2d')!;
     firstImg.close();
 
-    const stream = outputCanvas.captureStream(TARGET_FPS);
+    const stream = outputCanvas.captureStream(outputFps);
     const chunks: Blob[] = [];
 
     const mimeType = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
@@ -159,21 +246,20 @@ export class FrameCapture {
       recorder.start(100);
 
       let frameIndex = 0;
-      const frameInterval = 1000 / TARGET_FPS;
+      const frameInterval = 1000 / outputFps;
 
       const drawNext = async () => {
-        if (frameIndex >= totalFrames) {
-          // 모든 프레임 그림 → 녹화 종료
+        if (frameIndex >= selectedFrames.length) {
           setTimeout(() => recorder.stop(), 200);
           return;
         }
 
-        const img = await createImageBitmap(this.frames[frameIndex]);
+        const img = await createImageBitmap(selectedFrames[frameIndex]);
         ctx.drawImage(img, 0, 0);
         img.close();
 
         if (onProgress) {
-          onProgress(Math.round((frameIndex / totalFrames) * 100));
+          onProgress(Math.round((frameIndex / selectedFrames.length) * 100));
         }
 
         frameIndex++;
