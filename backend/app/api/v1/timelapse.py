@@ -30,8 +30,9 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     if not file_id or output_seconds not in (30, 60, 90):
         raise HTTPException(status_code=400, detail="Invalid request: outputSeconds must be 30, 60, or 90")
 
-    if not recording_seconds or recording_seconds <= 0:
+    if recording_seconds is None:
         raise HTTPException(status_code=400, detail="Invalid request: recordingSeconds is required")
+    # recordingSeconds=0은 허용 (프론트 타이머 버그 대응, ffprobe로 보정)
 
     valid_ratios = ("9:16", "1:1", "4:5", "16:9")
     if aspect_ratio not in valid_ratios:

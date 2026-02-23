@@ -158,6 +158,12 @@ class TimelapseService:
                 total_frames, duration = await self._probe_clean(input_path, recording_seconds)
                 logger.info(f"[{task_id}] probed: frames={total_frames}, duration={duration}s")
 
+            # recordingSeconds가 0이면 ffprobe duration으로 대체
+            if recording_seconds <= 0 and duration > 0:
+                recording_seconds = duration
+                task["recording_seconds"] = recording_seconds
+                logger.warning(f"[{task_id}] recordingSeconds was 0, using duration={duration}s")
+
             case, pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
 
             if case == "case2":
