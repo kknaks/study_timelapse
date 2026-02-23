@@ -46,6 +46,8 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
           ? 'video/mp4;codecs=avc1'
           : 'video/webm;codecs=vp8';
 
+        console.log(`📹 녹화 포맷: ${mimeType}`);
+
         const recorder = new MediaRecorder(stream, {
           mimeType,
           videoBitsPerSecond: 2_500_000,
