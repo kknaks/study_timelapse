@@ -71,13 +71,15 @@ class TimelapseService:
 
             logger.info(f"[{task_id}] target_input_fps={target_input_fps}, output_fps={output_fps}")
 
-            # 2-pass: fps로 프레임 샘플링 → setpts로 타임라인 리셋 → drawtext 오버레이
+            # fps 샘플링 → 인스타 릴스 해상도(1080x1920) → 경과시간 오버레이
             filter_str = (
                 f"fps={target_input_fps},"
                 f"setpts=N/{output_fps}/TB,"
+                f"scale=1080:1920:force_original_aspect_ratio=decrease,"
+                f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,"
                 f"drawtext=text='%{{pts\\:hms}}':"
-                f"fontsize=36:fontcolor=white:"
-                f"x=10:y=10:box=1:boxcolor=black@0.5:boxborderw=5"
+                f"fontsize=48:fontcolor=white:"
+                f"x=20:y=20:box=1:boxcolor=black@0.5:boxborderw=8"
             )
 
             cmd = [
@@ -87,9 +89,12 @@ class TimelapseService:
                 "-r", str(output_fps),
                 "-an",
                 "-c:v", "libx264",
-                "-profile:v", "baseline",
-                "-level", "3.0",
+                "-profile:v", "high",
+                "-level", "4.1",
                 "-pix_fmt", "yuv420p",
+                "-crf", "23",
+                "-maxrate", "5M",
+                "-bufsize", "10M",
                 "-preset", "fast",
                 "-movflags", "+faststart",
                 output_path,
