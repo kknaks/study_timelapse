@@ -19,7 +19,8 @@ export class OverlayRenderer {
     const { theme } = this.config;
 
     // 타임랩스 현재 시간 → 원본 시간으로 매핑
-    const speed = this.totalSeconds / this.outputSeconds;
+    // totalSeconds=0이면 currentTime 그대로 사용 (폴백)
+    const speed = this.totalSeconds > 0 ? this.totalSeconds / this.outputSeconds : 1;
     const originalSeconds = currentTime * speed;
 
     switch (theme) {
@@ -172,7 +173,7 @@ export class OverlayRenderer {
     const fontSize = this.getFontSize() * 0.6;
     const barHeight = fontSize * 0.6;
     const barWidth = Math.min(w * 0.4, 200);
-    const progress = Math.min(seconds / this.totalSeconds, 1);
+    const progress = this.totalSeconds > 0 ? Math.min(seconds / this.totalSeconds, 1) : 0;
 
     const pos = this.getPosition(w, h, barWidth, barHeight + fontSize + 10);
 

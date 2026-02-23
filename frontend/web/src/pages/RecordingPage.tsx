@@ -110,6 +110,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
       recorder.onstop = () => {
+        console.log(`⏱️ 녹화 종료: elapsedRef=${elapsedRef.current}초`);
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
         onComplete(blob, elapsedRef.current);
       };
