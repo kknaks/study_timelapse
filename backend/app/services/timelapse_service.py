@@ -56,7 +56,7 @@ class TimelapseService:
 
         asyncio.create_task(
             self._run_ffmpeg(task_id, file_info["file_path"], output_path,
-                             output_seconds, total_frames, recording_seconds, aspect_ratio)
+                             output_seconds, total_frames, duration, recording_seconds, aspect_ratio)
         )
 
         return task_id
@@ -147,6 +147,7 @@ class TimelapseService:
         output_path: str,
         output_seconds: int,
         total_frames: int,
+        duration: float,
         recording_seconds: float,
         aspect_ratio: str = "16:9",
     ) -> None:

@@ -69,36 +69,48 @@ class UploadService:
 
     async def _probe_video(self, file_path: str) -> tuple[int, float]:
         """ffprobe로 총 프레임 수와 길이(초)를 반환한다."""
-        # 프레임 수
-        frame_cmd = [
+        # 프레임 수 + 길이를 한번에 (count_frames로 정확한 값)
+        cmd = [
             "ffprobe", "-v", "error",
             "-count_frames", "-select_streams", "v:0",
-            "-show_entries", "stream=nb_read_frames",
-            "-of", "csv=p=0",
-            file_path,
-        ]
-        # 길이
-        duration_cmd = [
-            "ffprobe", "-v", "error",
-            "-select_streams", "v:0",
+            "-show_entries", "stream=nb_read_frames,duration",
             "-show_entries", "format=duration",
-            "-of", "csv=p=0",
+            "-of", "json",
             file_path,
         ]
 
         try:
-            frame_proc = await asyncio.create_subprocess_exec(
-                *frame_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
-            frame_out, _ = await frame_proc.communicate()
+            out, _ = await proc.communicate()
 
-            duration_proc = await asyncio.create_subprocess_exec(
-                *duration_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
-            duration_out, _ = await duration_proc.communicate()
+            import json
+            data = json.loads(out.decode())
 
-            total_frames = int(frame_out.decode().strip())
-            duration = float(duration_out.decode().strip())
+            # 프레임 수
+            total_frames = 0
+            streams = data.get("streams", [])
+            if streams:
+                val = streams[0].get("nb_read_frames", "0")
+                if val and val != "N/A":
+                    total_frames = int(val)
+
+            # 길이: stream duration → format duration 순서로 시도
+            duration = 0.0
+            if streams:
+                val = streams[0].get("duration", "N/A")
+                if val and val != "N/A":
+                    duration = float(val)
+            if duration <= 0:
+                val = data.get("format", {}).get("duration", "N/A")
+                if val and val != "N/A":
+                    duration = float(val)
+
+            # webm은 duration이 N/A일 수 있음 → 프레임수로 추정
+            if duration <= 0 and total_frames > 0:
+                duration = total_frames / 30.0
+                logger.info(f"duration estimated from frames: {duration}s")
 
             return total_frames, duration
         except Exception as e:
