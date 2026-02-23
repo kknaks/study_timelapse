@@ -172,12 +172,11 @@ class TimelapseService:
             # crop/scale
             crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
 
-            # 필터 체인: select → crop → setpts → scale → pad → drawtext
-            filters = [select_filter]
+            # 필터 체인: select → setpts(리셋) → crop → scale → pad → drawtext
+            filters = [select_filter, "setpts=N/TB"]
             if crop_filter:
                 filters.append(crop_filter)
             filters.extend([
-                f"setpts=N/{actual_fps}/TB",
                 f"{scale_filter}:force_original_aspect_ratio=decrease",
                 pad_filter,
                 (
@@ -193,6 +192,7 @@ class TimelapseService:
                 "-fflags", "+genpts",
                 "-i", input_path,
                 "-vf", filter_str,
+                "-vsync", "vfr",
                 "-r", str(actual_fps),
                 "-an",
                 "-c:v", "libx264",
