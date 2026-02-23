@@ -41,10 +41,12 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
           videoRef.current.srcObject = stream;
         }
 
-        // TODO: 테스트 후 mp4 우선으로 복원
-        // 강제 webm/vp8 테스트
-        const mimeType = 'video/webm;codecs=vp8';
+        if (!MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+          alert('이 브라우저는 MP4 녹화를 지원하지 않습니다.\nChrome 최신 버전을 사용해주세요.');
+          return;
+        }
 
+        const mimeType = 'video/mp4;codecs=avc1';
         console.log(`📹 녹화 포맷: ${mimeType}`);
 
         const recorder = new MediaRecorder(stream, {
