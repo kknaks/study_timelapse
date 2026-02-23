@@ -25,6 +25,7 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     file_id = request.get("fileId")
     output_seconds = request.get("outputSeconds")
     recording_seconds = request.get("recordingSeconds")
+    aspect_ratio = request.get("aspectRatio", "16:9")
 
     if not file_id or output_seconds not in (30, 60, 90):
         raise HTTPException(status_code=400, detail="Invalid request: outputSeconds must be 30, 60, or 90")
@@ -32,8 +33,12 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     if not recording_seconds or recording_seconds <= 0:
         raise HTTPException(status_code=400, detail="Invalid request: recordingSeconds is required")
 
+    valid_ratios = ("9:16", "1:1", "4:5", "16:9")
+    if aspect_ratio not in valid_ratios:
+        raise HTTPException(status_code=400, detail=f"Invalid aspectRatio: must be one of {valid_ratios}")
+
     try:
-        task_id = await timelapse_service.create_task(file_id, output_seconds, recording_seconds)
+        task_id = await timelapse_service.create_task(file_id, output_seconds, recording_seconds, aspect_ratio)
         return TimelapseCreateResponse(taskId=task_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")

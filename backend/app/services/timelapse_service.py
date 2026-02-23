@@ -21,7 +21,7 @@ class TimelapseService:
     def __init__(self, upload_service: UploadService) -> None:
         self.upload_service = upload_service
 
-    async def create_task(self, file_id: str, output_seconds: int, recording_seconds: float) -> str:
+    async def create_task(self, file_id: str, output_seconds: int, recording_seconds: float, aspect_ratio: str = "16:9") -> str:
         """변환 태스크를 생성하고 백그라운드에서 FFmpeg 실행."""
         file_info = self.upload_service.get_file(file_id)
         if not file_info:
@@ -35,19 +35,32 @@ class TimelapseService:
             "file_id": file_id,
             "output_seconds": output_seconds,
             "recording_seconds": recording_seconds,
+            "aspect_ratio": aspect_ratio,
             "status": "processing",
             "progress": 0,
             "output_path": output_path,
         }
 
         asyncio.create_task(
-            self._run_ffmpeg(task_id, file_info["file_path"], output_path, output_seconds, recording_seconds)
+            self._run_ffmpeg(task_id, file_info["file_path"], output_path, output_seconds, recording_seconds, aspect_ratio)
         )
 
         return task_id
 
     def get_task(self, task_id: str) -> Optional[dict]:
         return task_store.get(task_id)
+
+    def _get_crop_and_scale(self, aspect_ratio: str) -> tuple[str, str, str]:
+        """비율별 crop → scale → pad 필터 반환."""
+        # 입력: 1280x720 (16:9)
+        # crop은 입력 기준 중앙 크롭, scale은 출력 해상도
+        configs = {
+            "9:16": ("crop=ih*9/16:ih:(iw-ih*9/16)/2:0", "scale=1080:1920", "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"),
+            "1:1":  ("crop=ih:ih:(iw-ih)/2:0", "scale=1080:1080", "pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black"),
+            "4:5":  ("crop=ih*4/5:ih:(iw-ih*4/5)/2:0", "scale=1080:1350", "pad=1080:1350:(ow-iw)/2:(oh-ih)/2:black"),
+            "16:9": ("", "scale=1920:1080", "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black"),
+        }
+        return configs.get(aspect_ratio, configs["16:9"])
 
     async def _run_ffmpeg(
         self,
@@ -56,31 +69,39 @@ class TimelapseService:
         output_path: str,
         output_seconds: int,
         recording_seconds: float,
+        aspect_ratio: str = "16:9",
     ) -> None:
         """FFmpeg로 타임랩스 변환."""
         task = task_store[task_id]
         try:
             # 배속 계산: 프론트에서 받은 녹화 시간 사용
             speed_factor = recording_seconds / output_seconds
-            logger.info(f"[{task_id}] recording={recording_seconds}s, output={output_seconds}s, speed={speed_factor}x")
+            logger.info(f"[{task_id}] recording={recording_seconds}s, output={output_seconds}s, speed={speed_factor}x, ratio={aspect_ratio}")
 
             # 타임랩스: fps 필터로 출력 fps 계산하여 프레임 샘플링
-            # 출력 fps = 원본 총 프레임 / (출력 시간 * 1) → 결과를 30fps로 출력
             output_fps = 30
-            target_input_fps = output_fps / speed_factor  # 원본에서 뽑을 fps
+            target_input_fps = output_fps / speed_factor
 
             logger.info(f"[{task_id}] target_input_fps={target_input_fps}, output_fps={output_fps}")
 
-            # fps 샘플링 → 인스타 릴스 해상도(1080x1920) → 경과시간 오버레이
-            filter_str = (
-                f"fps={target_input_fps},"
-                f"setpts=N/{output_fps}/TB,"
-                f"scale=1080:1920:force_original_aspect_ratio=decrease,"
-                f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,"
-                f"drawtext=text='%{{pts\\:hms}}':"
-                f"fontsize=48:fontcolor=white:"
-                f"x=20:y=20:box=1:boxcolor=black@0.5:boxborderw=8"
-            )
+            # 비율별 crop/scale 필터
+            crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
+
+            # 필터 체인 구성: fps → crop(있으면) → setpts → scale → pad → drawtext
+            filters = [f"fps={target_input_fps}"]
+            if crop_filter:
+                filters.append(crop_filter)
+            filters.extend([
+                f"setpts=N/{output_fps}/TB",
+                f"{scale_filter}:force_original_aspect_ratio=decrease",
+                pad_filter,
+                (
+                    f"drawtext=text='%{{pts\\:hms}}':"
+                    f"fontsize=48:fontcolor=white:"
+                    f"x=20:y=20:box=1:boxcolor=black@0.5:boxborderw=8"
+                ),
+            ])
+            filter_str = ",".join(filters)
 
             cmd = [
                 "ffmpeg", "-y",
