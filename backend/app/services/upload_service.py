@@ -52,7 +52,12 @@ class UploadService:
 
         logger.info(f"[{file_id}] uploaded: frames={total_frames}, duration={duration}s")
 
-        return {"fileId": file_id, "filename": saved_filename}
+        return {
+            "fileId": file_id,
+            "filename": saved_filename,
+            "totalFrames": total_frames,
+            "duration": duration,
+        }
 
     def _validate(self, file: UploadFile) -> None:
         ext = os.path.splitext(file.filename or "")[1].lower()

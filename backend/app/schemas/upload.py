@@ -8,3 +8,5 @@ class UploadResponse(BaseModel):
 
     fileId: str
     filename: str
+    totalFrames: int = 0
+    duration: float = 0.0

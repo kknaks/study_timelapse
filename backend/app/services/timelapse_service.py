@@ -112,7 +112,23 @@ class TimelapseService:
             # 출력에 필요한 프레임 수
             output_frames = OUTPUT_FPS * output_seconds  # e.g. 30 * 30 = 900
 
-            if total_frames > 0 and total_frames > output_frames:
+            if total_frames <= 0:
+                # ffprobe 실패: 프론트가 보낸 recordingSeconds로 추정
+                recording_seconds = task.get("recording_seconds", 0)
+                estimated_fps = 30
+                total_frames = int(recording_seconds * estimated_fps)
+                logger.warning(f"[{task_id}] ffprobe failed, estimated frames={total_frames}")
+
+            if total_frames <= output_frames:
+                # 프레임 부족: 타임랩스 불가 → 원본 전체를 outputSeconds에 맞춰 재생
+                # (녹화가 짧으면 슬로모션이 될 수 있지만, 최소한 깨지진 않음)
+                pick_every = 1
+                logger.warning(
+                    f"[{task_id}] not enough frames: {total_frames} <= {output_frames}, "
+                    f"using all frames (result may be shorter than {output_seconds}s)"
+                )
+                select_filter = "select='1'"
+            else:
                 # 진짜 타임랩스: N프레임마다 1프레임 추출
                 pick_every = math.floor(total_frames / output_frames)
                 select_filter = f"select='not(mod(n\\,{pick_every}))'"
@@ -121,11 +137,6 @@ class TimelapseService:
                     f"pick every {pick_every}th → ~{total_frames // pick_every} frames → "
                     f"{output_seconds}s @ {OUTPUT_FPS}fps"
                 )
-            else:
-                # fallback: ffprobe 실패 시 fps 기반 샘플링
-                fallback_fps = max(1, total_frames / output_seconds) if total_frames > 0 else OUTPUT_FPS
-                select_filter = f"fps={fallback_fps}"
-                logger.warning(f"[{task_id}] fallback mode: fps={fallback_fps}")
 
             # 비율별 crop/scale
             crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
