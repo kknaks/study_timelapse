@@ -54,10 +54,11 @@ class TimelapseService:
         """비율별 crop → scale → pad 필터 반환."""
         # 입력: 1280x720 (16:9)
         # crop은 입력 기준 중앙 크롭, scale은 출력 해상도
+        # crop 값을 2의 배수로 내림 (h264 짝수 해상도 필수)
         configs = {
-            "9:16": ("crop=ih*9/16:ih:(iw-ih*9/16)/2:0", "scale=1080:1920", "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"),
-            "1:1":  ("crop=ih:ih:(iw-ih)/2:0", "scale=1080:1080", "pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black"),
-            "4:5":  ("crop=ih*4/5:ih:(iw-ih*4/5)/2:0", "scale=1080:1350", "pad=1080:1350:(ow-iw)/2:(oh-ih)/2:black"),
+            "9:16": ("crop=trunc(ih*9/16/2)*2:ih:(iw-trunc(ih*9/16/2)*2)/2:0", "scale=1080:1920", "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"),
+            "1:1":  ("crop=trunc(ih/2)*2:trunc(ih/2)*2:(iw-trunc(ih/2)*2)/2:0", "scale=1080:1080", "pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black"),
+            "4:5":  ("crop=trunc(ih*4/5/2)*2:ih:(iw-trunc(ih*4/5/2)*2)/2:0", "scale=1080:1350", "pad=1080:1350:(ow-iw)/2:(oh-ih)/2:black"),
             "16:9": ("", "scale=1920:1080", "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black"),
         }
         return configs.get(aspect_ratio, configs["16:9"])
@@ -105,7 +106,9 @@ class TimelapseService:
 
             cmd = [
                 "ffmpeg", "-y",
+                "-fflags", "+genpts",
                 "-i", input_path,
+                "-vsync", "cfr",
                 "-vf", filter_str,
                 "-r", str(output_fps),
                 "-an",
