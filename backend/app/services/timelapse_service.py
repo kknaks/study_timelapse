@@ -17,6 +17,11 @@ task_store: dict[str, dict] = {}
 
 OUTPUT_FPS = 30
 
+# 자연스러운 타임랩스를 위한 배속 범위
+# pick_every가 이 범위 안에 있어야 자연스러움
+MIN_PICK_EVERY = 2    # 최소 2프레임당 1개 (너무 원본에 가까우면 타임랩스 느낌 없음)
+MAX_PICK_EVERY = 60   # 최대 60프레임당 1개 (2초에 1프레임, 이 이상이면 뚝뚝 끊김)
+
 
 class TimelapseService:
     """타임랩스 변환 서비스."""
@@ -64,6 +69,46 @@ class TimelapseService:
 
     def get_task(self, task_id: str) -> Optional[dict]:
         return task_store.get(task_id)
+
+    # ── 동적 출력 길이 계산 ──
+
+    def _calc_natural_output(
+        self, total_frames: int, desired_seconds: int
+    ) -> tuple[int, int]:
+        """
+        자연스러운 타임랩스가 되도록 output_seconds를 동적 조정.
+
+        pick_every = total_frames / (OUTPUT_FPS * output_seconds)
+        이 값이 MIN_PICK_EVERY ~ MAX_PICK_EVERY 범위에 들어야 자연스러움.
+
+        범위를 벗어나면 output_seconds를 조정해서 맞춤.
+        """
+        if total_frames <= 0:
+            return desired_seconds, 1
+
+        desired_output_frames = OUTPUT_FPS * desired_seconds
+        pick_every = math.floor(total_frames / desired_output_frames) if desired_output_frames > 0 else 1
+
+        if MIN_PICK_EVERY <= pick_every <= MAX_PICK_EVERY:
+            # 유저가 원한 값 그대로 OK
+            return desired_seconds, pick_every
+
+        if pick_every < MIN_PICK_EVERY:
+            # 녹화가 짧음 → output_seconds를 줄여야 함
+            # total_frames / (OUTPUT_FPS * x) = MIN_PICK_EVERY → x = total_frames / (OUTPUT_FPS * MIN_PICK_EVERY)
+            adjusted = math.floor(total_frames / (OUTPUT_FPS * MIN_PICK_EVERY))
+            adjusted = max(10, adjusted)  # 최소 10초
+            pick_every = math.floor(total_frames / (OUTPUT_FPS * adjusted)) if adjusted > 0 else 1
+            logger.info(f"adjusted output: {desired_seconds}s → {adjusted}s (recording too short)")
+            return adjusted, max(pick_every, 1)
+
+        # pick_every > MAX_PICK_EVERY → 녹화가 김 → output_seconds를 늘려야 함
+        # total_frames / (OUTPUT_FPS * x) = MAX_PICK_EVERY → x = total_frames / (OUTPUT_FPS * MAX_PICK_EVERY)
+        adjusted = math.ceil(total_frames / (OUTPUT_FPS * MAX_PICK_EVERY))
+        adjusted = min(180, adjusted)  # 최대 3분
+        pick_every = math.floor(total_frames / (OUTPUT_FPS * adjusted))
+        logger.info(f"adjusted output: {desired_seconds}s → {adjusted}s (recording too long)")
+        return adjusted, pick_every
 
     # ── 비율별 crop/scale ──
 
@@ -115,22 +160,25 @@ class TimelapseService:
             if total_frames <= 0:
                 # ffprobe 실패: 프론트가 보낸 recordingSeconds로 추정
                 recording_seconds = task.get("recording_seconds", 0)
-                estimated_fps = 30
-                total_frames = int(recording_seconds * estimated_fps)
+                total_frames = int(recording_seconds * 30)
                 logger.warning(f"[{task_id}] ffprobe failed, estimated frames={total_frames}")
 
-            if total_frames <= output_frames:
-                # 프레임 부족: 타임랩스 불가 → 원본 전체를 outputSeconds에 맞춰 재생
-                # (녹화가 짧으면 슬로모션이 될 수 있지만, 최소한 깨지진 않음)
+            # 동적 output_seconds 계산
+            # 유저가 원하는 값으로 시작하되, pick_every가 자연스러운 범위에 들도록 조정
+            output_seconds, pick_every = self._calc_natural_output(
+                total_frames, output_seconds
+            )
+            output_frames = OUTPUT_FPS * output_seconds
+            task["output_seconds"] = output_seconds  # 실제 적용된 값 업데이트
+
+            if total_frames <= OUTPUT_FPS * output_seconds:
+                # 프레임 부족: 전체 프레임 사용
                 pick_every = 1
-                logger.warning(
-                    f"[{task_id}] not enough frames: {total_frames} <= {output_frames}, "
-                    f"using all frames (result may be shorter than {output_seconds}s)"
-                )
                 select_filter = "select='1'"
+                logger.warning(
+                    f"[{task_id}] not enough frames: {total_frames}, using all"
+                )
             else:
-                # 진짜 타임랩스: N프레임마다 1프레임 추출
-                pick_every = math.floor(total_frames / output_frames)
                 select_filter = f"select='not(mod(n\\,{pick_every}))'"
                 logger.info(
                     f"[{task_id}] timelapse: {total_frames} frames, "

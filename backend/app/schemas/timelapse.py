@@ -31,4 +31,5 @@ class TimelapseStatusResponse(BaseModel):
     taskId: str
     status: str
     progress: int
+    outputSeconds: Optional[int] = None
     downloadUrl: Optional[str] = None

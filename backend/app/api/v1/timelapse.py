@@ -61,6 +61,7 @@ async def get_timelapse_status(task_id: str) -> TimelapseStatusResponse:
         taskId=task["task_id"],
         status=task["status"],
         progress=task["progress"],
+        outputSeconds=task.get("output_seconds"),
         downloadUrl=download_url,
     )
 
