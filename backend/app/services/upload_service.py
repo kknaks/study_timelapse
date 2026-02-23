@@ -12,8 +12,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_EXTENSIONS = {".webm", ".mp4", ".mov"}
-ALLOWED_MIME_TYPES = {"video/webm", "video/mp4", "video/quicktime"}
+ALLOWED_EXTENSIONS = {".mp4", ".mov"}
+ALLOWED_MIME_TYPES = {"video/mp4", "video/quicktime"}
 
 # In-memory 파일 저장소 (MVP: DB 대신 dict 사용)
 file_store: dict[str, dict] = {}

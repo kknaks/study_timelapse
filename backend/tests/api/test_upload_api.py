@@ -10,7 +10,7 @@ class TestUploadFile:
     요구사항:
     ========
     1. 목적: 녹화된 영상 파일을 서버에 업로드
-    2. 입력: multipart/form-data (file: webm, mp4, mov)
+    2. 입력: multipart/form-data (file: mp4, mov)
     3. 응답: fileId (UUID), filename
     4. 에러: 파일 누락 400, 지원하지 않는 형식 400
     5. 제약: 최대 2GB
@@ -20,13 +20,13 @@ class TestUploadFile:
     async def test_should_upload_file_when_valid_video(self, client: AsyncClient) -> None:
         """정상 업로드
 
-        Given: 유효한 webm 영상 파일
+        Given: 유효한 mp4 영상 파일
         When: 업로드 API 호출
         Then: 200 반환, fileId와 filename 포함
         """
         # Given
         file_content = b"fake-video-content"
-        files = {"file": ("recording.webm", io.BytesIO(file_content), "video/webm")}
+        files = {"file": ("recording.mp4", io.BytesIO(file_content), "video/mp4")}
 
         # When
         response = await client.post("/api/upload", files=files)

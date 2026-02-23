@@ -153,21 +153,9 @@ class TimelapseService:
     ) -> None:
         task = task_store[task_id]
         try:
-            # ── Pass 1: webm → 깨끗한 mp4 (mp4 입력이면 스킵) ──
-            is_mp4 = input_path.lower().endswith(".mp4")
-            if is_mp4:
-                clean_path = input_path
-                logger.info(f"[{task_id}] mp4 input, skipping pass1")
-            else:
-                clean_path = output_path.replace("_timelapse.mp4", "_clean.mp4")
-                pass1_ok = await self._decode_to_mp4(task_id, input_path, clean_path)
-                if not pass1_ok:
-                    task["status"] = "failed"
-                    return
-
-            # 프레임수/길이 파악
+            # 프레임수/길이 파악 (업로드 시 실패했을 경우 재시도)
             if total_frames <= 0 or duration <= 0:
-                total_frames, duration = await self._probe_clean(clean_path, recording_seconds)
+                total_frames, duration = await self._probe_clean(input_path, recording_seconds)
                 logger.info(f"[{task_id}] probed: frames={total_frames}, duration={duration}s")
 
             case, pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
@@ -205,7 +193,7 @@ class TimelapseService:
 
             cmd = [
                 "ffmpeg", "-y",
-                "-i", clean_path,
+                "-i", input_path,
                 "-vf", filter_str,
                 "-r", str(actual_fps),
                 "-an",
@@ -240,51 +228,9 @@ class TimelapseService:
                 task["status"] = "failed"
                 logger.error(f"[{task_id}] pass2 failed (code {process.returncode})")
 
-            # clean 파일 정리 (원본 mp4는 삭제하지 않음)
-            if not is_mp4 and os.path.exists(clean_path):
-                os.remove(clean_path)
-
         except Exception as e:
             task["status"] = "failed"
             logger.exception(f"[{task_id}] Conversion error: {e}")
-
-    async def _decode_to_mp4(self, task_id: str, input_path: str, output_path: str) -> bool:
-        """Pass 1: 입력(webm 등)을 깨끗한 mp4로 전체 디코딩."""
-        cmd = [
-            "ffmpeg", "-y",
-            "-fflags", "+genpts+discardcorrupt",
-            "-err_detect", "ignore_err",
-            "-i", input_path,
-            "-map", "0:v:0",
-            "-vsync", "cfr",
-            "-r", "30",
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "18",
-            "-pix_fmt", "yuv420p",
-            "-g", "30",
-            "-an",
-            output_path,
-        ]
-        logger.info(f"[{task_id}] pass1 (decode): {' '.join(cmd)}")
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await process.communicate()
-
-        stderr_text = stderr.decode() if stderr else ""
-        if stderr_text:
-            logger.info(f"[{task_id}] pass1 stderr (last 500): {stderr_text[-500:]}")
-
-        if process.returncode != 0:
-            logger.error(f"[{task_id}] pass1 failed (code {process.returncode})")
-            return False
-
-        # pass1 결과 파일 크기 확인
-        fsize = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-        logger.info(f"[{task_id}] pass1 done: {output_path} ({fsize} bytes)")
-        return True
 
     async def _probe_clean(self, file_path: str, fallback_seconds: float) -> tuple[int, float]:
         """깨끗한 mp4에서 프레임수/길이 파악."""

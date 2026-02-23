@@ -25,7 +25,7 @@ class TestCreateTimelapse:
         Then: 202 반환, taskId 포함
         """
         # Given - 먼저 파일 업로드
-        files = {"file": ("test.webm", io.BytesIO(b"fake-video"), "video/webm")}
+        files = {"file": ("test.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
         upload_res = await client.post("/api/upload", files=files)
         file_id = upload_res.json()["fileId"]
 
@@ -49,7 +49,7 @@ class TestCreateTimelapse:
         Then: 400 반환
         """
         # Given
-        files = {"file": ("test.webm", io.BytesIO(b"fake-video"), "video/webm")}
+        files = {"file": ("test.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
         upload_res = await client.post("/api/upload", files=files)
         file_id = upload_res.json()["fileId"]
 
@@ -99,7 +99,7 @@ class TestGetTimelapseStatus:
         Then: 200 반환, status/progress 포함
         """
         # Given - 파일 업로드 → 변환 요청
-        files = {"file": ("test.webm", io.BytesIO(b"fake-video"), "video/webm")}
+        files = {"file": ("test.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
         upload_res = await client.post("/api/upload", files=files)
         file_id = upload_res.json()["fileId"]
 
@@ -167,7 +167,7 @@ class TestDownloadTimelapse:
         Then: 404 반환
         """
         # Given
-        files = {"file": ("test.webm", io.BytesIO(b"fake-video"), "video/webm")}
+        files = {"file": ("test.mp4", io.BytesIO(b"fake-video"), "video/mp4")}
         upload_res = await client.post("/api/upload", files=files)
         file_id = upload_res.json()["fileId"]
 
