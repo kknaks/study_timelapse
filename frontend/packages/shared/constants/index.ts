@@ -14,10 +14,13 @@ export const MIN_STUDY_SECONDS = 60;
 /** 최대 공부 시간 (초) - 12시간 */
 export const MAX_STUDY_SECONDS = 12 * 60 * 60;
 
-/** API 기본 URL */
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
-  ?? process.env.EXPO_PUBLIC_API_URL
-  ?? 'http://localhost:8000';
+/** API 기본 URL — 환경변수는 각 앱에서 오버라이드 */
+export let API_BASE_URL = 'http://localhost:8000';
+
+/** API URL 설정 (앱 초기화 시 호출) */
+export function setApiBaseUrl(url: string) {
+  API_BASE_URL = url;
+}
 
 /** API 엔드포인트 */
 export const API_ENDPOINTS = {
