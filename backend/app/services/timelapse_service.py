@@ -70,45 +70,48 @@ class TimelapseService:
     def get_task(self, task_id: str) -> Optional[dict]:
         return task_store.get(task_id)
 
-    # ── 동적 출력 길이 계산 ──
+    # ── 타임랩스 파라미터 계산 ──
 
-    def _calc_natural_output(
-        self, total_frames: int, desired_seconds: int
+    def _calc_timelapse_params(
+        self, total_frames: int, output_seconds: int
     ) -> tuple[int, int]:
         """
-        자연스러운 타임랩스가 되도록 output_seconds를 동적 조정.
+        자연스러운 타임랩스를 위한 (pick_every, output_fps) 계산.
 
-        pick_every = total_frames / (OUTPUT_FPS * output_seconds)
-        이 값이 MIN_PICK_EVERY ~ MAX_PICK_EVERY 범위에 들어야 자연스러움.
+        output_seconds는 유저가 정한 값 그대로 유지.
+        pick_every가 MAX_PICK_EVERY를 넘으면 output_fps를 올려서 보상.
 
-        범위를 벗어나면 output_seconds를 조정해서 맞춤.
+        pick_every = total_frames / output_frames
+        output_frames = output_fps * output_seconds
         """
         if total_frames <= 0:
-            return desired_seconds, 1
+            return 1, OUTPUT_FPS
 
-        desired_output_frames = OUTPUT_FPS * desired_seconds
-        pick_every = math.floor(total_frames / desired_output_frames) if desired_output_frames > 0 else 1
+        # 기본 30fps로 계산
+        output_frames = OUTPUT_FPS * output_seconds
+        pick_every = math.floor(total_frames / output_frames) if output_frames > 0 else 1
 
-        if MIN_PICK_EVERY <= pick_every <= MAX_PICK_EVERY:
-            # 유저가 원한 값 그대로 OK
-            return desired_seconds, pick_every
+        if pick_every <= MAX_PICK_EVERY:
+            # 자연스러운 범위 → 30fps 그대로
+            return max(pick_every, 1), OUTPUT_FPS
 
-        if pick_every < MIN_PICK_EVERY:
-            # 녹화가 짧음 → output_seconds를 줄여야 함
-            # total_frames / (OUTPUT_FPS * x) = MIN_PICK_EVERY → x = total_frames / (OUTPUT_FPS * MIN_PICK_EVERY)
-            adjusted = math.floor(total_frames / (OUTPUT_FPS * MIN_PICK_EVERY))
-            adjusted = max(10, adjusted)  # 최소 10초
-            pick_every = math.floor(total_frames / (OUTPUT_FPS * adjusted)) if adjusted > 0 else 1
-            logger.info(f"adjusted output: {desired_seconds}s → {adjusted}s (recording too short)")
-            return adjusted, max(pick_every, 1)
+        # pick_every가 너무 큼 → output_fps를 올려서 프레임 빽빽하게
+        # pick_every = MAX_PICK_EVERY로 고정, output_fps를 역산
+        # output_frames = total_frames / MAX_PICK_EVERY
+        # output_fps = output_frames / output_seconds
+        adjusted_output_frames = math.ceil(total_frames / MAX_PICK_EVERY)
+        adjusted_fps = math.ceil(adjusted_output_frames / output_seconds)
+        adjusted_fps = min(adjusted_fps, 240)  # 최대 240fps (대부분 플레이어 지원)
 
-        # pick_every > MAX_PICK_EVERY → 녹화가 김 → output_seconds를 늘려야 함
-        # total_frames / (OUTPUT_FPS * x) = MAX_PICK_EVERY → x = total_frames / (OUTPUT_FPS * MAX_PICK_EVERY)
-        adjusted = math.ceil(total_frames / (OUTPUT_FPS * MAX_PICK_EVERY))
-        adjusted = min(180, adjusted)  # 최대 3분
-        pick_every = math.floor(total_frames / (OUTPUT_FPS * adjusted))
-        logger.info(f"adjusted output: {desired_seconds}s → {adjusted}s (recording too long)")
-        return adjusted, pick_every
+        # adjusted_fps로 다시 pick_every 계산
+        actual_output_frames = adjusted_fps * output_seconds
+        pick_every = math.floor(total_frames / actual_output_frames)
+
+        logger.info(
+            f"high frame density: pick_every={pick_every}, "
+            f"output_fps={adjusted_fps} (was {OUTPUT_FPS})"
+        )
+        return max(pick_every, 1), adjusted_fps
 
     # ── 비율별 crop/scale ──
 
@@ -158,32 +161,23 @@ class TimelapseService:
             output_frames = OUTPUT_FPS * output_seconds  # e.g. 30 * 30 = 900
 
             if total_frames <= 0:
-                # ffprobe 실패: 프론트가 보낸 recordingSeconds로 추정
                 recording_seconds = task.get("recording_seconds", 0)
                 total_frames = int(recording_seconds * 30)
                 logger.warning(f"[{task_id}] ffprobe failed, estimated frames={total_frames}")
 
-            # 동적 output_seconds 계산
-            # 유저가 원하는 값으로 시작하되, pick_every가 자연스러운 범위에 들도록 조정
-            output_seconds, pick_every = self._calc_natural_output(
-                total_frames, output_seconds
-            )
-            output_frames = OUTPUT_FPS * output_seconds
-            task["output_seconds"] = output_seconds  # 실제 적용된 값 업데이트
+            # 타임랩스 파라미터 계산 (output_seconds 고정, fps 동적)
+            pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
 
-            if total_frames <= OUTPUT_FPS * output_seconds:
-                # 프레임 부족: 전체 프레임 사용
+            min_required = actual_fps * output_seconds
+            if total_frames <= min_required:
                 pick_every = 1
                 select_filter = "select='1'"
-                logger.warning(
-                    f"[{task_id}] not enough frames: {total_frames}, using all"
-                )
+                logger.warning(f"[{task_id}] not enough frames: {total_frames}, using all")
             else:
                 select_filter = f"select='not(mod(n\\,{pick_every}))'"
                 logger.info(
                     f"[{task_id}] timelapse: {total_frames} frames, "
-                    f"pick every {pick_every}th → ~{total_frames // pick_every} frames → "
-                    f"{output_seconds}s @ {OUTPUT_FPS}fps"
+                    f"pick every {pick_every}th, {actual_fps}fps → {output_seconds}s"
                 )
 
             # 비율별 crop/scale
@@ -194,7 +188,7 @@ class TimelapseService:
             if crop_filter:
                 filters.append(crop_filter)
             filters.extend([
-                f"setpts=N/{OUTPUT_FPS}/TB",
+                f"setpts=N/{actual_fps}/TB",
                 f"{scale_filter}:force_original_aspect_ratio=decrease",
                 pad_filter,
                 (
@@ -210,7 +204,7 @@ class TimelapseService:
                 "-fflags", "+genpts",
                 "-i", input_path,
                 "-vf", filter_str,
-                "-r", str(OUTPUT_FPS),
+                "-r", str(actual_fps),
                 "-an",
                 "-c:v", "libx264",
                 "-profile:v", "high",
