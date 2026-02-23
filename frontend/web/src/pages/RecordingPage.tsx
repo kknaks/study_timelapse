@@ -96,15 +96,15 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     };
   }, [timerStatus, config.durationSeconds]);
 
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     setTimerStatus('completed');
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (frameCountInterval.current) clearInterval(frameCountInterval.current);
 
     const fc = frameCaptureRef.current;
     if (fc) {
-      fc.stop();
-      console.log(`⏱️ 녹화 종료: ${elapsedRef.current}초, ${fc.frameCount}프레임 캡처`);
+      await fc.stop(); // OPFS flush 대기
+      console.log(`⏱️ 녹화 종료: ${elapsedRef.current}초, ${fc.frameCount}프레임 캡처 (${fc.storageMode})`);
       onComplete(fc, elapsedRef.current);
     }
   }, [onComplete]);
