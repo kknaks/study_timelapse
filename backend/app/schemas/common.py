@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Optional, Union
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel
@@ -19,7 +22,7 @@ class ApiErrorResponse(BaseModel):
     success: bool = False
     error_code: str
     message: str
-    detail: dict | list | None = None
+    detail: Optional[Union[dict, list]] = None
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

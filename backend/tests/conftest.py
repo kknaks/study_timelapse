@@ -1,35 +1,37 @@
+import os
+import tempfile
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.database import get_db
+from app.config import settings
 from app.main import app
-from app.models.base import Base
 
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+
+@pytest.fixture(autouse=True)
+def setup_test_env(tmp_path):
+    """테스트마다 임시 upload 디렉토리 사용 + store 리셋."""
+    # 임시 디렉토리 설정
+    settings.upload_dir = str(tmp_path / "uploads")
+    os.makedirs(settings.upload_dir, exist_ok=True)
+
+    # In-memory store 리셋
+    from app.services.upload_service import file_store
+    from app.services.timelapse_service import task_store
+    file_store.clear()
+    task_store.clear()
+
+    # upload/timelapse 서비스가 같은 store를 공유하도록
+    from app.api.v1 import upload as upload_mod, timelapse as timelapse_mod
+    upload_mod.upload_service = upload_mod.UploadService()
+    timelapse_mod.upload_service = upload_mod.upload_service
+    timelapse_mod.timelapse_service = timelapse_mod.TimelapseService(upload_mod.upload_service)
+
+    yield
 
 
 @pytest.fixture
-async def db_session():
-    engine = create_async_engine(TEST_DATABASE_URL)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_maker() as session:
-        async with session.begin():
-            yield session
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
-
-
-@pytest.fixture
-async def client(db_session: AsyncSession):
-    async def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
+async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
-    app.dependency_overrides.clear()

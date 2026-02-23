@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 from fastapi import APIRouter
+
+from app.api.v1 import timelapse, upload
 
 v1_router = APIRouter()
 
-# 도메인 라우터 등록
-# from app.api.v1 import users
-# v1_router.include_router(users.router, prefix="/users", tags=["User"])
+v1_router.include_router(upload.router, tags=["Upload"])
+v1_router.include_router(timelapse.router, tags=["Timelapse"])
