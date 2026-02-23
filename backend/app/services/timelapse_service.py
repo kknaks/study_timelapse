@@ -64,18 +64,17 @@ class TimelapseService:
             speed_factor = recording_seconds / output_seconds
             logger.info(f"[{task_id}] recording={recording_seconds}s, output={output_seconds}s, speed={speed_factor}x")
 
-            # 타임랩스: N프레임마다 1개 선택 → 30fps 출력 → 경과시간 오버레이
-            # 원본 fps 추정 (보통 30fps)
-            src_fps = 30.0
-            total_frames = recording_seconds * src_fps
-            target_frames = output_seconds * 30  # 출력도 30fps
-            select_every_n = max(1, int(total_frames / target_frames))
+            # 타임랩스: fps 필터로 출력 fps 계산하여 프레임 샘플링
+            # 출력 fps = 원본 총 프레임 / (출력 시간 * 1) → 결과를 30fps로 출력
+            output_fps = 30
+            target_input_fps = output_fps / speed_factor  # 원본에서 뽑을 fps
 
-            logger.info(f"[{task_id}] total_frames={total_frames}, target={target_frames}, select_every={select_every_n}")
+            logger.info(f"[{task_id}] target_input_fps={target_input_fps}, output_fps={output_fps}")
 
+            # 2-pass: fps로 프레임 샘플링 → setpts로 타임라인 리셋 → drawtext 오버레이
             filter_str = (
-                f"select=not(mod(n\\,{select_every_n})),"
-                f"setpts=N/30/TB,"
+                f"fps={target_input_fps},"
+                f"setpts=N/{output_fps}/TB,"
                 f"drawtext=text='%{{pts\\:hms}}':"
                 f"fontsize=36:fontcolor=white:"
                 f"x=10:y=10:box=1:boxcolor=black@0.5:boxborderw=5"
@@ -85,7 +84,7 @@ class TimelapseService:
                 "ffmpeg", "-y",
                 "-i", input_path,
                 "-vf", filter_str,
-                "-r", "30",
+                "-r", str(output_fps),
                 "-an",
                 "-c:v", "libx264",
                 "-profile:v", "baseline",
