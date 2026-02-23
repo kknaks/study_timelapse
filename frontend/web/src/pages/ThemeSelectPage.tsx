@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { OverlayTheme, OverlayConfig, OverlayPosition } from '../../../packages/shared/types';
 import { OverlayRenderer } from '../utils/overlayRenderer';
+import type { FrameCapture } from '../utils/frameCapture';
 
 interface ThemeSelectPageProps {
-  videoBlob: Blob;
+  frameCapture: FrameCapture;
   recordingSeconds: number;
   outputSeconds: number;
   onSelect: (config: OverlayConfig) => void;
@@ -22,68 +23,89 @@ const COLORS = ['#ffffff', '#00ff88', '#ff6b6b', '#4ecdc4', '#ffe66d', '#a855f7'
 const SIZES: Array<'sm' | 'md' | 'lg'> = ['sm', 'md', 'lg'];
 
 export function ThemeSelectPage({
-  videoBlob,
+  frameCapture,
   recordingSeconds,
   outputSeconds,
   onSelect,
   onBack,
 }: ThemeSelectPageProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const rendererRef = useRef<OverlayRenderer | null>(null);
+  const previewImageRef = useRef<ImageBitmap | null>(null);
 
   const [theme, setTheme] = useState<OverlayTheme>('stopwatch');
   const [position, setPosition] = useState<OverlayPosition>({ x: 0.8, y: 0.85 });
   const [color, setColor] = useState('#ffffff');
   const [size, setSize] = useState<'sm' | 'md' | 'lg'>('md');
   const [isDragging, setIsDragging] = useState(false);
-  const [videoUrl] = useState(() => URL.createObjectURL(videoBlob));
+  const [previewReady, setPreviewReady] = useState(false);
+
+  // 첫 프레임 이미지 로드
+  useEffect(() => {
+    async function loadPreview() {
+      const frames = (frameCapture as any).frames as Blob[];
+      if (frames.length === 0) return;
+      // 중간쯤 프레임으로 프리뷰
+      const midIndex = Math.floor(frames.length * 0.3);
+      const img = await createImageBitmap(frames[midIndex] || frames[0]);
+      previewImageRef.current = img;
+
+      const canvas = previewRef.current;
+      if (canvas) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+      }
+      setPreviewReady(true);
+    }
+    loadPreview();
+
+    return () => {
+      previewImageRef.current?.close();
+    };
+  }, [frameCapture]);
 
   // 렌더러 업데이트
   useEffect(() => {
     const config: OverlayConfig = { theme, position, color, size };
     rendererRef.current = new OverlayRenderer(config, recordingSeconds, outputSeconds);
-    if (videoRef.current) {
-      rendererRef.current.setVideoDuration(videoRef.current.duration || 1);
-    }
+    rendererRef.current.setVideoDuration(outputSeconds);
   }, [theme, position, color, size, recordingSeconds, outputSeconds]);
 
-  // Canvas 프리뷰 렌더 루프
+  // 오버레이 캔버스 렌더 루프
   const renderFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+    const canvas = overlayRef.current;
     const renderer = rendererRef.current;
+    const img = previewImageRef.current;
 
-    if (!video || !canvas || !renderer) return;
+    if (!canvas || !renderer || !img) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 360;
-
+    canvas.width = img.width;
+    canvas.height = img.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (theme !== 'none') {
-      // 미리보기용 시간 (전체의 30% 지점)
-      const previewTime = (video.currentTime || 0) || (video.duration || 1) * 0.3;
+      // 미리보기: 전체의 30% 시점
+      const previewTime = outputSeconds * 0.3;
       renderer.render(ctx, canvas.width, canvas.height, previewTime);
     }
 
     animFrameRef.current = requestAnimationFrame(renderFrame);
-  }, [theme]);
+  }, [theme, outputSeconds]);
 
   useEffect(() => {
-    animFrameRef.current = requestAnimationFrame(renderFrame);
+    if (previewReady) {
+      animFrameRef.current = requestAnimationFrame(renderFrame);
+    }
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [renderFrame]);
-
-  // 클린업
-  useEffect(() => {
-    return () => URL.revokeObjectURL(videoUrl);
-  }, [videoUrl]);
+  }, [renderFrame, previewReady]);
 
   // 드래그/탭으로 위치 설정
   const updatePosition = (clientX: number, clientY: number) => {
@@ -141,17 +163,12 @@ export function ThemeSelectPage({
         onTouchMove={handleTouchMove}
         style={{ cursor: theme !== 'none' ? 'crosshair' : 'default' }}
       >
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          loop
-          muted
-          autoPlay
-          playsInline
+        <canvas
+          ref={previewRef}
           className="theme-preview-video"
         />
         <canvas
-          ref={canvasRef}
+          ref={overlayRef}
           className="theme-preview-canvas"
         />
         {theme !== 'none' && (

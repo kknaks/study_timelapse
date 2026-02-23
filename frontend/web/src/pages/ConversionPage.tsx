@@ -1,22 +1,20 @@
 import { useState, useEffect } from 'react';
-import type { AspectRatio, OverlayConfig } from '../../../packages/shared/types';
-import { createClientTimelapse } from '../utils/clientTimelapse';
+import type { OverlayConfig } from '../../../packages/shared/types';
+import type { FrameCapture } from '../utils/frameCapture';
 import { OverlayRenderer } from '../utils/overlayRenderer';
 
 interface ConversionPageProps {
-  videoBlob: Blob;
+  frameCapture: FrameCapture;
   outputSeconds: number;
   recordingSeconds: number;
-  aspectRatio: AspectRatio;
   overlayConfig: OverlayConfig | null;
   onComplete: (downloadUrl: string) => void;
 }
 
 export function ConversionPage({
-  videoBlob,
+  frameCapture,
   outputSeconds,
   recordingSeconds,
-  aspectRatio,
   overlayConfig,
   onComplete,
 }: ConversionPageProps) {
@@ -29,19 +27,11 @@ export function ConversionPage({
   useEffect(() => {
     async function process() {
       try {
-        // 1. FFmpeg.wasm으로 타임랩스 생성
+        // 1. 프레임 → 타임랩스 영상 생성
         setStep('timelapse');
-        console.log(`🚀 타임랩스 시작: ${recordingSeconds}초 → ${outputSeconds}초`);
+        const timelapseBlob = await frameCapture.createTimelapse(setProgress);
 
-        const timelapseBlob = await createClientTimelapse({
-          videoBlob,
-          recordingSeconds,
-          outputSeconds,
-          aspectRatio,
-          onProgress: setProgress,
-        });
-
-        // 2. 오버레이 합성 (Canvas + MediaRecorder)
+        // 2. 오버레이 합성
         if (hasOverlay && overlayConfig) {
           setStep('overlay');
           setProgress(0);
@@ -54,6 +44,9 @@ export function ConversionPage({
           setStep('done');
           onComplete(url);
         }
+
+        // 메모리 해제
+        frameCapture.dispose();
       } catch (err) {
         console.error('변환 실패:', err);
         setError(err instanceof Error ? err.message : '오류가 발생했습니다');
@@ -63,7 +56,6 @@ export function ConversionPage({
     process();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Canvas 오버레이 합성
   async function compositeOverlay(timelapseBlob: Blob, config: OverlayConfig): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -136,7 +128,7 @@ export function ConversionPage({
 
       <div className="progress-section">
         <div className="progress-item">
-          <span>타임랩스 변환</span>
+          <span>{hasOverlay ? '프레임 조립' : '타임랩스 생성'}</span>
           <div className="progress-bar">
             <div className="progress-fill" style={{ width: `${step === 'timelapse' ? progress : 100}%` }} />
           </div>
@@ -155,7 +147,7 @@ export function ConversionPage({
       </div>
 
       <p className="conversion-info">
-        {recordingSeconds > 0 && `${Math.floor(recordingSeconds / 60)}분 → ${outputSeconds}초`}
+        📸 {frameCapture.frameCount}프레임 → {outputSeconds}초 타임랩스
         {hasOverlay && ` + ${overlayConfig!.theme} 오버레이`}
       </p>
 

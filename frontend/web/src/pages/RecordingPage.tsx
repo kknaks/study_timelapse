@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { TimerConfig, TimerStatus } from '../../../packages/shared/types';
 import { formatTime } from '../../../packages/shared/utils';
+import { FrameCapture } from '../utils/frameCapture';
 
 const ASPECT_CSS: Record<string, string> = {
   '9:16': '9 / 16',
@@ -11,23 +12,23 @@ const ASPECT_CSS: Record<string, string> = {
 
 interface RecordingPageProps {
   config: TimerConfig;
-  onComplete: (blob: Blob, elapsedSeconds: number) => void;
+  onComplete: (frameCapture: FrameCapture, elapsedSeconds: number) => void;
 }
 
 export function RecordingPage({ config, onComplete }: RecordingPageProps) {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>('idle');
   const [elapsed, setElapsed] = useState(0);
+  const [frameCount, setFrameCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
   const intervalRef = useRef<number | null>(null);
   const elapsedRef = useRef(0);
+  const streamRef = useRef<MediaStream | null>(null);
+  const frameCaptureRef = useRef<FrameCapture | null>(null);
+  const frameCountInterval = useRef<number | null>(null);
 
   const remaining = Math.max(0, config.durationSeconds - elapsed);
 
-  const streamRef = useRef<MediaStream | null>(null);
-
-  // 카메라 프리뷰만 시작 (녹화는 버튼 클릭 시)
+  // 카메라 프리뷰
   useEffect(() => {
     async function startCamera() {
       try {
@@ -40,10 +41,6 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-
-        if (!MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
-          alert('이 브라우저는 MP4 녹화를 지원하지 않습니다.\nChrome 최신 버전을 사용해주세요.');
-        }
       } catch {
         alert('카메라 접근 권한이 필요합니다');
       }
@@ -55,30 +52,27 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
+      if (frameCountInterval.current) clearInterval(frameCountInterval.current);
     };
   }, []);
 
-  // 녹화 시작
+  // 녹화 시작 (프레임 캡처 방식)
   const handleStart = () => {
-    const stream = streamRef.current;
-    if (!stream) return;
+    const video = videoRef.current;
+    if (!video) return;
 
-    const mimeType = 'video/mp4;codecs=avc1';
-    console.log(`📹 녹화 포맷: ${mimeType}`);
-
-    const recorder = new MediaRecorder(stream, {
-      mimeType,
-      videoBitsPerSecond: 2_500_000,
+    const fc = new FrameCapture({
+      durationSeconds: config.durationSeconds,
+      outputSeconds: config.outputSeconds,
     });
+    fc.start(video);
+    frameCaptureRef.current = fc;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
-    };
+    // 프레임 카운트 UI 업데이트
+    frameCountInterval.current = window.setInterval(() => {
+      setFrameCount(fc.frameCount);
+    }, 500);
 
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
     setTimerStatus('running');
   };
 
@@ -105,25 +99,23 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
   const handleStop = useCallback(() => {
     setTimerStatus('completed');
     if (intervalRef.current) clearInterval(intervalRef.current);
+    if (frameCountInterval.current) clearInterval(frameCountInterval.current);
 
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop();
-      recorder.onstop = () => {
-        console.log(`⏱️ 녹화 종료: elapsedRef=${elapsedRef.current}초`);
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
-        onComplete(blob, elapsedRef.current);
-      };
+    const fc = frameCaptureRef.current;
+    if (fc) {
+      fc.stop();
+      console.log(`⏱️ 녹화 종료: ${elapsedRef.current}초, ${fc.frameCount}프레임 캡처`);
+      onComplete(fc, elapsedRef.current);
     }
   }, [onComplete]);
 
   const handlePause = () => {
     if (timerStatus === 'running') {
       setTimerStatus('paused');
-      mediaRecorderRef.current?.pause();
+      frameCaptureRef.current?.pause();
     } else if (timerStatus === 'paused') {
       setTimerStatus('running');
-      mediaRecorderRef.current?.resume();
+      frameCaptureRef.current?.resume();
     }
   };
 
@@ -157,7 +149,10 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
       </div>
 
       {timerStatus !== 'idle' && (
-        <p className="warning">⚠️ 탭을 전환하면 녹화가 중단될 수 있습니다</p>
+        <>
+          <p className="frame-count">📸 {frameCount}프레임 캡처됨</p>
+          <p className="warning">⚠️ 탭을 전환하면 캡처가 중단될 수 있습니다</p>
+        </>
       )}
 
       <div className="controls">

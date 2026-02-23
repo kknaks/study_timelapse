@@ -281,6 +281,18 @@ button.active,
   letter-spacing: 2px;
 }
 
+.frame-count {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-success);
+  margin: 0;
+}
+
+.conversion-info {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
 .warning {
   font-size: 0.85rem;
   color: var(--color-warning);

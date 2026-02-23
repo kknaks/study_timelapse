@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { TimerConfig, OverlayConfig } from '../../packages/shared/types';
+import type { FrameCapture } from './utils/frameCapture';
 import { setApiBaseUrl } from '../../packages/shared/constants';
 import { SetupPage } from './pages/SetupPage';
 
@@ -19,7 +20,7 @@ type AppStep = 'setup' | 'recording' | 'themeSelect' | 'conversion' | 'complete'
 export default function App() {
   const [step, setStep] = useState<AppStep>('setup');
   const [config, setConfig] = useState<TimerConfig | null>(null);
-  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [frameCapture, setFrameCapture] = useState<FrameCapture | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
   const [overlayConfig, setOverlayConfig] = useState<OverlayConfig | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
@@ -29,8 +30,8 @@ export default function App() {
     setStep('recording');
   };
 
-  const handleRecordingComplete = (blob: Blob, elapsedSeconds: number) => {
-    setVideoBlob(blob);
+  const handleRecordingComplete = (fc: FrameCapture, elapsedSeconds: number) => {
+    setFrameCapture(fc);
     setRecordingSeconds(elapsedSeconds);
     setStep('themeSelect');
   };
@@ -41,8 +42,8 @@ export default function App() {
   };
 
   const handleThemeBack = () => {
-    // 녹화 다시 하기
-    setVideoBlob(null);
+    frameCapture?.dispose();
+    setFrameCapture(null);
     setRecordingSeconds(0);
     setStep('recording');
   };
@@ -54,7 +55,8 @@ export default function App() {
 
   const handleRetry = () => {
     setConfig(null);
-    setVideoBlob(null);
+    frameCapture?.dispose();
+    setFrameCapture(null);
     setRecordingSeconds(0);
     setOverlayConfig(null);
     setDownloadUrl('');
@@ -72,21 +74,20 @@ export default function App() {
           onComplete={handleRecordingComplete}
         />
       )}
-      {step === 'themeSelect' && videoBlob && config && (
+      {step === 'themeSelect' && frameCapture && config && (
         <ThemeSelectPage
-          videoBlob={videoBlob}
+          frameCapture={frameCapture}
           recordingSeconds={recordingSeconds}
           outputSeconds={config.outputSeconds}
           onSelect={handleThemeSelect}
           onBack={handleThemeBack}
         />
       )}
-      {step === 'conversion' && videoBlob && config && (
+      {step === 'conversion' && frameCapture && config && (
         <ConversionPage
-          videoBlob={videoBlob}
+          frameCapture={frameCapture}
           outputSeconds={config.outputSeconds}
           recordingSeconds={recordingSeconds}
-          aspectRatio={config.aspectRatio}
           overlayConfig={overlayConfig}
           onComplete={handleConversionComplete}
         />
