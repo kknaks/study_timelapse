@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { UploadStatus, ConversionStatus } from '../../../packages/shared/types';
-import { uploadVideo, requestTimelapse, pollUntilComplete, getDownloadUrl } from '../../../packages/shared/api';
+import { uploadVideo, requestTimelapse, pollUntilComplete } from '../../../packages/shared/api';
+import { API_BASE_URL } from '../../../packages/shared/constants';
 
 interface ConversionPageProps {
   videoBlob: Blob;
@@ -33,7 +34,10 @@ export function ConversionPage({ videoBlob, outputSeconds, recordingSeconds, onC
 
         if (result.status === 'completed') {
           setConversionStatus('completed');
-          onComplete(result.downloadUrl ?? getDownloadUrl(taskId));
+          const url = result.downloadUrl
+            ? `${API_BASE_URL}${result.downloadUrl}`
+            : `${API_BASE_URL}/api/download/${taskId}`;
+          onComplete(url);
         } else {
           throw new Error('변환에 실패했습니다');
         }
