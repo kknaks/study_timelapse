@@ -21,76 +21,41 @@ export function CompletePage({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const rendererRef = useRef<OverlayRenderer | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+
+  const [exportStatus, setExportStatus] = useState<'loading' | 'compositing' | 'done'>('loading');
   const [exportProgress, setExportProgress] = useState(0);
-  const [videoReady, setVideoReady] = useState(false);
+  const [compositedUrl, setCompositedUrl] = useState<string>('');
 
   const hasOverlay = overlayConfig && overlayConfig.theme !== 'none';
 
+  // 렌더러 초기화
   useEffect(() => {
     if (hasOverlay && overlayConfig) {
       rendererRef.current = new OverlayRenderer(overlayConfig, recordingSeconds, outputSeconds);
     }
   }, [overlayConfig, recordingSeconds, outputSeconds, hasOverlay]);
 
-  // Canvas 오버레이 렌더 루프
-  const renderFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const renderer = rendererRef.current;
-
-    if (!video || !canvas || !renderer) return;
-    if (video.paused && video.currentTime === 0) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Canvas를 비디오 위에 정확히 겹치기 위해 사이즈 맞춤
-    const rect = video.getBoundingClientRect();
-    canvas.width = video.videoWidth || rect.width;
-    canvas.height = video.videoHeight || rect.height;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    renderer.render(ctx, canvas.width, canvas.height, video.currentTime);
-
-    if (!video.paused && !video.ended) {
-      animFrameRef.current = requestAnimationFrame(renderFrame);
-    }
-  }, []);
-
-  const handlePlay = () => {
-    if (hasOverlay) {
-      animFrameRef.current = requestAnimationFrame(renderFrame);
-    }
-  };
-
-  const handlePause = () => {
-    cancelAnimationFrame(animFrameRef.current);
-    // 마지막 프레임 유지
-    renderFrame();
-  };
-
-  const handleTimeUpdate = () => {
-    if (hasOverlay && videoRef.current?.paused) {
-      renderFrame();
-    }
-  };
-
-  useEffect(() => {
-    return () => cancelAnimationFrame(animFrameRef.current);
-  }, []);
-
-  // 합성 영상 내보내기
-  const handleExport = async () => {
+  // 영상 로드되면 자동 합성 시작
+  const handleVideoLoaded = useCallback(async () => {
     const video = videoRef.current;
     const renderer = rendererRef.current;
 
-    if (!video || !renderer) return;
+    if (!video) return;
 
-    setIsExporting(true);
+    // 오버레이 없으면 원본 URL 바로 사용
+    if (!hasOverlay || !renderer) {
+      setCompositedUrl(downloadUrl);
+      setExportStatus('done');
+      return;
+    }
+
+    renderer.setVideoDuration(video.duration);
+    console.log(`🎬 영상 duration: ${video.duration}초, 원본 녹화: ${recordingSeconds}초`);
+
+    // 자동 합성 시작
+    setExportStatus('compositing');
     setExportProgress(0);
 
-    // 오프스크린 캔버스로 합성
     const offCanvas = document.createElement('canvas');
     offCanvas.width = video.videoWidth;
     offCanvas.height = video.videoHeight;
@@ -116,15 +81,11 @@ export function CompletePage({
     };
 
     recorder.onstop = () => {
-      const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `study-timelapse.${ext}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setIsExporting(false);
+      setCompositedUrl(url);
+      setExportStatus('done');
+      console.log('✅ 오버레이 합성 완료');
     };
 
     recorder.start(100);
@@ -141,18 +102,47 @@ export function CompletePage({
       requestAnimationFrame(captureFrame);
     };
 
-    await video.play();
-    captureFrame();
-
     video.onended = () => {
+      setExportProgress(100);
       setTimeout(() => recorder.stop(), 200);
     };
-  };
 
-  const handleDirectDownload = () => {
+    await video.play();
+    captureFrame();
+  }, [downloadUrl, hasOverlay, recordingSeconds]);
+
+  // 프리뷰용 오버레이 렌더 루프
+  const renderPreviewFrame = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const renderer = rendererRef.current;
+
+    if (!video || !canvas || !renderer) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 360;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    renderer.render(ctx, canvas.width, canvas.height, video.currentTime);
+
+    if (!video.paused && !video.ended) {
+      animFrameRef.current = requestAnimationFrame(renderPreviewFrame);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  const handleDownload = () => {
+    if (!compositedUrl) return;
+    const ext = compositedUrl.startsWith('blob:') ? 'mp4' : 'mp4';
     const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = 'study-timelapse.mp4';
+    a.href = compositedUrl;
+    a.download = `study-timelapse.${ext}`;
     a.click();
   };
 
@@ -168,60 +158,74 @@ export function CompletePage({
         </p>
       )}
 
-      <div className="preview-container">
+      {/* 합성용 비디오 (숨김) */}
+      {hasOverlay && exportStatus !== 'done' && (
         <video
           ref={videoRef}
           src={downloadUrl}
-          controls
           playsInline
+          muted
           crossOrigin="anonymous"
-          className="timelapse-preview"
-          onPlay={handlePlay}
-          onPause={handlePause}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedData={() => {
-            setVideoReady(true);
-            if (videoRef.current && rendererRef.current) {
-              rendererRef.current.setVideoDuration(videoRef.current.duration);
-              console.log(`🎬 영상 duration: ${videoRef.current.duration}초, 원본 녹화: ${recordingSeconds}초`);
-            }
-          }}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+          onLoadedData={handleVideoLoaded}
         />
-        {hasOverlay && videoReady && (
-          <canvas
-            ref={canvasRef}
-            className="overlay-canvas"
-          />
-        )}
-      </div>
+      )}
+
+      {/* 합성 진행 중 */}
+      {exportStatus === 'loading' && (
+        <div className="export-progress">
+          <p>영상 로딩 중...</p>
+        </div>
+      )}
+
+      {exportStatus === 'compositing' && (
+        <div className="export-progress">
+          <p>🎨 오버레이 합성 중...</p>
+          <div className="progress-bar" style={{ width: '100%' }}>
+            <div className="progress-fill" style={{ width: `${exportProgress}%` }} />
+          </div>
+          <span>{exportProgress}%</span>
+        </div>
+      )}
+
+      {/* 합성 완료 → 프리뷰 */}
+      {exportStatus === 'done' && (
+        <div className="preview-container">
+          {hasOverlay ? (
+            <>
+              <video
+                ref={videoRef}
+                src={compositedUrl}
+                controls
+                playsInline
+                className="timelapse-preview"
+              />
+            </>
+          ) : (
+            <video
+              ref={videoRef}
+              src={downloadUrl}
+              controls
+              playsInline
+              className="timelapse-preview"
+              onLoadedData={handleVideoLoaded}
+            />
+          )}
+        </div>
+      )}
 
       {mins > 0 && (
         <p>{mins}분 녹화 → {outputSeconds}초 타임랩스</p>
       )}
 
-      {isExporting && (
-        <div className="export-progress">
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${exportProgress}%` }} />
-          </div>
-          <span>합성 중... {exportProgress}%</span>
-        </div>
-      )}
-
       <div className="actions">
-        {hasOverlay ? (
-          <button
-            onClick={handleExport}
-            disabled={isExporting || !videoReady}
-            className="download-button"
-          >
-            {isExporting ? '합성 중...' : '📥 오버레이 합성 다운로드'}
-          </button>
-        ) : (
-          <button onClick={handleDirectDownload} className="download-button">
-            📥 다운로드
-          </button>
-        )}
+        <button
+          onClick={handleDownload}
+          disabled={exportStatus !== 'done'}
+          className="download-button"
+        >
+          {exportStatus === 'done' ? '📥 다운로드' : '합성 중...'}
+        </button>
         <button onClick={onRetry}>다시 촬영</button>
       </div>
     </div>
