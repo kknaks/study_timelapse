@@ -62,6 +62,7 @@ export default function App() {
           videoBlob={videoBlob}
           outputSeconds={config.outputSeconds}
           recordingSeconds={recordingSeconds}
+          aspectRatio={config.aspectRatio}
           onComplete={handleConversionComplete}
         />
       )}

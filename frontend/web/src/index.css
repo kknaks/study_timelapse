@@ -231,11 +231,11 @@ button.active,
 
 .camera-preview {
   width: 100%;
-  max-width: 480px;
-  aspect-ratio: 16 / 9;
+  max-width: 400px;
+  /* aspect-ratio는 인라인 스타일로 동적 적용 */
   border-radius: var(--radius-lg);
   background: #000;
-  object-fit: cover;
+  object-fit: cover; /* 가로 영상을 선택한 비율로 중앙 크롭 */
   border: 2px solid var(--color-border);
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { UploadStatus, ConversionStatus } from '../../../packages/shared/types';
+import type { UploadStatus, ConversionStatus, AspectRatio } from '../../../packages/shared/types';
 import { uploadVideo, requestTimelapse, pollUntilComplete } from '../../../packages/shared/api';
 import { API_BASE_URL } from '../../../packages/shared/constants';
 
@@ -7,10 +7,11 @@ interface ConversionPageProps {
   videoBlob: Blob;
   outputSeconds: number;
   recordingSeconds: number;
+  aspectRatio: AspectRatio;
   onComplete: (downloadUrl: string) => void;
 }
 
-export function ConversionPage({ videoBlob, outputSeconds, recordingSeconds, onComplete }: ConversionPageProps) {
+export function ConversionPage({ videoBlob, outputSeconds, recordingSeconds, aspectRatio, onComplete }: ConversionPageProps) {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [conversionStatus, setConversionStatus] = useState<ConversionStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -27,7 +28,7 @@ export function ConversionPage({ videoBlob, outputSeconds, recordingSeconds, onC
 
         // 2. 변환 요청
         setConversionStatus('processing');
-        const { taskId } = await requestTimelapse({ fileId, outputSeconds, recordingSeconds });
+        const { taskId } = await requestTimelapse({ fileId, outputSeconds, recordingSeconds, aspectRatio });
 
         // 3. 변환 완료 대기
         const result = await pollUntilComplete(taskId, (p) => setConversionProgress(p));

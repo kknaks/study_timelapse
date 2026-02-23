@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TimerConfig } from '../../../packages/shared/types';
+import type { TimerConfig, AspectRatio } from '../../../packages/shared/types';
 import {
   OUTPUT_DURATION_OPTIONS,
   DEFAULT_OUTPUT_SECONDS,
@@ -16,13 +16,14 @@ export function SetupPage({ onStart }: SetupPageProps) {
   const [hours, setHours] = useState(1);
   const [minutes, setMinutes] = useState(0);
   const [outputSeconds, setOutputSeconds] = useState(DEFAULT_OUTPUT_SECONDS);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
 
   const totalSeconds = toSeconds(hours, minutes);
   const isValid = totalSeconds >= MIN_STUDY_SECONDS && totalSeconds <= MAX_STUDY_SECONDS;
 
   const handleStart = () => {
     if (!isValid) return;
-    onStart({ durationSeconds: totalSeconds, outputSeconds });
+    onStart({ durationSeconds: totalSeconds, outputSeconds, aspectRatio });
   };
 
   return (
@@ -66,6 +67,25 @@ export function SetupPage({ onStart }: SetupPageProps) {
               onClick={() => setOutputSeconds(sec)}
             >
               {sec}초
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2>영상 비율</h2>
+        <div className="output-options">
+          {(['9:16', '1:1', '4:5', '16:9'] as AspectRatio[]).map((ratio) => (
+            <button
+              key={ratio}
+              className={aspectRatio === ratio ? 'active' : ''}
+              onClick={() => setAspectRatio(ratio)}
+            >
+              {ratio}
+              {ratio === '9:16' && ' 릴스'}
+              {ratio === '1:1' && ' 피드'}
+              {ratio === '4:5' && ' 피드'}
+              {ratio === '16:9' && ' 원본'}
             </button>
           ))}
         </div>

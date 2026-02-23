@@ -2,6 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { TimerConfig, TimerStatus } from '../../../packages/shared/types';
 import { formatTime } from '../../../packages/shared/utils';
 
+const ASPECT_CSS: Record<string, string> = {
+  '9:16': '9 / 16',
+  '1:1': '1 / 1',
+  '4:5': '4 / 5',
+  '16:9': '16 / 9',
+};
+
 interface RecordingPageProps {
   config: TimerConfig;
   onComplete: (blob: Blob, elapsedSeconds: number) => void;
@@ -109,7 +116,14 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     <div className="page recording-page">
       <h1>공부 중</h1>
 
-      <video ref={videoRef} autoPlay muted playsInline className="camera-preview" />
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="camera-preview"
+        style={{ aspectRatio: ASPECT_CSS[config.aspectRatio] }}
+      />
 
       <div className="timer-display">
         <div>

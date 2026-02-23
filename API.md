@@ -97,7 +97,8 @@ file: recording.webm (binary)
 {
   "fileId": "abc123-def456",
   "outputSeconds": 60,
-  "recordingSeconds": 7200
+  "recordingSeconds": 7200,
+  "aspectRatio": "9:16"
 }
 ```
 
@@ -106,6 +107,7 @@ file: recording.webm (binary)
 | `fileId` | string | O | 업로드 API에서 받은 파일 ID |
 | `outputSeconds` | number | O | 목표 출력 시간 (30, 60, 90초) |
 | `recordingSeconds` | number | O | 실제 녹화 시간 (초) — 프론트 타이머 기준 |
+| `aspectRatio` | string | X | 출력 비율 (`"9:16"`, `"1:1"`, `"4:5"`, `"16:9"`). 기본값 `"9:16"` |
 
 **Response — 202 Accepted**
 
@@ -236,6 +238,7 @@ interface TimelapseRequest {
   fileId: string;
   outputSeconds: number;      // 30 | 60 | 90
   recordingSeconds: number;   // 프론트 타이머 기준 실제 녹화 시간
+  aspectRatio?: string;       // "9:16" | "1:1" | "4:5" | "16:9" (기본: "9:16")
 }
 
 // 타임랩스 상태 응답

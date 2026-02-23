@@ -12,6 +12,8 @@ export interface TimerConfig {
   durationSeconds: number;
   /** 타임랩스 출력 시간 (초 단위) */
   outputSeconds: number;
+  /** 출력 비율 */
+  aspectRatio: AspectRatio;
 }
 
 /** 타이머 상태 */
@@ -69,6 +71,9 @@ export interface UploadResponse {
   filename: string;
 }
 
+/** 출력 비율 */
+export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:5';
+
 /** API 타임랩스 요청 */
 export interface TimelapseRequest {
   /** 업로드된 파일 ID */
@@ -77,6 +82,8 @@ export interface TimelapseRequest {
   outputSeconds: number;
   /** 실제 녹화 시간 (초) — 프론트 타이머 기준 */
   recordingSeconds: number;
+  /** 출력 비율 — 백엔드에서 FFmpeg crop 처리 */
+  aspectRatio?: AspectRatio;
 }
 
 /** API 타임랩스 상태 응답 */
