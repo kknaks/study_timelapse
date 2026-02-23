@@ -146,19 +146,9 @@ export function ThemeSelectPage({
           src={videoUrl}
           loop
           muted
+          autoPlay
           playsInline
           className="theme-preview-video"
-          onLoadedData={() => {
-            const video = videoRef.current;
-            if (!video) return;
-            // 첫 프레임 보이도록 약간 시크
-            video.currentTime = 0.1;
-            // 자동 재생 시도
-            video.play().catch(() => {
-              // 자동 재생 실패해도 첫 프레임은 보임
-              console.log('자동 재생 차단 — 정지 프리뷰 사용');
-            });
-          }}
         />
         <canvas
           ref={canvasRef}
