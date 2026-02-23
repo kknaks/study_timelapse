@@ -1,0 +1,19 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Uploads/Outputs (runtime data)
+uploads/
+outputs/
