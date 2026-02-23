@@ -128,7 +128,12 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
   return (
     <div className="page recording-page">
-      <h1>{timerStatus === 'idle' ? '준비' : '공부 중'}</h1>
+      <h1>
+        {timerStatus === 'idle' && '📷 준비'}
+        {timerStatus === 'running' && '🔴 공부 중'}
+        {timerStatus === 'paused' && '⏸️ 일시정지'}
+        {timerStatus === 'completed' && '✅ 완료'}
+      </h1>
 
       <video
         ref={videoRef}
