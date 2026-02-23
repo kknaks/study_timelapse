@@ -1,0 +1,14 @@
+{
+  "name": "@study-timelapse/shared",
+  "version": "0.0.1",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    "./types": "./types/index.ts",
+    "./api": "./api/index.ts",
+    "./i18n": "./i18n/index.ts",
+    "./utils": "./utils/index.ts",
+    "./constants": "./constants/index.ts"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "study-timelapse-frontend",
+  "private": true,
+  "workspaces": [
+    "web",
+    "mobile",
+    "packages/*"
+  ]
+}
