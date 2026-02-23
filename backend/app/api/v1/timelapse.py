@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from app.schemas.timelapse import TimelapseCreateResponse, TimelapseRequest, TimelapseStatusResponse
+from app.schemas.timelapse import TimelapseCreateResponse, TimelapseStatusResponse
 from app.services.timelapse_service import TimelapseService
 from app.services.upload_service import UploadService
 
@@ -28,7 +28,10 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     aspect_ratio = request.get("aspectRatio", "9:16")
 
     if not file_id or output_seconds not in (30, 60, 90):
-        raise HTTPException(status_code=400, detail="Invalid request: outputSeconds must be 30, 60, or 90")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request: outputSeconds must be 30, 60, or 90",
+        )
 
     if recording_seconds is None:
         raise HTTPException(status_code=400, detail="Invalid request: recordingSeconds is required")
@@ -36,13 +39,18 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
 
     valid_ratios = ("9:16", "1:1", "4:5", "16:9")
     if aspect_ratio not in valid_ratios:
-        raise HTTPException(status_code=400, detail=f"Invalid aspectRatio: must be one of {valid_ratios}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid aspectRatio: must be one of {valid_ratios}",
+        )
 
     try:
-        task_id = await timelapse_service.create_task(file_id, output_seconds, recording_seconds, aspect_ratio)
+        task_id = await timelapse_service.create_task(
+            file_id, output_seconds, recording_seconds, aspect_ratio,
+        )
         return TimelapseCreateResponse(taskId=task_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail="File not found") from e
 
 
 @router.get(

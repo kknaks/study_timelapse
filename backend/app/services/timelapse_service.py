@@ -5,7 +5,6 @@ import logging
 import math
 import os
 import uuid
-from typing import Optional
 
 from app.config import settings
 from app.services.upload_service import UploadService
@@ -55,13 +54,16 @@ class TimelapseService:
         }
 
         asyncio.create_task(
-            self._run_ffmpeg(task_id, file_info["file_path"], output_path,
-                             output_seconds, total_frames, duration, recording_seconds, aspect_ratio)
+            self._run_ffmpeg(
+                task_id, file_info["file_path"], output_path,
+                output_seconds, total_frames, duration,
+                recording_seconds, aspect_ratio,
+            )
         )
 
         return task_id
 
-    def get_task(self, task_id: str) -> Optional[dict]:
+    def get_task(self, task_id: str) -> dict | None:
         return task_store.get(task_id)
 
     # ── 타임랩스 파라미터 계산 ──
@@ -190,7 +192,10 @@ class TimelapseService:
             ])
             filter_str = ",".join(filters)
 
-            logger.info(f"[{task_id}] [{case}] sample_fps={sample_fps:.4f}, output_fps={actual_fps}")
+            logger.info(
+                f"[{task_id}] [{case}] sample_fps={sample_fps:.4f}, "
+                f"output_fps={actual_fps}"
+            )
 
             cmd = [
                 "ffmpeg", "-y",

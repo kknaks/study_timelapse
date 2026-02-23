@@ -27,6 +27,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B"]
+ignore = ["N815"]  # camelCase in Pydantic schemas (API 호환)
+
+[tool.ruff.lint.per-file-ignores]
+"app/schemas/*" = ["N815"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

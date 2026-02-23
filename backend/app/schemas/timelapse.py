@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, field_validator
 
 
@@ -31,5 +29,5 @@ class TimelapseStatusResponse(BaseModel):
     taskId: str
     status: str
     progress: int
-    outputSeconds: Optional[int] = None
-    downloadUrl: Optional[str] = None
+    outputSeconds: int | None = None
+    downloadUrl: str | None = None

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
 import os
 import uuid
 
@@ -64,7 +63,7 @@ class UploadService:
         if ext not in ALLOWED_EXTENSIONS:
             raise ValueError(f"Unsupported file format: {ext}")
 
-    def get_file(self, file_id: str) -> Optional[dict]:
+    def get_file(self, file_id: str) -> dict | None:
         return file_store.get(file_id)
 
     async def _probe_video(self, file_path: str) -> tuple[int, float]:
