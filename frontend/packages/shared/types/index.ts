@@ -82,10 +82,17 @@ export type OverlayTheme =
   | 'minimal'        // 심플 텍스트
   | 'none';          // 오버레이 없음
 
+/** 오버레이 위치 (비율 0~1) */
+export interface OverlayPosition {
+  x: number;  // 0(좌) ~ 1(우)
+  y: number;  // 0(상) ~ 1(하)
+}
+
 /** 오버레이 설정 */
 export interface OverlayConfig {
   theme: OverlayTheme;
-  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  /** 비율 기반 위치 (0~1) */
+  position: OverlayPosition;
   color: string;     // hex
   size: 'sm' | 'md' | 'lg';
 }

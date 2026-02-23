@@ -50,23 +50,13 @@ export class OverlayRenderer {
   }
 
   private getPosition(width: number, height: number, elemW: number, elemH: number) {
-    const margin = 20;
     const { position } = this.config;
-
-    switch (position) {
-      case 'top-left':
-        return { x: margin, y: margin + elemH };
-      case 'top-right':
-        return { x: width - elemW - margin, y: margin + elemH };
-      case 'bottom-left':
-        return { x: margin, y: height - margin };
-      case 'bottom-right':
-        return { x: width - elemW - margin, y: height - margin };
-      case 'center':
-        return { x: (width - elemW) / 2, y: (height + elemH) / 2 };
-      default:
-        return { x: margin, y: height - margin };
-    }
+    // position은 {x: 0~1, y: 0~1} 비율 좌표
+    // 요소가 화면 밖으로 나가지 않도록 클램핑
+    const margin = 10;
+    const x = Math.max(margin, Math.min(position.x * width - elemW / 2, width - elemW - margin));
+    const y = Math.max(margin + elemH, Math.min(position.y * height + elemH / 2, height - margin));
+    return { x, y };
   }
 
   private getFontSize(): number {
@@ -111,7 +101,7 @@ export class OverlayRenderer {
     const radius = this.getFontSize() * 1.2;
     const pos = this.getPosition(w, h, radius * 2, radius * 2);
     const cx = pos.x + radius;
-    const cy = pos.y - radius;
+    const cy = pos.y - radius + 5;
 
     // 배경 원
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';

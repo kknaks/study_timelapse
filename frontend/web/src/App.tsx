@@ -72,8 +72,11 @@ export default function App() {
           onComplete={handleRecordingComplete}
         />
       )}
-      {step === 'themeSelect' && (
+      {step === 'themeSelect' && videoBlob && config && (
         <ThemeSelectPage
+          videoBlob={videoBlob}
+          recordingSeconds={recordingSeconds}
+          outputSeconds={config.outputSeconds}
           onSelect={handleThemeSelect}
           onBack={handleThemeBack}
         />

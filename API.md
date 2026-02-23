@@ -249,7 +249,7 @@ GET /api/download/task-789xyz
 | `taskId` | string | O | 변환 작업 ID |
 | `overlay` | object | O | 오버레이 설정 |
 | `overlay.theme` | string | O | `"stopwatch"` \| `"analog-clock"` \| `"progress-bar"` \| `"minimal"` \| `"none"` |
-| `overlay.position` | string | O | `"top-left"` \| `"top-right"` \| `"bottom-left"` \| `"bottom-right"` \| `"center"` |
+| `overlay.position` | object | O | `{ x: 0.8, y: 0.85 }` — 비율 좌표 (0~1) |
 | `overlay.color` | string | O | hex 색상 (`"#ffffff"`) |
 | `overlay.size` | string | O | `"sm"` \| `"md"` \| `"lg"` |
 | `composited` | boolean | X | 프론트에서 합성 완료 여부 |
@@ -280,7 +280,7 @@ interface UploadResponse {
 // 오버레이 설정
 interface OverlayConfig {
   theme: 'stopwatch' | 'analog-clock' | 'progress-bar' | 'minimal' | 'none';
-  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  position: { x: number; y: number };  // 비율 좌표 (0~1)
   color: string;          // hex
   size: 'sm' | 'md' | 'lg';
 }

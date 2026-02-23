@@ -154,7 +154,7 @@ export function CompletePage({
 
       {overlayConfig && overlayConfig.theme !== 'none' && (
         <p className="theme-badge">
-          테마: {overlayConfig.theme} | 위치: {overlayConfig.position} | 크기: {overlayConfig.size.toUpperCase()}
+          테마: {overlayConfig.theme} | 크기: {overlayConfig.size.toUpperCase()}
         </p>
       )}
 
