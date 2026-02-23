@@ -15,7 +15,7 @@ interface RecordingPageProps {
 }
 
 export function RecordingPage({ config, onComplete }: RecordingPageProps) {
-  const [timerStatus, setTimerStatus] = useState<TimerStatus>('running');
+  const [timerStatus, setTimerStatus] = useState<TimerStatus>('idle');
   const [elapsed, setElapsed] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -25,17 +25,17 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
   const remaining = Math.max(0, config.durationSeconds - elapsed);
 
-  // 카메라 시작 + 녹화
-  useEffect(() => {
-    let stream: MediaStream | null = null;
+  const streamRef = useRef<MediaStream | null>(null);
 
+  // 카메라 프리뷰만 시작 (녹화는 버튼 클릭 시)
+  useEffect(() => {
     async function startCamera() {
       try {
-        // 웹캠은 가로(16:9)로 녹화, 백엔드에서 인스타 비율로 크롭/리사이즈
-        stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: 1280, height: 720 },
           audio: false,
         });
+        streamRef.current = stream;
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -43,25 +43,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
         if (!MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
           alert('이 브라우저는 MP4 녹화를 지원하지 않습니다.\nChrome 최신 버전을 사용해주세요.');
-          return;
         }
-
-        const mimeType = 'video/mp4;codecs=avc1';
-        console.log(`📹 녹화 포맷: ${mimeType}`);
-
-        const recorder = new MediaRecorder(stream, {
-          mimeType,
-          videoBitsPerSecond: 2_500_000,
-        });
-
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
-            chunksRef.current.push(e.data);
-          }
-        };
-
-        recorder.start(1000); // 1초마다 chunk
-        mediaRecorderRef.current = recorder;
       } catch {
         alert('카메라 접근 권한이 필요합니다');
       }
@@ -70,11 +52,35 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
+
+  // 녹화 시작
+  const handleStart = () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    const mimeType = 'video/mp4;codecs=avc1';
+    console.log(`📹 녹화 포맷: ${mimeType}`);
+
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 2_500_000,
+    });
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+      }
+    };
+
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+    setTimerStatus('running');
+  };
 
   // 타이머
   useEffect(() => {
@@ -122,7 +128,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
   return (
     <div className="page recording-page">
-      <h1>공부 중</h1>
+      <h1>{timerStatus === 'idle' ? '준비' : '공부 중'}</h1>
 
       <video
         ref={videoRef}
@@ -144,15 +150,25 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
         </div>
       </div>
 
-      <p className="warning">⚠️ 탭을 전환하면 녹화가 중단될 수 있습니다</p>
+      {timerStatus !== 'idle' && (
+        <p className="warning">⚠️ 탭을 전환하면 녹화가 중단될 수 있습니다</p>
+      )}
 
       <div className="controls">
-        <button onClick={handlePause} disabled={timerStatus === 'completed'}>
-          {timerStatus === 'paused' ? '재개' : '일시정지'}
-        </button>
-        <button onClick={handleStop} disabled={timerStatus === 'completed'}>
-          종료
-        </button>
+        {timerStatus === 'idle' ? (
+          <button onClick={handleStart} className="start-button">
+            🔴 녹화 시작
+          </button>
+        ) : (
+          <>
+            <button onClick={handlePause} disabled={timerStatus === 'completed'}>
+              {timerStatus === 'paused' ? '재개' : '일시정지'}
+            </button>
+            <button onClick={handleStop} disabled={timerStatus === 'completed'}>
+              종료
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
