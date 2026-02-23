@@ -163,20 +163,24 @@ class TimelapseService:
                 actual_output = max(1, total_frames // BASE_FPS)
                 task["output_seconds"] = actual_output
 
-            # select 필터
-            if pick_every <= 1:
-                select_filter = "select='1'"
-            else:
-                select_filter = f"select='not(mod(n\\,{pick_every}))'"
-
             # crop/scale
             crop_filter, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
 
-            # 필터 체인: select → setpts(리셋) → crop → scale → pad → drawtext
-            filters = [select_filter, "setpts=N/TB"]
+            # fps 필터로 프레임 샘플링 (select 대신 — webm 호환)
+            # 원본에서 뽑을 fps = 출력에 필요한 프레임수 / 원본 길이
+            source_duration = duration if duration > 0 else recording_seconds
+            if source_duration > 0 and case != "case2":
+                needed_frames = actual_fps * output_seconds
+                sample_fps = needed_frames / source_duration
+            else:
+                sample_fps = BASE_FPS
+
+            # 필터 체인: fps(샘플링) → crop → setpts(리셋) → scale → pad → drawtext
+            filters = [f"fps={sample_fps:.4f}"]
             if crop_filter:
                 filters.append(crop_filter)
             filters.extend([
+                f"setpts=N/{actual_fps}/TB",
                 f"{scale_filter}:force_original_aspect_ratio=decrease",
                 pad_filter,
                 (
@@ -187,12 +191,13 @@ class TimelapseService:
             ])
             filter_str = ",".join(filters)
 
+            logger.info(f"[{task_id}] [{case}] sample_fps={sample_fps:.4f}, output_fps={actual_fps}")
+
             cmd = [
                 "ffmpeg", "-y",
                 "-fflags", "+genpts",
                 "-i", input_path,
                 "-vf", filter_str,
-                "-vsync", "vfr",
                 "-r", str(actual_fps),
                 "-an",
                 "-c:v", "libx264",
