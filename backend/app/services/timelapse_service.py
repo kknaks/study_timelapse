@@ -153,17 +153,22 @@ class TimelapseService:
     ) -> None:
         task = task_store[task_id]
         try:
-            # ── Pass 1: webm → 깨끗한 mp4 (전체 디코딩) ──
-            clean_path = output_path.replace("_timelapse.mp4", "_clean.mp4")
-            pass1_ok = await self._decode_to_mp4(task_id, input_path, clean_path)
-            if not pass1_ok:
-                task["status"] = "failed"
-                return
+            # ── Pass 1: webm → 깨끗한 mp4 (mp4 입력이면 스킵) ──
+            is_mp4 = input_path.lower().endswith(".mp4")
+            if is_mp4:
+                clean_path = input_path
+                logger.info(f"[{task_id}] mp4 input, skipping pass1")
+            else:
+                clean_path = output_path.replace("_timelapse.mp4", "_clean.mp4")
+                pass1_ok = await self._decode_to_mp4(task_id, input_path, clean_path)
+                if not pass1_ok:
+                    task["status"] = "failed"
+                    return
 
-            # clean mp4에서 정확한 프레임수/길이 다시 파악
+            # 프레임수/길이 파악
             if total_frames <= 0 or duration <= 0:
                 total_frames, duration = await self._probe_clean(clean_path, recording_seconds)
-                logger.info(f"[{task_id}] re-probed: frames={total_frames}, duration={duration}s")
+                logger.info(f"[{task_id}] probed: frames={total_frames}, duration={duration}s")
 
             case, pick_every, actual_fps = self._calc_timelapse_params(total_frames, output_seconds)
 
@@ -235,8 +240,8 @@ class TimelapseService:
                 task["status"] = "failed"
                 logger.error(f"[{task_id}] pass2 failed (code {process.returncode})")
 
-            # clean 파일 정리
-            if os.path.exists(clean_path):
+            # clean 파일 정리 (원본 mp4는 삭제하지 않음)
+            if not is_mp4 and os.path.exists(clean_path):
                 os.remove(clean_path)
 
         except Exception as e:
