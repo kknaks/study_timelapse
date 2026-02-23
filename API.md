@@ -222,6 +222,50 @@ GET /api/download/task-789xyz
 
 ---
 
+## 5. 타임랩스 최종 저장 (향후 DB 연동)
+
+### `POST /api/timelapse/:taskId/save`
+
+프론트에서 오버레이 합성 완료 후, 테마 메타데이터를 백엔드에 기록합니다.
+(현재는 메타데이터만 기록, 향후 DB 연동 시 활용)
+
+**Request**
+
+```json
+{
+  "taskId": "task-789xyz",
+  "overlay": {
+    "theme": "stopwatch",
+    "position": "bottom-right",
+    "color": "#ffffff",
+    "size": "md"
+  },
+  "composited": true
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `taskId` | string | O | 변환 작업 ID |
+| `overlay` | object | O | 오버레이 설정 |
+| `overlay.theme` | string | O | `"stopwatch"` \| `"analog-clock"` \| `"progress-bar"` \| `"minimal"` \| `"none"` |
+| `overlay.position` | string | O | `"top-left"` \| `"top-right"` \| `"bottom-left"` \| `"bottom-right"` \| `"center"` |
+| `overlay.color` | string | O | hex 색상 (`"#ffffff"`) |
+| `overlay.size` | string | O | `"sm"` \| `"md"` \| `"lg"` |
+| `composited` | boolean | X | 프론트에서 합성 완료 여부 |
+
+**Response — 200 OK**
+
+```json
+{
+  "success": true
+}
+```
+
+> ⚠️ 오버레이 합성은 **프론트엔드(Canvas)**에서 처리. 백엔드는 깨끗한 타임랩스 영상만 생성하고, 이 API로 메타데이터만 기록합니다.
+
+---
+
 ## 타입 정의 (TypeScript)
 
 백엔드 구현 시 참고할 타입 정의입니다.
@@ -233,12 +277,21 @@ interface UploadResponse {
   filename: string;
 }
 
+// 오버레이 설정
+interface OverlayConfig {
+  theme: 'stopwatch' | 'analog-clock' | 'progress-bar' | 'minimal' | 'none';
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  color: string;          // hex
+  size: 'sm' | 'md' | 'lg';
+}
+
 // 타임랩스 요청
 interface TimelapseRequest {
   fileId: string;
   outputSeconds: number;      // 30 | 60 | 90
   recordingSeconds: number;   // 프론트 타이머 기준 실제 녹화 시간
   aspectRatio?: string;       // "9:16" | "1:1" | "4:5" | "16:9" (기본: "9:16")
+  overlay?: OverlayConfig;    // 메타데이터 기록용
 }
 
 // 타임랩스 상태 응답
@@ -247,6 +300,13 @@ interface TimelapseStatusResponse {
   status: 'processing' | 'completed' | 'failed';
   progress: number;       // 0~100
   downloadUrl?: string;   // completed일 때만
+}
+
+// 타임랩스 최종 저장 요청
+interface TimelapseSaveRequest {
+  taskId: string;
+  overlay: OverlayConfig;
+  composited?: boolean;
 }
 ```
 
@@ -263,6 +323,7 @@ interface TimelapseStatusResponse {
 | 최대 공부 시간 | 43,200초 (12시간) |
 | 출력 옵션 | 30초, 60초, 90초 |
 | 폴링 간격 | 2초 |
+| 오버레이 테마 | stopwatch, analog-clock, progress-bar, minimal, none |
 
 ---
 

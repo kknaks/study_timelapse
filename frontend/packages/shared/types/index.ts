@@ -100,6 +100,18 @@ export interface TimelapseRequest {
   recordingSeconds: number;
   /** 출력 비율 — 백엔드에서 FFmpeg crop 처리 */
   aspectRatio?: AspectRatio;
+  /** 오버레이 설정 (DB 기록용, 백엔드는 오버레이 안 함) */
+  overlay?: OverlayConfig;
+}
+
+/** API 타임랩스 최종 저장 요청 */
+export interface TimelapseSaveRequest {
+  /** 작업 ID */
+  taskId: string;
+  /** 오버레이 설정 */
+  overlay: OverlayConfig;
+  /** 최종 합성 영상 (프론트에서 Canvas 합성한 Blob) */
+  composited?: boolean;
 }
 
 /** API 타임랩스 상태 응답 */

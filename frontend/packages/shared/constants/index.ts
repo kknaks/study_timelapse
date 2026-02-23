@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
   UPLOAD: '/api/upload',
   TIMELAPSE: '/api/timelapse',
   TIMELAPSE_STATUS: (id: string) => `/api/timelapse/${id}`,
+  TIMELAPSE_SAVE: (id: string) => `/api/timelapse/${id}/save`,
   DOWNLOAD: (id: string) => `/api/download/${id}`,
 } as const;
 

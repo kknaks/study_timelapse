@@ -8,6 +8,7 @@ import type {
   UploadResponse,
   TimelapseRequest,
   TimelapseStatusResponse,
+  TimelapseSaveRequest,
 } from '../types';
 
 /**
@@ -115,4 +116,62 @@ export async function pollUntilComplete(
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+}
+
+/**
+ * 타임랩스 최종 저장 (테마 메타데이터)
+ */
+export async function saveTimelapse(
+  request: TimelapseSaveRequest,
+): Promise<{ success: boolean }> {
+  const response = await fetch(
+    `${API_BASE_URL}${API_ENDPOINTS.TIMELAPSE_SAVE(request.taskId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Save failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * 합성된 영상 업로드 (Canvas에서 녹화한 최종 영상)
+ */
+export async function uploadComposited(
+  taskId: string,
+  blob: Blob,
+  onProgress?: (percentage: number) => void,
+): Promise<{ success: boolean }> {
+  const formData = new FormData();
+  formData.append('file', blob, 'composited.mp4');
+  formData.append('taskId', taskId);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+
+    xhr.open('POST', `${API_BASE_URL}${API_ENDPOINTS.TIMELAPSE_SAVE(taskId)}`);
+    xhr.send(formData);
+  });
 }
