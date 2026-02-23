@@ -24,8 +24,10 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
     async function startCamera() {
       try {
+        // 인스타 릴스 최적: 1080x1920 (9:16) 또는 1080x1080 (1:1)
+        // 업로드 용량 줄이기 위해 720p로 녹화, 백엔드에서 최종 리사이즈
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 1280, height: 720 },
+          video: { facingMode: 'user', width: 720, height: 1280 },
           audio: false,
         });
 
@@ -35,6 +37,7 @@ export function RecordingPage({ config, onComplete }: RecordingPageProps) {
 
         const recorder = new MediaRecorder(stream, {
           mimeType: 'video/webm;codecs=vp9',
+          videoBitsPerSecond: 2_500_000, // 2.5Mbps — 용량 절약
         });
 
         recorder.ondataavailable = (e) => {
