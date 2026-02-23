@@ -247,11 +247,17 @@ class TimelapseService:
         """Pass 1: 입력(webm 등)을 깨끗한 mp4로 전체 디코딩."""
         cmd = [
             "ffmpeg", "-y",
+            "-fflags", "+genpts+discardcorrupt",
+            "-err_detect", "ignore_err",
             "-i", input_path,
+            "-map", "0:v:0",
+            "-vsync", "cfr",
+            "-r", "30",
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-crf", "18",
             "-pix_fmt", "yuv420p",
+            "-g", "30",
             "-an",
             output_path,
         ]
@@ -262,12 +268,17 @@ class TimelapseService:
         )
         _, stderr = await process.communicate()
 
+        stderr_text = stderr.decode() if stderr else ""
+        if stderr_text:
+            logger.info(f"[{task_id}] pass1 stderr (last 500): {stderr_text[-500:]}")
+
         if process.returncode != 0:
-            stderr_text = stderr.decode() if stderr else ""
-            logger.error(f"[{task_id}] pass1 failed: {stderr_text[-500:]}")
+            logger.error(f"[{task_id}] pass1 failed (code {process.returncode})")
             return False
 
-        logger.info(f"[{task_id}] pass1 done: {output_path}")
+        # pass1 결과 파일 크기 확인
+        fsize = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+        logger.info(f"[{task_id}] pass1 done: {output_path} ({fsize} bytes)")
         return True
 
     async def _probe_clean(self, file_path: str, fallback_seconds: float) -> tuple[int, float]:
