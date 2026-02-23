@@ -181,11 +181,6 @@ class TimelapseService:
                 f"setpts=N/{actual_fps}/TB",
                 f"{scale_filter}:force_original_aspect_ratio=decrease",
                 pad_filter,
-                (
-                    f"drawtext=text='%{{pts\\:hms}}':"
-                    f"fontsize=48:fontcolor=white:"
-                    f"x=20:y=20:box=1:boxcolor=black@0.5:boxborderw=8"
-                ),
             ])
             filter_str = ",".join(filters)
 
