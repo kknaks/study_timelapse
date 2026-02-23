@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "18001:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/code
+      - upload_data:/code/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "15433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-timelapse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-timelapse123}
+      POSTGRES_DB: ${POSTGRES_DB:-study_timelapse}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timelapse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  upload_data:
