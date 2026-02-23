@@ -87,6 +87,7 @@ export default function App() {
           outputSeconds={config.outputSeconds}
           recordingSeconds={recordingSeconds}
           aspectRatio={config.aspectRatio}
+          overlayConfig={overlayConfig}
           onComplete={handleConversionComplete}
         />
       )}
