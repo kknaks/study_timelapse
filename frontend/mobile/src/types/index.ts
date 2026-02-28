@@ -30,3 +30,17 @@ export interface WeeklyStats {
   session_count: number;
   daily: Array<{ date: string; total_seconds: number; session_count: number }>;
 }
+
+export interface TimelapseStatus {
+  taskId: string;
+  status: 'processing' | 'completed' | 'failed';
+  progress: number;
+  downloadUrl?: string;
+}
+
+export interface UploadResponse {
+  fileId: string;
+  filename: string;
+  totalFrames: number;
+  duration: number;
+}

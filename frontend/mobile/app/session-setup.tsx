@@ -41,8 +41,18 @@ export default function SessionSetupScreen() {
 
   const mutation = useMutation({
     mutationFn: (data: CreateSessionRequest) => createSession(data),
-    onSuccess: () => {
-      router.push('/focus');
+    onSuccess: (response) => {
+      const createdSession = response.data;
+      router.push({
+        pathname: '/focus',
+        params: {
+          sessionId: createdSession.id,
+          studyMinutes: String(totalStudyMinutes),
+          outputSeconds: String(outputSeconds),
+          aspectRatio,
+          overlayStyle,
+        },
+      });
     },
     onError: (error: Error) => {
       Alert.alert('Error', 'Failed to create session. Please try again.');

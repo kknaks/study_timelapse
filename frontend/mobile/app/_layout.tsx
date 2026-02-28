@@ -24,6 +24,8 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen name="focus" options={{ headerShown: false }} />
+        <Stack.Screen name="processing" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="result" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="stats" options={{ title: 'Stats' }} />
       </Stack>
     </QueryClientProvider>
