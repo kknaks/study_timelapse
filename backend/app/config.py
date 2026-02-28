@@ -20,6 +20,18 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:5173"
 
+    # JWT
+    jwt_secret_key: str = "jwt-secret-change-me"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 30
+
+    # Google OAuth
+    google_client_id: str = ""
+
+    # Apple OAuth
+    apple_bundle_id: str = ""
+
     model_config = {"env_file": ".env"}
 
 
