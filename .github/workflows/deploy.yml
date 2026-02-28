@@ -1,13 +1,13 @@
 name: Deploy
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - "backend/**"
-  #     - "docker-compose.yml"
-  #     - ".github/workflows/deploy.yml"
-  workflow_dispatch:  # 수동 실행만 가능
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:  # 수동 실행도 가능
 
 env:
   REGISTRY: ghcr.io
