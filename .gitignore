@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+secret.env
 
 # Dependencies
 node_modules/

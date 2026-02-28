@@ -30,7 +30,8 @@ class Settings(BaseSettings):
     google_client_id: str = ""
 
     # Apple OAuth
-    apple_bundle_id: str = ""
+    apple_client_id: str = "com.focustimelapse.app"
+    apple_team_id: str = ""
 
     model_config = {"env_file": ".env"}
 
