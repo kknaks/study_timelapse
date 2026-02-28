@@ -67,6 +67,7 @@ export default function SessionSetupScreen() {
     }
 
     mutation.mutate({
+      start_time: new Date().toISOString(),
       output_seconds: outputSeconds,
       aspect_ratio: aspectRatio,
       overlay_style: overlayStyle,

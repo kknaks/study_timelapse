@@ -18,6 +18,7 @@ export interface Session {
 }
 
 export interface CreateSessionRequest {
+  start_time: string;
   output_seconds: number;
   aspect_ratio: string;
   overlay_style: string;
