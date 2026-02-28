@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """공통 의존성."""
+
+from __future__ import annotations
 
 import uuid
 

@@ -104,8 +104,8 @@ async def verify_apple_token(token: str) -> dict:
             "email": payload.get("email"),
             "name": None,  # Apple은 첫 로그인 시만 이름 제공 (별도 파라미터)
         }
-    except pyjwt.ExpiredSignatureError:
-        raise ValueError("Apple token expired")
+    except pyjwt.ExpiredSignatureError as e:
+        raise ValueError("Apple token expired") from e
     except Exception as e:
         logger.error(f"Apple token verification failed: {e}")
         raise ValueError(f"Invalid Apple token: {e}") from e

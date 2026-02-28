@@ -8,8 +8,6 @@ from app.schemas.auth import (
     AppleLoginRequest,
     GoogleLoginRequest,
     RefreshTokenRequest,
-    TokenResponse,
-    UserInfoResponse,
 )
 from app.services import auth_service
 from app.services.jwt_service import create_token_pair, verify_refresh_token

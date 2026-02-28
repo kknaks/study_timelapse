@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -23,14 +22,14 @@ class FocusSession(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     aspect_ratio: Mapped[str] = mapped_column(String, default="9:16")
     overlay_style: Mapped[str] = mapped_column(String, default="stopwatch")
     status: Mapped[str] = mapped_column(String, default="recording")
-    file_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    task_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    task_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Relationships
