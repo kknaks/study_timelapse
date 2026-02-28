@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     apple_client_id: str = "com.focustimelapse.app"
     apple_team_id: str = ""
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

@@ -4,41 +4,41 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.services.jwt_service import verify_access_token
 
-security = HTTPBearer()
+# TODO: 로그인 구현 후 JWT 인증으로 교체
+# 현재는 고정 테스트 유저로 인증을 우회합니다.
+TEST_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+TEST_USER_PROVIDER = "test"
+TEST_USER_PROVIDER_ID = "test_user"
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """JWT에서 현재 유저를 조회하는 의존성."""
-    try:
-        user_id = verify_access_token(credentials.credentials)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
+    """고정 테스트 유저를 반환하는 의존성.
 
-    stmt = select(User).where(User.id == uuid.UUID(user_id))
+    TODO: 로그인 구현 후 JWT 인증으로 교체
+    - HTTPBearer + verify_access_token 으로 복원
+    """
+    stmt = select(User).where(User.id == TEST_USER_ID)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
+        # 테스트 유저가 없으면 자동 생성 (upsert)
+        user = User(
+            id=TEST_USER_ID,
+            provider=TEST_USER_PROVIDER,
+            provider_id=TEST_USER_PROVIDER_ID,
+            name="Test User",
         )
+        db.add(user)
+        await db.flush()
 
     return user
