@@ -26,7 +26,7 @@ FocusTimelapse는 공부/집중 시간을 타임랩스 영상 콘텐츠로 변�
 | **영상 비율** | 9:16, 1:1, 4:5, 16:9 | 9:16, 1:1, 16:9 (4:5 제외) |
 | **워터마크** | 없음 | Free=워터마크, Pro=클린 |
 | **공유** | 다운로드만 | 내보내기 (갤러리 저장 + 공유 시트) |
-| **계정** | 없음 | 기기 기반 + 서버 DB 동기화 |
+| **계정** | 없음 | 소셜 로그인 (Google / Apple) |
 | **다국어** | KO/ZH/JA/EN/ES | Phase 1에서는 KO/EN (추후 확장) |
 
 ## 3. 타겟 유저
@@ -42,6 +42,7 @@ FocusTimelapse는 공부/집중 시간을 타임랩스 영상 콘텐츠로 변�
 | **모바일** | React Native (iOS + Android) |
 | **백엔드** | Python FastAPI + PostgreSQL |
 | **영상 처리** | FFmpeg (서버사이드 타임랩스 변환 + 오버레이 합성) |
+| **인증** | Google Sign-In, Sign in with Apple |
 | **결제** | RevenueCat (Phase 2) |
 | **로컬 저장** | AsyncStorage / SQLite (세션 데이터, 설정) |
 | **카메라** | react-native-camera / expo-camera |
@@ -146,7 +147,10 @@ UserState {
 -- 사용자
 CREATE TABLE users (
   id UUID PRIMARY KEY,
-  device_id VARCHAR UNIQUE NOT NULL,
+  provider VARCHAR NOT NULL,           -- 'google' | 'apple'
+  provider_id VARCHAR UNIQUE NOT NULL, -- Google sub / Apple user ID
+  email VARCHAR,
+  name VARCHAR,
   streak INT DEFAULT 0,
   longest_streak INT DEFAULT 0,
   total_focus_time INT DEFAULT 0,  -- seconds
@@ -190,7 +194,9 @@ CREATE TABLE daily_focus (
 ### 추가 API
 
 ```
-POST   /api/auth/device          — 기기 등록 (device_id → user_id)
+POST   /api/auth/google          — Google 소셜 로그인 (id_token → JWT)
+POST   /api/auth/apple           — Apple 소셜 로그인 (identity_token → JWT)
+POST   /api/auth/refresh         — JWT 토큰 갱신
 GET    /api/users/me              — 내 정보 (스트릭, 구독 상태, 포커스 시간)
 PUT    /api/users/me/streak       — 스트릭 업데이트
 POST   /api/sessions              — 세션 생성 (시작)
@@ -284,7 +290,7 @@ POST   /api/subscription/verify   — 구독 상태 검증 (RevenueCat, Phase 2)
 - ❌ 클라우드 동기화 (기기 간 데이터 동기화)
 - ❌ 4K 영상 출력
 - ❌ 커스텀 폰트/색상 (오버레이)
-- ❌ 회원가입/로그인 (이메일/소셜) — 기기 ID 기반으로 운영
+- ❌ 이메일/비밀번호 로그인 (소셜 로그인만 지원)
 - ❌ 다국어 확장 (Phase 1은 KO/EN만)
 
 ## 12. 리스크 & 대응
