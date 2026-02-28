@@ -15,7 +15,7 @@ services:
   db:
     image: postgres:16-alpine
     ports:
-      - "15434:5432"
+      - "25432:5432"
     env_file:
       - secret.env
     volumes:
