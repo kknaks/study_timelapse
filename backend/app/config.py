@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 2048
 
     # CORS
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "*"
 
     # JWT
     jwt_secret_key: str = "jwt-secret-change-me"
