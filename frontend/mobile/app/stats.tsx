@@ -284,13 +284,15 @@ export default function StatsScreen() {
                     <TouchableOpacity
                       onPress={(e) => {
                         const { pageX, pageY } = e.nativeEvent;
-                        // 요일 계산 (0=일, 1=월 ... 6=토)
+                        // 캘린더는 월요일 시작 → 컬럼 인덱스 계산
+                        // getDay(): 0=일,1=월,2=화,3=수,4=목,5=금,6=토
+                        // 캘린더 컬럼: 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
                         const dow = new Date(dateStr).getDay();
+                        const calCol = dow === 0 ? 6 : dow - 1;
                         const bubbleW = 120;
-                        // 기본: 중앙(1/2), 월요일: 2/5, 토/일요일: 4/5
-                        const ratio = dow === 1 ? 0.4 : (dow === 0 || dow === 6) ? 0.8 : 0.5;
+                        // 월(컬럼0): 2/5, 일(컬럼6): 4/5, 나머지: 중앙(1/2)
+                        const ratio = calCol === 0 ? 2/5 : calCol === 6 ? 4/5 : 0.5;
                         const leftOffset = Math.round(bubbleW * ratio);
-                        // 화면 밖으로 나가지 않도록 clamp
                         const left = Math.min(Math.max(pageX - leftOffset, 8), 260);
                         setSelectedDate(dateStr);
                         setSelectedSeconds(dayEntry?.total_seconds ?? 0);
