@@ -283,10 +283,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 20,
   },
   watermarkIcon: {
     width: 18,
