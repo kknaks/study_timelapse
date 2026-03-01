@@ -180,9 +180,9 @@ export default function StatsScreen() {
               activeOpacity={1}
               onPress={() => setBarBubble(null)}
             >
-              <View style={styles.bubbleSmall}>
-                <Text style={styles.bubbleDateSmall}>{barBubble.label}</Text>
-                <Text style={styles.bubbleTimeSmall}>
+              <View style={styles.sharedBubble}>
+                <Text style={styles.sharedBubbleDate}>{barBubble.label}</Text>
+                <Text style={styles.sharedBubbleTime}>
                   {(() => {
                     const h = Math.floor(barBubble.seconds / 3600);
                     const m = Math.floor((barBubble.seconds % 3600) / 60);
@@ -308,33 +308,33 @@ export default function StatsScreen() {
         </View>
       </ScrollView>
 
-      {/* 캘린더 날짜 말풍선 — 꼬리가 클릭 위치 바로 위 */}
+      {/* 캘린더 날짜 말풍선 — 클릭 위치 기준 고정 */}
       {selectedDate && bubblePos && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={[styles.bubble, {
-            top: bubblePos.y - 88,
-            left: Math.min(Math.max(bubblePos.x - 70, 8), 230),
+          <View style={[styles.sharedBubble, {
+            position: 'absolute',
+            top: bubblePos.y - 82,
+            left: Math.min(Math.max(bubblePos.x - 60, 8), 230),
           }]}>
-            <Text style={styles.bubbleDate}>
+            <Text style={styles.sharedBubbleDate}>
               {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
             </Text>
-            <Text style={styles.bubbleTime}>
+            <Text style={styles.sharedBubbleTime}>
               {(() => {
                 const h = Math.floor(selectedSeconds / 3600);
                 const m = Math.floor((selectedSeconds % 3600) / 60);
                 return h > 0 ? `${h}h ${m}m` : `${m}m`;
               })()}
             </Text>
-            <View style={styles.bubbleTail} />
           </View>
         </TouchableOpacity>
       )}
 
-      {/* 바 차트 클릭 말풍선 — 바 차트 카드 우측 상단 고정 */}
+      {/* 바 차트 클릭 말풍선 — 배경 터치 닫기 */}
       {barBubble && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
@@ -570,11 +570,11 @@ const styles = StyleSheet.create({
   },
 
   // 말풍선 (캘린더용)
-  bubble: {
-    position: 'absolute',
+  // 공통 말풍선 — 캘린더/바 차트 동일 스타일
+  sharedBubble: {
     backgroundColor: '#1a1a1a',
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 14,
     alignItems: 'center',
     gap: 3,
@@ -583,7 +583,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 8,
-    minWidth: 130,
+    minWidth: 110,
+  },
+  sharedBubbleDate: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+  },
+  sharedBubbleTime: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFF',
   },
   // 바 차트 말풍선 wrapper — 카드 우측 상단 고정
   barBubbleWrap: {
@@ -591,50 +601,5 @@ const styles = StyleSheet.create({
     top: 12,
     right: 16,
     zIndex: 10,
-  },
-  // 바 차트용 더 작은 말풍선
-  bubbleSmall: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    gap: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  bubbleTail: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderTopWidth: 7,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#1a1a1a',
-    marginTop: 2,
-  },
-  bubbleDate: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-  },
-  bubbleDateSmall: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '500',
-  },
-  bubbleTime: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFF',
-  },
-  bubbleTimeSmall: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFF',
   },
 });
