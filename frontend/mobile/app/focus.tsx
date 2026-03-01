@@ -201,14 +201,20 @@ export default function FocusScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Camera Preview */}
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing="front"
-        mode="video"
-        onCameraReady={() => setCameraReady(true)}
-      />
+      {/* Camera Preview — aspect ratio 맞게 중앙 배치, 나머지 검정 */}
+      <View style={styles.cameraWrapper}>
+        <CameraView
+          ref={cameraRef}
+          style={[
+            styles.camera,
+            aspectRatio === '1:1' && styles.camera1x1,
+            aspectRatio === '16:9' && styles.camera16x9,
+          ]}
+          facing="front"
+          mode="video"
+          onCameraReady={() => setCameraReady(true)}
+        />
+      </View>
 
       {/* Overlay */}
       <View style={styles.overlay}>
@@ -299,6 +305,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  cameraWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  camera: {
+    // 기본 9:16 — 전체 화면
+    width: '100%',
+    height: '100%',
+  },
+  camera1x1: {
+    // 1:1 — 정사각형, 가운데 배치
+    width: '100%',
+    aspectRatio: 1,
+    height: undefined,
+  },
+  camera16x9: {
+    // 16:9 — 가로형, 위아래 레터박스
+    width: '100%',
+    aspectRatio: 16 / 9,
+    height: undefined,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

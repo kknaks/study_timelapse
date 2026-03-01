@@ -59,6 +59,20 @@ export default function ProcessingScreen() {
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelledRef = useRef(false);
+  const [resultUrl, setResultUrl] = useState('');
+
+  const navigateToResult = useCallback((url = '') => {
+    router.replace({
+      pathname: '/result',
+      params: {
+        downloadUrl: url,
+        sessionId,
+        studyMinutes: String(Math.round(recordingSecs / 60)),
+        outputSeconds: String(outputSecs),
+        aspectRatio,
+      },
+    });
+  }, [router, sessionId, recordingSecs, outputSecs, aspectRatio]);
 
   const cleanup = useCallback(() => {
     if (pollingRef.current) {
@@ -78,18 +92,6 @@ export default function ProcessingScreen() {
     if (!videoUri) {
       setStage('done');
       setProgress(100);
-      setTimeout(() => {
-        router.replace({
-          pathname: '/result',
-          params: {
-            downloadUrl: '',
-            sessionId,
-            studyMinutes: String(Math.round(recordingSecs / 60)),
-            outputSeconds: String(outputSecs),
-            aspectRatio,
-          },
-        });
-      }, 2500);
       return;
     }
 
@@ -162,22 +164,8 @@ export default function ProcessingScreen() {
             }
 
             setProgress(100);
-
-            // Navigate to result
-            setTimeout(() => {
-              if (!cancelledRef.current) {
-                router.replace({
-                  pathname: '/result',
-                  params: {
-                    downloadUrl,
-                    sessionId,
-                    studyMinutes: String(Math.round(recordingSecs / 60)),
-                    outputSeconds: String(outputSecs),
-                    aspectRatio,
-                  },
-                });
-              }
-            }, 500);
+            setResultUrl(downloadUrl);
+            setStage('done');
 
             resolve();
           } else if (status === 'failed') {
@@ -264,11 +252,14 @@ export default function ProcessingScreen() {
           />
         )}
 
-        {/* Tips */}
-        {stage !== 'error' && (
-          <Text style={styles.tip}>
-            💡 This may take a few minutes for longer recordings
-          </Text>
+        {/* View Results 버튼 (done 상태) */}
+        {stage === 'done' && (
+          <TouchableOpacity
+            style={styles.viewResultsButton}
+            onPress={() => navigateToResult(resultUrl)}
+          >
+            <Text style={styles.viewResultsText}>View Results →</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -379,6 +370,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+  viewResultsButton: {
+    marginTop: 32,
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 14,
+  },
+  viewResultsText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   errorContainer: {
     alignItems: 'center',
