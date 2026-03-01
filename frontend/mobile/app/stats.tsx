@@ -181,9 +181,9 @@ export default function StatsScreen() {
               activeOpacity={1}
               onPress={() => setBarBubble(null)}
             >
-              <View style={styles.sharedBubble}>
-                <Text style={styles.sharedBubbleDate}>{barBubble.label}</Text>
-                <Text style={styles.sharedBubbleTime}>
+              <View style={[styles.sharedBubble, styles.barBubble]}>
+                <Text style={styles.barBubbleDate}>{barBubble.label}</Text>
+                <Text style={styles.barBubbleTime}>
                   {(() => {
                     const h = Math.floor(barBubble.seconds / 3600);
                     const m = Math.floor((barBubble.seconds % 3600) / 60);
@@ -229,7 +229,16 @@ export default function StatsScreen() {
                     ]}
                   />
                   <Text style={[styles.barLabel, hasData && styles.barLabelActive]}>
-                    {label}
+                    {(() => {
+                      const weekStart = weeklyStats?.week_start;
+                      if (weekStart) {
+                        const d = new Date(weekStart);
+                        d.setDate(d.getDate() + i);
+                        const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        return `${shortMonths[d.getMonth()]} ${d.getDate()}`;
+                      }
+                      return label;
+                    })()}
                   </Text>
                 </TouchableOpacity>
               );
@@ -296,7 +305,7 @@ export default function StatsScreen() {
                         cell.measure((_fx, _fy, width, _height, px, py) => {
                           const tooltipW = 120;
                           const left = Math.min(Math.max(px + width / 2 - tooltipW / 2, 8), 260);
-                          const top = py - 82;
+                          const top = py - 90;
                           setSelectedDate(dateStr);
                           setSelectedSeconds(dayEntry?.total_seconds ?? 0);
                           setBubblePos({ x: left, y: top });
@@ -329,22 +338,20 @@ export default function StatsScreen() {
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={[styles.sharedBubble, {
-            position: 'absolute',
-            top: bubblePos.y,
-            left: bubblePos.x,
-            width: 120,
-          }]}>
-            <Text style={styles.sharedBubbleDate}>
-              {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
-            </Text>
-            <Text style={styles.sharedBubbleTime}>
-              {(() => {
-                const h = Math.floor(selectedSeconds / 3600);
-                const m = Math.floor((selectedSeconds % 3600) / 60);
-                return h > 0 ? `${h}h ${m}m` : `${m}m`;
-              })()}
-            </Text>
+          <View style={{ position: 'absolute', top: bubblePos.y, left: bubblePos.x, alignItems: 'center', width: 120 }}>
+            <View style={styles.sharedBubble}>
+              <Text style={styles.sharedBubbleDate}>
+                {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
+              </Text>
+              <Text style={styles.sharedBubbleTime}>
+                {(() => {
+                  const h = Math.floor(selectedSeconds / 3600);
+                  const m = Math.floor((selectedSeconds % 3600) / 60);
+                  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                })()}
+              </Text>
+            </View>
+            <View style={styles.bubbleTail} />
           </View>
         </TouchableOpacity>
       )}
@@ -482,13 +489,14 @@ const styles = StyleSheet.create({
     width: 28,
   },
   barLabel: {
-    fontSize: 12,
+    fontSize: 9,
     color: COLORS.textSecondary,
     fontWeight: '500',
   },
   barLabelActive: {
     color: COLORS.text,
     fontWeight: '600',
+    fontSize: 9,
   },
 
   // Activity Log
@@ -616,5 +624,32 @@ const styles = StyleSheet.create({
     top: 12,
     right: 16,
     zIndex: 10,
+  },
+  barBubble: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    minWidth: 0,
+    borderRadius: 8,
+  },
+  barBubbleDate: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+  },
+  barBubbleTime: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  // 캘린더 말풍선 꼬리
+  bubbleTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1a1a1a',
   },
 });

@@ -21,3 +21,5 @@ class WeeklyStatsResponse(BaseModel):
     total_seconds: int = 0
     session_count: int = 0
     daily: list[DailyFocusResponse] = []
+    streak: int = 0
+    longest_streak: int = 0

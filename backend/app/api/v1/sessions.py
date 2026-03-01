@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -99,7 +99,7 @@ async def update_session(
 
     # 세션 완료 시 daily_focus 업데이트 & 유저 총 포커스 시간 갱신
     if request.status == "completed" and request.duration:
-        await _update_daily_focus(db, current_user.id, request.duration)
+        await _update_daily_focus(db, current_user, request.duration)
         current_user.total_focus_time += request.duration
 
     await db.flush()
@@ -168,12 +168,12 @@ async def list_sessions(
 
 
 async def _update_daily_focus(
-    db: AsyncSession, user_id: uuid.UUID, duration: int
+    db: AsyncSession, user: User, duration: int
 ) -> None:
-    """일별 포커스 통계를 업데이트한다."""
+    """일별 포커스 통계를 업데이트하고 streak을 계산한다."""
     today = date.today()
     stmt = select(DailyFocus).where(
-        DailyFocus.user_id == user_id,
+        DailyFocus.user_id == user.id,
         DailyFocus.date == today,
     )
     result = await db.execute(stmt)
@@ -185,9 +185,27 @@ async def _update_daily_focus(
     else:
         daily = DailyFocus(
             id=uuid.uuid4(),
-            user_id=user_id,
+            user_id=user.id,
             date=today,
             total_seconds=duration,
             session_count=1,
         )
         db.add(daily)
+        await db.flush()
+
+    # streak 계산: 오늘부터 과거로 연속 daily_focus 존재하는 날 수
+    streak = 1  # 오늘 포함
+    check_date = today - timedelta(days=1)
+    while True:
+        stmt = select(DailyFocus.id).where(
+            DailyFocus.user_id == user.id,
+            DailyFocus.date == check_date,
+        )
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            break
+        streak += 1
+        check_date -= timedelta(days=1)
+
+    user.streak = streak
+    user.longest_streak = max(user.longest_streak, streak)

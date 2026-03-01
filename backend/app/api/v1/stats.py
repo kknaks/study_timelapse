@@ -105,5 +105,7 @@ async def get_weekly_stats(
                 )
                 for r in records
             ],
+            streak=current_user.streak,
+            longest_streak=current_user.longest_streak,
         ).model_dump(mode="json"),
     }
