@@ -233,10 +233,12 @@ export default function StatsScreen() {
               return (
                 <View key={dateStr} style={styles.calCell}>
                   {hasSession ? (
-                    <View style={styles.calDotFilled}>
+                    // 세션 있는 날: 검정 채운 원, 흰 숫자 + 오늘이면 테두리 추가
+                    <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
                       <Text style={styles.calDayTextFilled}>{day}</Text>
                     </View>
                   ) : isToday ? (
+                    // 오늘(세션 없음): 테두리 원만
                     <View style={styles.calDotToday}>
                       <Text style={styles.calDayTextToday}>{day}</Text>
                     </View>
@@ -440,7 +442,7 @@ const styles = StyleSheet.create({
   },
   calDayText: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: '#1a1a1a',
   },
   calDotFilled: {
     width: 30,
@@ -450,10 +452,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  calDotTodayRing: {
+    // 오늘이면서 세션도 있는 경우: 검정 채운 원 + 흰 테두리 느낌
+    borderWidth: 2.5,
+    borderColor: '#FF6B35',
+  },
   calDayTextFilled: {
     fontSize: 13,
     color: '#FFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   calDotToday: {
     width: 30,
@@ -466,7 +473,7 @@ const styles = StyleSheet.create({
   },
   calDayTextToday: {
     fontSize: 13,
-    color: COLORS.text,
-    fontWeight: '600',
+    color: '#1a1a1a',
+    fontWeight: '700',
   },
 });
