@@ -199,7 +199,7 @@ export default function ResultScreen() {
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveIcon}></Text>
-          <Text style={styles.saveText}>Save Video</Text>
+          <Text style={styles.saveText}>Create Video</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
