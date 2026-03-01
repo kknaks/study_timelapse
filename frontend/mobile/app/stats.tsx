@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -45,6 +46,10 @@ export default function StatsScreen() {
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
+
+  // 날짜 클릭 모달
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSeconds, setSelectedSeconds] = useState(0);
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -239,13 +244,23 @@ export default function StatsScreen() {
               const isToday = dateStr === today;
               const hasSession = sessionDates.has(dateStr);
 
+              const calData = monthlyData?.data ?? [];
+              const dayEntry = calData.find((d: any) => d.date === dateStr);
+
               return (
                 <View key={dateStr} style={styles.calCell}>
                   {hasSession ? (
-                    // 세션 있는 날: 검정 채운 원, 흰 숫자 + 오늘이면 테두리 추가
-                    <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
-                      <Text style={styles.calDayTextFilled}>{day}</Text>
-                    </View>
+                    // 세션 있는 날: 클릭 가능
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedDate(dateStr);
+                        setSelectedSeconds(dayEntry?.total_seconds ?? 0);
+                      }}
+                    >
+                      <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
+                        <Text style={styles.calDayTextFilled}>{day}</Text>
+                      </View>
+                    </TouchableOpacity>
                   ) : isToday ? (
                     // 오늘(세션 없음): 테두리 원만
                     <View style={styles.calDotToday}>
@@ -260,6 +275,37 @@ export default function StatsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* 날짜 클릭 모달 */}
+      <Modal
+        visible={selectedDate !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedDate(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setSelectedDate(null)}
+        >
+          <View style={styles.dateModal}>
+            <Text style={styles.dateModalDate}>
+              {selectedDate ? `${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}` : ''}
+            </Text>
+            <View style={styles.dateModalRow}>
+              <Text style={styles.dateModalIcon}>🕐</Text>
+              <Text style={styles.dateModalTime}>
+                {(() => {
+                  const h = Math.floor(selectedSeconds / 3600);
+                  const m = Math.floor((selectedSeconds % 3600) / 60);
+                  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                })()}
+              </Text>
+            </View>
+            <Text style={styles.dateModalSub}>Focus time</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -484,5 +530,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1a1a1a',
     fontWeight: '700',
+  },
+
+  // 날짜 클릭 모달
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateModal: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 180,
+  },
+  dateModalDate: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#888',
+    marginBottom: 4,
+  },
+  dateModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateModalIcon: {
+    fontSize: 22,
+  },
+  dateModalTime: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1a1a1a',
+  },
+  dateModalSub: {
+    fontSize: 13,
+    color: '#AAA',
+    marginTop: 2,
   },
 });
