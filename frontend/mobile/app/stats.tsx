@@ -47,10 +47,11 @@ export default function StatsScreen() {
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
 
-  // 날짜 클릭 말풍선
+  // 날짜/바 클릭 말풍선
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSeconds, setSelectedSeconds] = useState(0);
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
+  const [barBubble, setBarBubble] = useState<{ label: string; seconds: number; x: number; y: number } | null>(null);
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -177,10 +178,19 @@ export default function StatsScreen() {
               const secs = dayData?.total_seconds ?? 0;
               const hasData = secs > 0;
               const barHeight = hasData
-                ? Math.max(16, (secs / maxDailySeconds) * 120)
+                ? Math.max(16, (secs / maxDailySeconds) * 80)
                 : 16;
               return (
-                <View key={i} style={styles.barCol}>
+                <TouchableOpacity
+                  key={i}
+                  style={styles.barCol}
+                  disabled={!hasData}
+                  onPress={(e) => {
+                    if (!hasData) return;
+                    const { pageX, pageY } = e.nativeEvent;
+                    setBarBubble({ label, seconds: secs, x: pageX, y: pageY });
+                  }}
+                >
                   <View
                     style={[
                       styles.bar,
@@ -194,7 +204,7 @@ export default function StatsScreen() {
                   <Text style={[styles.barLabel, hasData && styles.barLabelActive]}>
                     {label}
                   </Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -272,30 +282,49 @@ export default function StatsScreen() {
         </View>
       </ScrollView>
 
-      {/* 날짜 클릭 말풍선 */}
+      {/* 캘린더 날짜 말풍선 */}
       {selectedDate && bubblePos && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={[
-            styles.bubble,
-            {
-              top: bubblePos.y - 120,
-              left: Math.min(bubblePos.x - 80, 200),
-            },
-          ]}>
-            {/* 말풍선 꼬리 */}
+          <View style={[styles.bubble, {
+            top: bubblePos.y - 100,
+            left: Math.min(Math.max(bubblePos.x - 70, 12), 220),
+          }]}>
             <View style={styles.bubbleTail} />
             <Text style={styles.bubbleDate}>
               {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
             </Text>
-            <Text style={styles.bubbleLabel}>Focus time</Text>
             <Text style={styles.bubbleTime}>
               {(() => {
                 const h = Math.floor(selectedSeconds / 3600);
                 const m = Math.floor((selectedSeconds % 3600) / 60);
+                return h > 0 ? `${h}h ${m}m` : `${m}m`;
+              })()}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* 바 차트 클릭 말풍선 */}
+      {barBubble && (
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={() => setBarBubble(null)}
+        >
+          <View style={[styles.bubble, {
+            top: barBubble.y - 100,
+            left: Math.min(Math.max(barBubble.x - 70, 12), 220),
+          }]}>
+            <View style={styles.bubbleTail} />
+            <Text style={styles.bubbleDate}>{barBubble.label}</Text>
+            <Text style={styles.bubbleTime}>
+              {(() => {
+                const h = Math.floor(barBubble.seconds / 3600);
+                const m = Math.floor((barBubble.seconds % 3600) / 60);
                 return h > 0 ? `${h}h ${m}m` : `${m}m`;
               })()}
             </Text>
@@ -413,8 +442,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
-    paddingBottom: 20,
+    height: 110,
+    paddingBottom: 4,
+    marginTop: 8,
   },
   barCol: {
     flex: 1,
@@ -568,7 +598,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
   },
   bubbleTime: {
-    fontSize: 26,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFF',
   },
