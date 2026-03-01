@@ -50,6 +50,7 @@ export default function ResultScreen() {
 
   const player = useVideoPlayer(downloadUrl, (p) => {
     p.loop = true;
+    p.muted = true;
     p.play();
   });
 

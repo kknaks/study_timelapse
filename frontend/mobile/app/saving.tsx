@@ -72,8 +72,12 @@ export default function SavingScreen() {
   }, []);
 
   const goToStats = () => {
-    // Use replace so user can't go back to saving screen
-    router.replace('/stats');
+    if (Platform.OS === 'web') {
+      // expo-router replace is unreliable on web — use href navigation
+      router.navigate('/stats');
+    } else {
+      router.replace('/stats');
+    }
   };
 
   const runSave = async () => {
