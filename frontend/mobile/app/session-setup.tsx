@@ -17,9 +17,10 @@ import type { CreateSessionRequest } from '../src/types';
 type TimerMode = 'countdown' | 'countup';
 type AspectRatio = '9:16' | '1:1' | '16:9';
 
-// 슬라이더 대신 스텝 버튼 방식 (웹 호환)
-const FOCUS_OPTIONS = [30, 45, 60, 90, 120, 150, 180, 210, 240]; // 분
 const TIMELAPSE_OPTIONS = [15, 30, 45, 60, 90, 120]; // 초
+const FOCUS_MIN = 5;
+const FOCUS_MAX = 240;
+const FOCUS_STEP = 5;
 
 function formatFocusTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -102,33 +103,59 @@ export default function SessionSetupScreen() {
             <Text style={styles.sectionLabel}>TOTAL FOCUS TIME</Text>
             <Text style={styles.sectionValue}>{formatFocusTime(focusMinutes)}</Text>
           </View>
-          <View style={styles.sliderTrack}>
-            {FOCUS_OPTIONS.map((val) => (
-              <TouchableOpacity
-                key={val}
-                style={[styles.sliderDot, focusMinutes === val && styles.sliderDotActive]}
-                onPress={() => setFocusMinutes(val)}
-              />
-            ))}
+          {/* 커스텀 슬라이더 (5분 단위, 터치 드래그) */}
+          <View
+            style={styles.sliderContainer}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            onResponderGrant={(e) => {
+              const { locationX, width } = e.nativeEvent as unknown as { locationX: number; width: number };
+              const w = (e.target as unknown as { offsetWidth?: number }).offsetWidth ?? 300;
+              const ratio = Math.max(0, Math.min(1, locationX / w));
+              const raw = FOCUS_MIN + ratio * (FOCUS_MAX - FOCUS_MIN);
+              setFocusMinutes(Math.round(raw / FOCUS_STEP) * FOCUS_STEP);
+            }}
+            onResponderMove={(e) => {
+              const locationX = e.nativeEvent.locationX;
+              const w = (e.target as unknown as { offsetWidth?: number }).offsetWidth ?? 300;
+              const ratio = Math.max(0, Math.min(1, locationX / w));
+              const raw = FOCUS_MIN + ratio * (FOCUS_MAX - FOCUS_MIN);
+              setFocusMinutes(Math.round(raw / FOCUS_STEP) * FOCUS_STEP);
+            }}
+          >
+            <View style={styles.sliderTrackBg} />
+            <View
+              style={[
+                styles.sliderTrackFill,
+                { width: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
+              ]}
+            />
+            <View
+              style={[
+                styles.sliderThumb,
+                { left: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
+              ]}
+            />
           </View>
           <View style={styles.sliderLabels}>
-            <Text style={styles.sliderMin}>30m</Text>
+            <Text style={styles.sliderMin}>5m</Text>
             <Text style={styles.sliderMax}>4h</Text>
           </View>
-          {/* 빠른 선택 */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll}>
-            {FOCUS_OPTIONS.map((val) => (
-              <TouchableOpacity
-                key={val}
-                style={[styles.quickChip, focusMinutes === val && styles.quickChipActive]}
-                onPress={() => setFocusMinutes(val)}
-              >
-                <Text style={[styles.quickChipText, focusMinutes === val && styles.quickChipTextActive]}>
-                  {formatFocusTime(val)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {/* +/- 버튼 (정밀 조정) */}
+          <View style={styles.adjustRow}>
+            <TouchableOpacity
+              style={styles.adjustBtn}
+              onPress={() => setFocusMinutes(Math.max(FOCUS_MIN, focusMinutes - FOCUS_STEP))}
+            >
+              <Text style={styles.adjustBtnText}>−5m</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.adjustBtn}
+              onPress={() => setFocusMinutes(Math.min(FOCUS_MAX, focusMinutes + FOCUS_STEP))}
+            >
+              <Text style={styles.adjustBtnText}>+5m</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Timelapse Length */}
@@ -290,28 +317,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a1a',
   },
-  sliderTrack: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  sliderContainer: {
+    height: 28,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sliderTrackBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     height: 4,
-    backgroundColor: '#E8E8E8',
+    backgroundColor: '#E0E0E0',
     borderRadius: 2,
-    paddingHorizontal: 4,
   },
-  sliderDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#DDD',
-  },
-  sliderDotActive: {
+  sliderTrackFill: {
+    position: 'absolute',
+    left: 0,
+    height: 4,
     backgroundColor: '#1a1a1a',
-    transform: [{ scale: 1.3 }],
+    borderRadius: 2,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#1a1a1a',
+    marginLeft: -11,
+    top: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   sliderLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 4,
   },
   sliderMin: {
     fontSize: 11,
@@ -320,6 +363,22 @@ const styles = StyleSheet.create({
   sliderMax: {
     fontSize: 11,
     color: COLORS.textSecondary,
+  },
+  adjustRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  adjustBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+  },
+  adjustBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
   quickScroll: {
     flexGrow: 0,
