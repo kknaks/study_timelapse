@@ -14,34 +14,23 @@ import { updateSession } from '../src/api/sessions';
 
 type Stage = 'uploading' | 'converting' | 'polling' | 'done' | 'error';
 
-function getStageLabel(stage: Stage): string {
+function getStageEmoji(stage: Stage): string {
   switch (stage) {
-    case 'uploading':
-      return 'Uploading video...';
-    case 'converting':
-      return 'Requesting conversion...';
-    case 'polling':
-      return 'Creating your timelapse...';
-    case 'done':
-      return 'Almost done!';
-    case 'error':
-      return 'Something went wrong';
+    case 'uploading': return '📤';
+    case 'converting': return '🎬';
+    case 'polling': return '⏳';
+    case 'done': return '✅';
+    case 'error': return '❌';
   }
 }
 
-function getStageEmoji(stage: Stage): string {
-  switch (stage) {
-    case 'uploading':
-      return '📤';
-    case 'converting':
-      return '🎬';
-    case 'polling':
-      return '⏳';
-    case 'done':
-      return '✅';
-    case 'error':
-      return '❌';
-  }
+function getMotivationMessage(ratio: number): string {
+  if (ratio >= 1.0) return '🎉 목표 달성! 대단해요!';
+  if (ratio >= 0.9) return '💪 거의 다 왔어요! 엄청난 집중력이에요!';
+  if (ratio >= 0.75) return '🔥 목표의 75%! 오늘 정말 잘했어요!';
+  if (ratio >= 0.5) return '⚡ 절반 이상 집중했어요! 훌륭해요!';
+  if (ratio >= 0.25) return '🌱 좋은 시작이에요! 꾸준히 하면 돼요!';
+  return '✨ 작은 한 걸음도 대단한 거예요!';
 }
 
 export default function ProcessingScreen() {
@@ -52,6 +41,7 @@ export default function ProcessingScreen() {
     outputSeconds: string;
     recordingSeconds: string;
     aspectRatio: string;
+    studyMinutes: string;
   }>();
 
   const videoUri = params.videoUri ?? '';
@@ -59,6 +49,8 @@ export default function ProcessingScreen() {
   const outputSecs = Number(params.outputSeconds) || 60;
   const recordingSecs = Number(params.recordingSeconds) || 0;
   const aspectRatio = params.aspectRatio ?? '9:16';
+  const studyMinutes = Number(params.studyMinutes) || 60;
+  const achievementRatio = Math.min(1, recordingSecs / (studyMinutes * 60));
 
   const [stage, setStage] = useState<Stage>('uploading');
   const [progress, setProgress] = useState(0);
@@ -230,16 +222,24 @@ export default function ProcessingScreen() {
           {stage === 'error' ? 'Oops!' : 'Creating Your Timelapse'}
         </Text>
 
-        {/* Stage label */}
-        <Text style={styles.stageLabel}>{getStageLabel(stage)}</Text>
+        {/* 동기부여 문구 */}
+        <Text style={styles.motivationLabel}>
+          {stage === 'error' ? 'Something went wrong' : getMotivationMessage(achievementRatio)}
+        </Text>
 
-        {/* Progress bar */}
+        {/* 달성 비율 */}
+        {stage !== 'error' && (
+          <Text style={styles.achievementLabel}>
+            목표 달성률 {Math.round(achievementRatio * 100)}%
+          </Text>
+        )}
+
+        {/* Progress bar — 달성 비율 표시 */}
         {stage !== 'error' && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              <View style={[styles.progressFill, { width: `${Math.round(achievementRatio * 100)}%` }]} />
             </View>
-            <Text style={styles.progressText}>{Math.round(progress)}%</Text>
           </View>
         )}
 
@@ -334,7 +334,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 8,
+  },
+  motivationLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  achievementLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
   },
   progressContainer: {
     width: '100%',

@@ -145,6 +145,7 @@ export default function FocusScreen() {
           outputSeconds: String(outputSeconds),
           recordingSeconds: String(elapsed),
           aspectRatio,
+          studyMinutes: String(studyMinutes),
         },
       });
     }, 500);
