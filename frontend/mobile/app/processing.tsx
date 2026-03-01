@@ -26,11 +26,11 @@ function getStageEmoji(stage: Stage): string {
 
 function getMotivationMessage(ratio: number): string {
   if (ratio >= 1.0) return 'Goal achieved! You crushed it!';
-  if (ratio >= 0.9) return '💪 Almost perfect! Incredible focus!';
-  if (ratio >= 0.75) return '🔥 75% done! That\'s seriously impressive!';
+  if (ratio >= 0.9) return 'Almost perfect! Incredible focus!';
+  if (ratio >= 0.75) return '75% done! That\'s seriously impressive!';
   if (ratio >= 0.5) return '⚡ Over halfway! Great work today!';
-  if (ratio >= 0.25) return '🌱 Solid start! Every session counts!';
-  return '✨ Every step forward matters. Keep going!';
+  if (ratio >= 0.25) return 'Solid start! Every session counts!';
+  return 'Every step forward matters. Keep going!';
 }
 
 export default function ProcessingScreen() {
