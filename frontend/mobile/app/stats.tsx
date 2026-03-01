@@ -188,7 +188,15 @@ export default function StatsScreen() {
                   onPress={(e) => {
                     if (!hasData) return;
                     const { pageX, pageY } = e.nativeEvent;
-                    setBarBubble({ label, seconds: secs, x: pageX, y: pageY });
+                    // 실제 날짜: weeklyStats.week_start 기준 i번째 날
+                    const weekStart = weeklyStats?.week_start;
+                    let dateLabel = label;
+                    if (weekStart) {
+                      const d = new Date(weekStart);
+                      d.setDate(d.getDate() + i);
+                      dateLabel = `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
+                    }
+                    setBarBubble({ label: dateLabel, seconds: secs, x: pageX, y: pageY });
                   }}
                 >
                   <View
@@ -282,7 +290,7 @@ export default function StatsScreen() {
         </View>
       </ScrollView>
 
-      {/* 캘린더 날짜 말풍선 */}
+      {/* 캘린더 날짜 말풍선 — 꼬리가 클릭 위치 바로 위 */}
       {selectedDate && bubblePos && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
@@ -290,10 +298,9 @@ export default function StatsScreen() {
           onPress={() => setSelectedDate(null)}
         >
           <View style={[styles.bubble, {
-            top: bubblePos.y - 100,
-            left: Math.min(Math.max(bubblePos.x - 70, 12), 220),
+            top: bubblePos.y - 88,
+            left: Math.min(Math.max(bubblePos.x - 70, 8), 230),
           }]}>
-            <View style={styles.bubbleTail} />
             <Text style={styles.bubbleDate}>
               {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
             </Text>
@@ -304,30 +311,31 @@ export default function StatsScreen() {
                 return h > 0 ? `${h}h ${m}m` : `${m}m`;
               })()}
             </Text>
+            <View style={styles.bubbleTail} />
           </View>
         </TouchableOpacity>
       )}
 
-      {/* 바 차트 클릭 말풍선 */}
+      {/* 바 차트 클릭 말풍선 — 더 작게 */}
       {barBubble && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
           onPress={() => setBarBubble(null)}
         >
-          <View style={[styles.bubble, {
-            top: barBubble.y - 100,
-            left: Math.min(Math.max(barBubble.x - 70, 12), 220),
+          <View style={[styles.bubble, styles.bubbleSmall, {
+            top: barBubble.y - 76,
+            left: Math.min(Math.max(barBubble.x - 55, 8), 240),
           }]}>
-            <View style={styles.bubbleTail} />
-            <Text style={styles.bubbleDate}>{barBubble.label}</Text>
-            <Text style={styles.bubbleTime}>
+            <Text style={styles.bubbleDateSmall}>{barBubble.label}</Text>
+            <Text style={styles.bubbleTimeSmall}>
               {(() => {
                 const h = Math.floor(barBubble.seconds / 3600);
                 const m = Math.floor((barBubble.seconds % 3600) / 60);
                 return h > 0 ? `${h}h ${m}m` : `${m}m`;
               })()}
             </Text>
+            <View style={styles.bubbleTail} />
           </View>
         </TouchableOpacity>
       )}
@@ -558,47 +566,57 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // 말풍선
+  // 말풍선 (캘린더용)
   bubble: {
     position: 'absolute',
     backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
     elevation: 8,
-    minWidth: 140,
+    minWidth: 130,
+  },
+  // 바 차트용 더 작은 말풍선
+  bubbleSmall: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    minWidth: 90,
+    borderRadius: 8,
   },
   bubbleTail: {
-    position: 'absolute',
-    bottom: -8,
-    left: '50%' as any,
-    marginLeft: -8,
     width: 0,
     height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderTopWidth: 8,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 7,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderTopColor: '#1a1a1a',
+    marginTop: 2,
   },
   bubbleDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
   },
-  bubbleLabel: {
-    fontSize: 12,
+  bubbleDateSmall: {
+    fontSize: 10,
     color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
   },
   bubbleTime: {
     fontSize: 18,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  bubbleTimeSmall: {
+    fontSize: 14,
     fontWeight: '800',
     color: '#FFF',
   },
