@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,20 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type StepStatus = 'pending' | 'active' | 'done';
-type Step = { label: string; status: StepStatus };
-
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
 const DARK = '#1a1a1a';
+
+type StepStatus = 'pending' | 'active' | 'done';
+type Step = { label: string; status: StepStatus };
+
+const WEB_STEPS: Step[] = [
+  { label: 'Preparing...', status: 'pending' },
+  { label: 'Processing video...', status: 'pending' },
+  { label: 'Done! 🎉', status: 'pending' },
+];
+
+const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 export default function SavingScreen() {
   const router = useRouter();
@@ -25,68 +33,56 @@ export default function SavingScreen() {
   const downloadUrl = params.downloadUrl ?? '';
   const isWeb = Platform.OS === 'web';
   const isRemoteUrl = downloadUrl.startsWith('http');
+  const hasRun = useRef(false);
 
-  const [steps, setSteps] = useState<Step[]>(() => {
-    if (isWeb) {
-      return [
-        { label: 'Preparing download...', status: 'pending' },
-        { label: 'Starting download...', status: 'pending' },
-        { label: 'Done! 🎉', status: 'pending' },
-      ];
-    }
+  const buildSteps = (): Step[] => {
+    if (isWeb) return WEB_STEPS.map(s => ({ ...s }));
     const s: Step[] = [{ label: 'Requesting permission...', status: 'pending' }];
     if (isRemoteUrl) s.push({ label: 'Downloading video...', status: 'pending' });
     s.push({ label: 'Saving to gallery...', status: 'pending' }, { label: 'Done! 🎉', status: 'pending' });
     return s;
-  });
-
-  // When this becomes true, render <Redirect> which is the most reliable way
-  // to navigate in expo-router on web
-  const [done, setDone] = useState(false);
-
-  const updateStep = (idx: number, status: StepStatus) => {
-    setSteps(prev => prev.map((s, i) => {
-      if (i < idx) return { ...s, status: 'done' };
-      if (i === idx) return { ...s, status };
-      return s;
-    }));
   };
 
-  const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+  const [steps, setSteps] = useState<Step[]>(buildSteps);
+
+  const setActive = (idx: number) =>
+    setSteps(prev => prev.map((s, i) =>
+      i < idx ? { ...s, status: 'done' } :
+      i === idx ? { ...s, status: 'active' } : s
+    ));
+
+  const setDone = (idx: number) =>
+    setSteps(prev => prev.map((s, i) => i <= idx ? { ...s, status: 'done' } : s));
+
+  const navigateToStats = () => {
+    if (Platform.OS === 'web') {
+      window.location.assign('http://localhost:8081/stats');
+    } else {
+      router.replace('/stats');
+    }
+  };
 
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
     runSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runSave = async () => {
-    const total = steps.length;
-
     try {
       if (isWeb) {
-        // Web: just show progress animation, no actual file download
-        // (download happens via the browser's built-in video controls or is skipped)
-        updateStep(0, 'active');
-        await wait(500);
-        updateStep(0, 'done');
-
-        updateStep(1, 'active');
-        await wait(600);
-        updateStep(1, 'done');
-
-        updateStep(2, 'active');
-        await wait(400);
-        updateStep(2, 'done');
-
+        setActive(0); await wait(600); setDone(0);
+        setActive(1); await wait(700); setDone(1);
+        setActive(2); await wait(400); setDone(2);
         await wait(800);
-        console.log('[saving] web flow complete, setDone(true)');
-        setDone(true);
+        navigateToStats();
         return;
       }
 
       // Mobile
       let idx = 0;
-      updateStep(idx, 'active');
+      setActive(idx);
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Please allow access to save to your gallery.', [
@@ -94,31 +90,28 @@ export default function SavingScreen() {
         ]);
         return;
       }
-      updateStep(idx, 'done');
-      idx++;
+      setDone(idx); idx++;
 
       let localUri = downloadUrl;
       if (isRemoteUrl) {
-        updateStep(idx, 'active');
+        setActive(idx);
         const filename = `timelapse_${Date.now()}.mp4`;
         const dest = `${FileSystem.documentDirectory}${filename}`;
         const { uri } = await FileSystem.downloadAsync(downloadUrl, dest);
         localUri = uri;
-        updateStep(idx, 'done');
-        idx++;
+        setDone(idx); idx++;
       }
 
-      updateStep(idx, 'active');
+      setActive(idx);
       await MediaLibrary.saveToLibraryAsync(localUri);
-      updateStep(idx, 'done');
-      idx++;
+      setDone(idx); idx++;
 
-      updateStep(idx, 'active');
+      setActive(idx);
       await wait(300);
-      updateStep(idx, 'done');
+      setDone(idx);
 
-      await wait(1000);
-      setDone(true);
+      await wait(800);
+      navigateToStats();
     } catch (e) {
       console.error('Save error:', e);
       Alert.alert('Error', 'Failed to save. Please try again.', [
@@ -127,24 +120,8 @@ export default function SavingScreen() {
     }
   };
 
-  // Navigate to stats when done
-  useEffect(() => {
-    console.log('[saving] done changed:', done);
-    if (!done) return;
-    console.log('[saving] navigating to stats...');
-    const t = setTimeout(() => {
-      console.log('[saving] executing navigate');
-      if (Platform.OS === 'web') {
-        (window as any).location.assign('/stats');
-      } else {
-        router.replace('/stats');
-      }
-    }, 100);
-    return () => clearTimeout(t);
-  }, [done, router]);
-
   const doneCount = steps.filter(s => s.status === 'done').length;
-  const progressPercent = steps.length > 0 ? Math.round((doneCount / steps.length) * 100) : 0;
+  const progressPercent = Math.round((doneCount / steps.length) * 100);
 
   return (
     <SafeAreaView style={styles.container}>
