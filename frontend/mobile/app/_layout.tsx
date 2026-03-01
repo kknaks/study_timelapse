@@ -15,14 +15,7 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <Stack>
         <Stack.Screen name="index" options={{ title: 'FocusTimelapse', headerShown: false }} />
-        <Stack.Screen
-          name="session-setup"
-          options={{
-            title: 'Session Setup',
-            headerStyle: { backgroundColor: '#F5F3EF' },
-            headerTintColor: '#1A1A2E',
-          }}
-        />
+        <Stack.Screen name="session-setup" options={{ headerShown: false }} />
         <Stack.Screen name="focus" options={{ headerShown: false }} />
         <Stack.Screen name="processing" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="result" options={{ headerShown: false, gestureEnabled: false }} />
