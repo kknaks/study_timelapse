@@ -29,10 +29,14 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """새로운 포커스 세션을 시작한다."""
+    # timezone-aware → naive (DB는 TIMESTAMP WITHOUT TIME ZONE)
+    st = request.start_time
+    start_time = st.replace(tzinfo=None) if st.tzinfo else st
+
     session = FocusSession(
         id=uuid.uuid4(),
         user_id=current_user.id,
-        start_time=request.start_time,
+        start_time=start_time,
         output_seconds=request.output_seconds,
         aspect_ratio=request.aspect_ratio,
         overlay_style=request.overlay_style,
