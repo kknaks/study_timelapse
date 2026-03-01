@@ -180,7 +180,6 @@ export default function ResultScreen() {
         setSaveSteps(prev => setStepDone(2, prev));
 
         setTimeout(() => {
-          setSaving(false);
           router.replace('/stats');
         }, 1500);
         return;
@@ -227,7 +226,6 @@ export default function ResultScreen() {
       setSaveSteps(prev => setStepDone(currentStep, prev));
 
       setTimeout(() => {
-        setSaving(false);
         router.replace('/stats');
       }, 1500);
     } catch (e) {
