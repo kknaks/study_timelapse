@@ -287,8 +287,8 @@ export default function StatsScreen() {
                         // 요일 계산 (0=일, 1=월 ... 6=토)
                         const dow = new Date(dateStr).getDay();
                         const bubbleW = 120;
-                        // 기본: 중앙(1/2), 월요일: 2/5, 일요일: 4/5
-                        const ratio = dow === 1 ? 0.4 : dow === 0 ? 0.8 : 0.5;
+                        // 기본: 중앙(1/2), 월요일: 2/5, 토/일요일: 4/5
+                        const ratio = dow === 1 ? 0.4 : (dow === 0 || dow === 6) ? 0.8 : 0.5;
                         const leftOffset = Math.round(bubbleW * ratio);
                         // 화면 밖으로 나가지 않도록 clamp
                         const left = Math.min(Math.max(pageX - leftOffset, 8), 260);
