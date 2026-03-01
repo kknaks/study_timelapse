@@ -51,7 +51,7 @@ export default function StatsScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSeconds, setSelectedSeconds] = useState(0);
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
-  const [barBubble, setBarBubble] = useState<{ label: string; seconds: number; x: number; y: number } | null>(null);
+  const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -172,6 +172,26 @@ export default function StatsScreen() {
             <Text style={styles.cardTitle}>This Week</Text>
             <Text style={styles.chartSubtitle}>{totalWeekHours} hrs total</Text>
           </View>
+
+          {/* 바 클릭 말풍선 — 카드 우측 상단 고정 */}
+          {barBubble && (
+            <TouchableOpacity
+              style={styles.barBubbleWrap}
+              activeOpacity={1}
+              onPress={() => setBarBubble(null)}
+            >
+              <View style={styles.bubbleSmall}>
+                <Text style={styles.bubbleDateSmall}>{barBubble.label}</Text>
+                <Text style={styles.bubbleTimeSmall}>
+                  {(() => {
+                    const h = Math.floor(barBubble.seconds / 3600);
+                    const m = Math.floor((barBubble.seconds % 3600) / 60);
+                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                  })()}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <View style={styles.barChart}>
             {DAY_LABELS.map((label, i) => {
               const dayData = dailyData[i];
@@ -185,10 +205,8 @@ export default function StatsScreen() {
                   key={i}
                   style={styles.barCol}
                   disabled={!hasData}
-                  onPress={(e) => {
+                  onPress={() => {
                     if (!hasData) return;
-                    const { pageX, pageY } = e.nativeEvent;
-                    // 실제 날짜: weeklyStats.week_start 기준 i번째 날
                     const weekStart = weeklyStats?.week_start;
                     let dateLabel = label;
                     if (weekStart) {
@@ -196,7 +214,7 @@ export default function StatsScreen() {
                       d.setDate(d.getDate() + i);
                       dateLabel = `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`;
                     }
-                    setBarBubble({ label: dateLabel, seconds: secs, x: pageX, y: pageY });
+                    setBarBubble({ label: dateLabel, seconds: secs });
                   }}
                 >
                   <View
@@ -316,28 +334,13 @@ export default function StatsScreen() {
         </TouchableOpacity>
       )}
 
-      {/* 바 차트 클릭 말풍선 — 더 작게 */}
+      {/* 바 차트 클릭 말풍선 — 바 차트 카드 우측 상단 고정 */}
       {barBubble && (
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
           onPress={() => setBarBubble(null)}
-        >
-          <View style={[styles.bubble, styles.bubbleSmall, {
-            top: barBubble.y - 76,
-            left: Math.min(Math.max(barBubble.x - 55, 8), 240),
-          }]}>
-            <Text style={styles.bubbleDateSmall}>{barBubble.label}</Text>
-            <Text style={styles.bubbleTimeSmall}>
-              {(() => {
-                const h = Math.floor(barBubble.seconds / 3600);
-                const m = Math.floor((barBubble.seconds % 3600) / 60);
-                return h > 0 ? `${h}h ${m}m` : `${m}m`;
-              })()}
-            </Text>
-            <View style={styles.bubbleTail} />
-          </View>
-        </TouchableOpacity>
+        />
       )}
     </View>
   );
@@ -582,12 +585,26 @@ const styles = StyleSheet.create({
     elevation: 8,
     minWidth: 130,
   },
+  // 바 차트 말풍선 wrapper — 카드 우측 상단 고정
+  barBubbleWrap: {
+    position: 'absolute',
+    top: 12,
+    right: 16,
+    zIndex: 10,
+  },
   // 바 차트용 더 작은 말풍선
   bubbleSmall: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    minWidth: 90,
+    backgroundColor: '#1a1a1a',
     borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 6,
   },
   bubbleTail: {
     width: 0,
