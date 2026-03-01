@@ -110,15 +110,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logoIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    width: 96,
+    height: 96,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
-    borderWidth: 2,
-    borderColor: '#E8E8E8',
   },
   logoImage: {
     width: '100%',
