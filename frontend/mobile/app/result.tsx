@@ -19,10 +19,11 @@ const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bu
 type OverlayStyle = 'none' | 'timer' | 'progress';
 
 function formatTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 export default function ResultScreen() {
@@ -62,21 +63,30 @@ export default function ResultScreen() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
-    // countdown: 남은 시간부터 시작, countup: 0부터 시작
+
+    // 타임랩스 배속: 원본 촬영시간 / 출력 영상시간
+    // 예) 2시간(7200s) → 30s = 240배속 → 타이머도 240배 빠르게
+    const speedMultiplier = outputSecs > 0 ? Math.max(1, recordingSecs / outputSecs) : 1;
+    const tickMs = 100; // 100ms마다 업데이트 (부드럽게)
+    const tickAmount = (speedMultiplier * tickMs) / 1000; // 한 틱당 증가량(초)
+
     setElapsed(timerMode === 'countdown' ? Math.max(0, goalSeconds - recordingSecs) : 0);
+
     intervalRef.current = setInterval(() => {
       setElapsed((prev) => {
         if (timerMode === 'countdown') {
-          return prev <= 0 ? goalSeconds : prev - 1;
+          const next = prev - tickAmount;
+          return next <= 0 ? goalSeconds : next;
         } else {
-          return prev >= goalSeconds ? 0 : prev + 1;
+          const next = prev + tickAmount;
+          return next >= goalSeconds ? 0 : next;
         }
       });
-    }, 1000);
+    }, tickMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [overlayStyle, timerMode, goalSeconds, recordingSecs]);
+  }, [overlayStyle, timerMode, goalSeconds, recordingSecs, outputSecs]);
 
   const handleSave = async () => {
     if (saving) return;

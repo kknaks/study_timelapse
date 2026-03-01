@@ -199,20 +199,40 @@ export default function FocusScreen() {
 
   const progressPercent = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0;
 
+  // 웹에서 1:1 crop을 위한 인라인 스타일
+  const webCameraStyle = Platform.OS === 'web' && aspectRatio === '1:1'
+    ? ({
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#000',
+        overflow: 'hidden',
+      } as any)
+    : undefined;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
       {/* Camera Preview — aspect ratio 맞게 중앙 배치, 나머지 검정 */}
-      <View style={styles.cameraWrapper}>
+      <View style={[
+        styles.cameraWrapper,
+        aspectRatio === '16:9' && styles.cameraWrapper16x9,
+      ]} {...(webCameraStyle ? { style: webCameraStyle } : {})}>
         <CameraView
           ref={cameraRef}
           style={[
             styles.camera,
+            // 1:1: 너비 = 높이로 정사각형 crop
             aspectRatio === '1:1' && (Platform.OS === 'web'
-              ? ({ width: '100vw', height: '100vw', maxHeight: '100%' } as any)
-              : styles.camera1x1),
-            aspectRatio === '16:9' && styles.camera16x9,
+              ? ({ width: '100vh', height: '100vh', maxWidth: '100%', maxHeight: '100%' } as any)
+              : { aspectRatio: 1, width: '100%', height: undefined }),
+            // 16:9: 위아래 레터박스
+            aspectRatio === '16:9' && (Platform.OS === 'web'
+              ? ({ width: '100%', aspectRatio: '16/9' } as any)
+              : { aspectRatio: 16/9, width: '100%', height: undefined }),
           ]}
           facing="front"
           mode="video"
@@ -316,22 +336,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#000',
   },
+  // 1:1: 화면 너비만큼 정사각형으로 crop
+  cameraWrapper1x1: {
+    top: '50%' as any,
+    transform: [{ translateY: -1 }], // 미세 보정
+    ...(Platform.OS === 'web' ? {
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      overflow: 'hidden',
+    } : {}),
+  },
+  // 16:9: 위아래 레터박스
+  cameraWrapper16x9: {},
   camera: {
-    // 기본 9:16 — 전체 화면
     width: '100%',
     height: '100%',
-  },
-  camera1x1: {
-    // 1:1 — 정사각형, 가운데 배치
-    width: '100%',
-    aspectRatio: 1,
-    height: undefined,
-  },
-  camera16x9: {
-    // 16:9 — 가로형, 위아래 레터박스
-    width: '100%',
-    aspectRatio: 16 / 9,
-    height: undefined,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
