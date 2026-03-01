@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { getWeeklyStats } from '../src/api/stats';
+import { getWeeklyStats, getDailyStats } from '../src/api/stats';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
@@ -56,6 +56,14 @@ export default function StatsScreen() {
     queryFn: () => getMe().then((r) => r.data),
   });
 
+  // 캘린더 월별 데이터
+  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(getDaysInMonth(calYear, calMonth)).padStart(2, '0')}`;
+  const { data: monthlyData } = useQuery({
+    queryKey: ['daily-stats', calYear, calMonth],
+    queryFn: () => getDailyStats(monthStart, monthEnd).then((r) => r.data),
+  });
+
   const weeklyStats = statsData?.data;
   const user = userData?.data;
 
@@ -83,11 +91,12 @@ export default function StatsScreen() {
 
   const sessionDates = useMemo(() => {
     const set = new Set<string>();
-    dailyData.forEach((d) => {
+    const calData = monthlyData?.data ?? [];
+    calData.forEach((d: { date: string; session_count: number }) => {
       if (d.session_count > 0) set.add(d.date);
     });
     return set;
-  }, [dailyData]);
+  }, [monthlyData]);
 
   const prevMonth = () => {
     if (calMonth === 0) {
