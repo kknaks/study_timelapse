@@ -7,7 +7,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, Redirect } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -132,10 +132,14 @@ export default function SavingScreen() {
     }
   };
 
-  // Redirect is the most reliable navigation in expo-router on web
-  if (done) {
-    return <Redirect href="/stats" />;
-  }
+  // Navigate to stats when done
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => {
+      router.push('/stats');
+    }, 100);
+    return () => clearTimeout(t);
+  }, [done, router]);
 
   const doneCount = steps.filter(s => s.status === 'done').length;
   const progressPercent = steps.length > 0 ? Math.round((doneCount / steps.length) * 100) : 0;
