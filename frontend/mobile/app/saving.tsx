@@ -136,7 +136,12 @@ export default function SavingScreen() {
   useEffect(() => {
     if (!done) return;
     const t = setTimeout(() => {
-      router.push('/stats');
+      if (Platform.OS === 'web') {
+        // Force hard navigation — most reliable on web
+        (window as any).location.assign('/stats');
+      } else {
+        router.replace('/stats');
+      }
     }, 100);
     return () => clearTimeout(t);
   }, [done, router]);
