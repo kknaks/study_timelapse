@@ -6,6 +6,7 @@ import { getMe } from '../src/api/user';
 import { getWeeklyStats } from '../src/api/stats';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
+import FocusTimelapseIcon from '../src/components/FocusTimelapseLogo';
 
 function formatTodayTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -46,10 +47,11 @@ export default function HomeScreen() {
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
-          <View style={styles.logoIcon}>
-            <Text style={styles.logoEmoji}>◎</Text>
+          {/* Icon + wordmark in a horizontal row */}
+          <View style={styles.logoRow}>
+            <FocusTimelapseIcon size={48} color="#1a1a1a" />
+            <Text style={styles.appName}>FocusTimelapse</Text>
           </View>
-          <Text style={styles.appName}>FocusTimelapse</Text>
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
 
@@ -105,23 +107,16 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 8,
   },
-  logoIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: '#1a1a1a',
+  logoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  logoEmoji: {
-    fontSize: 36,
-    color: '#FFF',
+    gap: 12,
   },
   appName: {
-    fontSize: 26,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     color: '#1a1a1a',
+    letterSpacing: -0.5,
   },
   tagline: {
     fontSize: 15,
