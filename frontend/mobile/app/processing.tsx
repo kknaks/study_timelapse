@@ -25,12 +25,12 @@ function getStageEmoji(stage: Stage): string {
 }
 
 function getMotivationMessage(ratio: number): string {
-  if (ratio >= 1.0) return '🎉 목표 달성! 대단해요!';
-  if (ratio >= 0.9) return '💪 거의 다 왔어요! 엄청난 집중력이에요!';
-  if (ratio >= 0.75) return '🔥 목표의 75%! 오늘 정말 잘했어요!';
-  if (ratio >= 0.5) return '⚡ 절반 이상 집중했어요! 훌륭해요!';
-  if (ratio >= 0.25) return '🌱 좋은 시작이에요! 꾸준히 하면 돼요!';
-  return '✨ 작은 한 걸음도 대단한 거예요!';
+  if (ratio >= 1.0) return '🎉 Goal achieved! You crushed it!';
+  if (ratio >= 0.9) return '💪 Almost perfect! Incredible focus!';
+  if (ratio >= 0.75) return '🔥 75% done! That\'s seriously impressive!';
+  if (ratio >= 0.5) return '⚡ Over halfway! Great work today!';
+  if (ratio >= 0.25) return '🌱 Solid start! Every session counts!';
+  return '✨ Every step forward matters. Keep going!';
 }
 
 export default function ProcessingScreen() {
@@ -86,9 +86,10 @@ export default function ProcessingScreen() {
             sessionId,
             studyMinutes: String(Math.round(recordingSecs / 60)),
             outputSeconds: String(outputSecs),
+            aspectRatio,
           },
         });
-      }, 800);
+      }, 2500);
       return;
     }
 
@@ -172,6 +173,7 @@ export default function ProcessingScreen() {
                     sessionId,
                     studyMinutes: String(Math.round(recordingSecs / 60)),
                     outputSeconds: String(outputSecs),
+                    aspectRatio,
                   },
                 });
               }
@@ -230,7 +232,7 @@ export default function ProcessingScreen() {
         {/* 달성 비율 */}
         {stage !== 'error' && (
           <Text style={styles.achievementLabel}>
-            목표 달성률 {Math.round(achievementRatio * 100)}%
+            {Math.round(achievementRatio * 100)}% of goal achieved
           </Text>
         )}
 
