@@ -62,15 +62,20 @@ export default function ResultScreen() {
     const speedMultiplier = outputSecs > 0 ? Math.max(1, recordingSecs / outputSecs) : 1;
     const tickMs = 100;
     const tickAmount = (speedMultiplier * tickMs) / 1000;
-    setElapsed(timerMode === 'countdown' ? Math.max(0, goalSeconds - recordingSecs) : 0);
+    // countdown: 목표 시간(goalSeconds)에서 시작해서 실제 녹화 시간만큼 줄어듦
+    // countup: 0에서 시작해서 실제 녹화 시간만큼 올라감
+    setElapsed(timerMode === 'countdown' ? goalSeconds : 0);
+    const endValue = timerMode === 'countdown'
+      ? Math.max(0, goalSeconds - recordingSecs)
+      : recordingSecs;
     intervalRef.current = setInterval(() => {
       setElapsed((prev) => {
         if (timerMode === 'countdown') {
           const next = prev - tickAmount;
-          return next <= 0 ? goalSeconds : next;
+          return next <= endValue ? endValue : next;
         } else {
           const next = prev + tickAmount;
-          return next >= goalSeconds ? 0 : next;
+          return next >= endValue ? endValue : next;
         }
       });
     }, tickMs);
