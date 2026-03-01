@@ -13,7 +13,6 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { COLORS } from '../src/constants';
-import FocusTimelapseIcon from '../src/components/FocusTimelapseLogo';
 
 const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
 
@@ -197,7 +196,7 @@ export default function ResultScreen() {
 
         {/* Watermark Overlay — always visible */}
         <View style={styles.watermark} pointerEvents="none">
-          <FocusTimelapseIcon size={18} color="#FFFFFF" />
+          <Text style={styles.watermarkIcon}>⏱</Text>
           <Text style={styles.watermarkText}>FocusTimelapse</Text>
         </View>
 
@@ -283,6 +282,10 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 20,
+  },
+  watermarkIcon: {
+    fontSize: 14,
+    lineHeight: 18,
   },
   watermarkText: {
     color: 'rgba(255,255,255,0.9)',

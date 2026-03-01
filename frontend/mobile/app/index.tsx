@@ -47,10 +47,7 @@ export default function HomeScreen() {
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
-          {/* Rounded square box with SVG icon inside */}
-          <View style={styles.logoIcon}>
-            <FocusTimelapseIcon size={44} color="#FFFFFF" />
-          </View>
+          <FocusTimelapseIcon size={88} bgColor="#1a1a1a" color="#FFFFFF" />
           <Text style={styles.appName}>FocusTimelapse</Text>
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
