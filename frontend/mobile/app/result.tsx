@@ -126,7 +126,7 @@ export default function ResultScreen() {
               src={downloadUrl}
               autoPlay
               loop
-              muted
+              muted={true}
               playsInline
               style={{
                 width: aspectRatio === '1:1' ? 'auto' : '100%',
