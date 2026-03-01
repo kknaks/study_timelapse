@@ -180,7 +180,11 @@ export default function ResultScreen() {
         setSaveSteps(prev => setStepDone(2, prev));
 
         setTimeout(() => {
-          router.replace('/stats');
+          if (Platform.OS === 'web') {
+            window.location.href = '/stats';
+          } else {
+            router.replace('/stats');
+          }
         }, 1500);
         return;
       }
@@ -226,7 +230,11 @@ export default function ResultScreen() {
       setSaveSteps(prev => setStepDone(currentStep, prev));
 
       setTimeout(() => {
-        router.replace('/stats');
+        if (Platform.OS === 'web') {
+          window.location.href = '/stats';
+        } else {
+          router.replace('/stats');
+        }
       }, 1500);
     } catch (e) {
       console.error('Save error:', e);
