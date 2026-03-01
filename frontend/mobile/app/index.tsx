@@ -84,7 +84,7 @@ export default function HomeScreen() {
           style={styles.statsLink}
           onPress={() => router.push('/stats')}
         >
-          <Text style={styles.statsLinkIcon}>▐▌</Text>
+          <Text style={styles.statsLinkIcon}>↗</Text>
           <Text style={styles.statsLinkText}>View Stats</Text>
         </TouchableOpacity>
       </View>

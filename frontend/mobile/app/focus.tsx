@@ -281,7 +281,7 @@ export default function FocusScreen() {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.pauseIcon}>{isRecording ? '⏸' : '▶'}</Text>
+              <Text style={styles.pauseIcon}>{isRecording ? '▐▌' : '▶'}</Text>
             </TouchableOpacity>
 
             {/* 정지 버튼 */}
@@ -426,13 +426,16 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   pauseIcon: {
-    fontSize: 22,
+    fontSize: 20,
     color: '#FFF',
+    fontWeight: '700',
   },
   stopButton: {
     width: 76,
