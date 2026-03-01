@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -52,6 +53,8 @@ export default function StatsScreen() {
   const [selectedSeconds, setSelectedSeconds] = useState(0);
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number; cellCenterX: number } | null>(null);
   const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [timerAlert, setTimerAlert] = useState(true);
   const cellRefs = useRef<Map<string, View>>(new Map());
 
   const { data: statsData } = useQuery({
@@ -151,7 +154,9 @@ export default function StatsScreen() {
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Your Focus</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity style={styles.settingsBtn} onPress={() => setShowSettings(true)}>
+          <Text style={styles.settingsIcon}>≡</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -344,6 +349,54 @@ export default function StatsScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Settings Panel */}
+      <Modal
+        visible={showSettings}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSettings(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.settingsPanel}>
+            <View style={styles.settingsPanelHandle} />
+            <Text style={styles.settingsPanelTitle}>Settings</Text>
+
+            {/* Timer Alert */}
+            <View style={styles.settingsRow}>
+              <View>
+                <Text style={styles.settingsRowLabel}>Timer Alert</Text>
+                <Text style={styles.settingsRowDesc}>Notify when focus goal is reached</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.toggle, timerAlert && styles.toggleOn]}
+                onPress={() => setTimerAlert(!timerAlert)}
+              >
+                <View style={[styles.toggleThumb, timerAlert && styles.toggleThumbOn]} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.settingsDivider} />
+
+            {/* Upgrade */}
+            <View style={styles.upgradeBox}>
+              <Text style={styles.upgradeTitle}>✦ Upgrade to Pro</Text>
+              <Text style={styles.upgradeDesc}>Remove watermark and unlock all features</Text>
+              <TouchableOpacity style={styles.upgradeBtn}>
+                <Text style={styles.upgradeBtnText}>Upgrade Now →</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.settingsDivider} />
+
+            <Text style={styles.appVersion}>FocusTimelapse v1.0.0</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* 캘린더 날짜 말풍선 — 클릭 위치 기준 고정 */}
       {selectedDate && bubblePos && (
@@ -608,6 +661,114 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1a1a1a',
     fontWeight: '700',
+  },
+
+  // Settings button
+  settingsBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  settingsIcon: {
+    fontSize: 22,
+    color: COLORS.text,
+    fontWeight: '600' as const,
+  },
+  // Settings modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end' as const,
+  },
+  settingsPanel: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 20,
+  },
+  settingsPanelHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DDD',
+    alignSelf: 'center' as const,
+    marginBottom: 4,
+  },
+  settingsPanelTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: COLORS.text,
+  },
+  settingsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  settingsRowLabel: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: COLORS.text,
+  },
+  settingsRowDesc: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#DDD',
+    padding: 2,
+    justifyContent: 'center' as const,
+  },
+  toggleOn: {
+    backgroundColor: '#1a1a1a',
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF',
+  },
+  toggleThumbOn: {
+    alignSelf: 'flex-end' as const,
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+  },
+  upgradeBox: {
+    gap: 8,
+  },
+  upgradeTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: COLORS.text,
+  },
+  upgradeDesc: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  upgradeBtn: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center' as const,
+    marginTop: 4,
+  },
+  upgradeBtnText: {
+    color: '#FFF',
+    fontWeight: '700' as const,
+    fontSize: 14,
+  },
+  appVersion: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center' as const,
   },
 
   // 말풍선 (캘린더용)
