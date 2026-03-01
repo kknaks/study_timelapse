@@ -7,6 +7,7 @@ import {
   Modal,
   Alert,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
@@ -146,6 +147,7 @@ export default function FocusScreen() {
           recordingSeconds: String(elapsed),
           aspectRatio,
           studyMinutes: String(studyMinutes),
+          timerMode,
         },
       });
     }, 500);
@@ -207,7 +209,9 @@ export default function FocusScreen() {
           ref={cameraRef}
           style={[
             styles.camera,
-            aspectRatio === '1:1' && styles.camera1x1,
+            aspectRatio === '1:1' && (Platform.OS === 'web'
+              ? ({ width: '100vw', height: '100vw', maxHeight: '100%' } as any)
+              : styles.camera1x1),
             aspectRatio === '16:9' && styles.camera16x9,
           ]}
           facing="front"

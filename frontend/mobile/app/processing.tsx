@@ -42,6 +42,7 @@ export default function ProcessingScreen() {
     recordingSeconds: string;
     aspectRatio: string;
     studyMinutes: string;
+    timerMode: string;
   }>();
 
   const videoUri = params.videoUri ?? '';
@@ -50,6 +51,7 @@ export default function ProcessingScreen() {
   const recordingSecs = Number(params.recordingSeconds) || 0;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const studyMinutes = Number(params.studyMinutes) || 60;
+  const timerMode = params.timerMode ?? 'countdown';
   const achievementRatio = Math.min(1, recordingSecs / (studyMinutes * 60));
 
   const [stage, setStage] = useState<Stage>('uploading');
@@ -67,12 +69,14 @@ export default function ProcessingScreen() {
       params: {
         downloadUrl: url,
         sessionId,
-        studyMinutes: String(Math.round(recordingSecs / 60)),
+        studyMinutes: String(studyMinutes),       // 목표 시간 (분)
+        recordingSeconds: String(recordingSecs),   // 실제 촬영 시간 (초)
         outputSeconds: String(outputSecs),
         aspectRatio,
+        timerMode,
       },
     });
-  }, [router, sessionId, recordingSecs, outputSecs, aspectRatio]);
+  }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode]);
 
   const cleanup = useCallback(() => {
     if (pollingRef.current) {

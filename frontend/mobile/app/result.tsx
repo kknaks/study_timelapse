@@ -29,13 +29,19 @@ export default function ResultScreen() {
     downloadUrl: string;
     sessionId: string;
     studyMinutes: string;
+    recordingSeconds: string;
     outputSeconds: string;
     aspectRatio: string;
+    timerMode: string;
   }>();
 
   const downloadUrl = params.downloadUrl || SAMPLE_VIDEO_URL;
   const outputSecs = Number(params.outputSeconds) || 30;
   const studyMinutes = Number(params.studyMinutes) || 0;
+  const recordingSecs = Number(params.recordingSeconds) || studyMinutes * 60;
+  const aspectRatio = params.aspectRatio ?? '9:16';
+  const timerMode = params.timerMode ?? 'countdown'; // 'countdown' | 'countup'
+  const goalSeconds = studyMinutes * 60;
 
   const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [saving, setSaving] = useState(false);
@@ -49,26 +55,26 @@ export default function ResultScreen() {
     p.play();
   });
 
-  // 타이머/프로그레스 오버레이 활성화 시 카운터 시작
   useEffect(() => {
     if (overlayStyle === 'none') {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      setElapsed(0);
       return;
     }
-    setElapsed(0);
+    // countdown: 남은 시간부터 시작, countup: 0부터 시작
+    setElapsed(timerMode === 'countdown' ? Math.max(0, goalSeconds - recordingSecs) : 0);
     intervalRef.current = setInterval(() => {
       setElapsed((prev) => {
-        if (prev >= outputSecs) {
-          return 0; // loop
+        if (timerMode === 'countdown') {
+          return prev <= 0 ? goalSeconds : prev - 1;
+        } else {
+          return prev >= goalSeconds ? 0 : prev + 1;
         }
-        return prev + 1;
       });
     }, 1000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [overlayStyle, outputSecs]);
+  }, [overlayStyle, timerMode, goalSeconds, recordingSecs]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -92,7 +98,12 @@ export default function ResultScreen() {
     { key: 'progress', label: 'Progress Bar' },
   ];
 
-  const progressPercent = outputSecs > 0 ? (elapsed / outputSecs) * 100 : 0;
+  // countup: 경과/목표, countdown: (목표-남은)/목표
+  const progressPercent = goalSeconds > 0
+    ? timerMode === 'countup'
+      ? (elapsed / goalSeconds) * 100
+      : ((goalSeconds - elapsed) / goalSeconds) * 100
+    : 0;
 
   return (
     <View style={styles.container}>
@@ -108,14 +119,30 @@ export default function ResultScreen() {
       {/* Video Preview Area */}
       <View style={styles.previewArea}>
         {Platform.OS === 'web' ? (
-          <video
-            src={downloadUrl}
-            autoPlay
-            loop
-            muted
-            playsInline
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          <div style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#000',
+          }}>
+            <video
+              src={downloadUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{
+                width: aspectRatio === '1:1' ? 'auto' : '100%',
+                height: aspectRatio === '1:1' ? '100%' : '100%',
+                aspectRatio: aspectRatio === '1:1' ? '1/1' : aspectRatio === '16:9' ? '16/9' : undefined,
+                objectFit: 'cover',
+                maxWidth: '100%',
+                maxHeight: '100%',
+              }}
+            />
+          </div>
         ) : (
           <VideoView
             style={styles.video}
