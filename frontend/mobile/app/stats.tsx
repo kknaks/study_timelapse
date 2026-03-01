@@ -1,11 +1,10 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -47,9 +46,10 @@ export default function StatsScreen() {
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
 
-  // 날짜 클릭 모달
+  // 날짜 클릭 말풍선
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSeconds, setSelectedSeconds] = useState(0);
+  const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -252,9 +252,11 @@ export default function StatsScreen() {
                   {hasSession ? (
                     // 세션 있는 날: 클릭 가능
                     <TouchableOpacity
-                      onPress={() => {
+                      onPress={(e) => {
+                        const { pageX, pageY } = e.nativeEvent;
                         setSelectedDate(dateStr);
                         setSelectedSeconds(dayEntry?.total_seconds ?? 0);
+                        setBubblePos({ x: pageX, y: pageY });
                       }}
                     >
                       <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
@@ -276,36 +278,36 @@ export default function StatsScreen() {
         </View>
       </ScrollView>
 
-      {/* 날짜 클릭 모달 */}
-      <Modal
-        visible={selectedDate !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedDate(null)}
-      >
+      {/* 날짜 클릭 말풍선 */}
+      {selectedDate && bubblePos && (
         <TouchableOpacity
-          style={styles.modalBackdrop}
+          style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={styles.dateModal}>
-            <Text style={styles.dateModalDate}>
-              {selectedDate ? `${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}` : ''}
+          <View style={[
+            styles.bubble,
+            {
+              top: bubblePos.y - 120,
+              left: Math.min(bubblePos.x - 80, 200),
+            },
+          ]}>
+            {/* 말풍선 꼬리 */}
+            <View style={styles.bubbleTail} />
+            <Text style={styles.bubbleDate}>
+              {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
             </Text>
-            <View style={styles.dateModalRow}>
-              <Text style={styles.dateModalIcon}>🕐</Text>
-              <Text style={styles.dateModalTime}>
-                {(() => {
-                  const h = Math.floor(selectedSeconds / 3600);
-                  const m = Math.floor((selectedSeconds % 3600) / 60);
-                  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-                })()}
-              </Text>
-            </View>
-            <Text style={styles.dateModalSub}>Focus time</Text>
+            <Text style={styles.bubbleLabel}>Focus time</Text>
+            <Text style={styles.bubbleTime}>
+              {(() => {
+                const h = Math.floor(selectedSeconds / 3600);
+                const m = Math.floor((selectedSeconds % 3600) / 60);
+                return h > 0 ? `${h}h ${m}m` : `${m}m`;
+              })()}
+            </Text>
           </View>
         </TouchableOpacity>
-      </Modal>
+      )}
     </View>
   );
 }
@@ -532,49 +534,48 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // 날짜 클릭 모달
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+  // 말풍선
+  bubble: {
+    position: 'absolute',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dateModal: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    gap: 8,
+    gap: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
     elevation: 8,
-    minWidth: 180,
+    minWidth: 140,
   },
-  dateModalDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#888',
-    marginBottom: 4,
+  bubbleTail: {
+    position: 'absolute',
+    bottom: -8,
+    left: '50%' as any,
+    marginLeft: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#1a1a1a',
   },
-  dateModalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  bubbleDate: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
   },
-  dateModalIcon: {
-    fontSize: 22,
+  bubbleLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.6)',
   },
-  dateModalTime: {
-    fontSize: 32,
+  bubbleTime: {
+    fontSize: 26,
     fontWeight: '800',
-    color: '#1a1a1a',
-  },
-  dateModalSub: {
-    fontSize: 13,
-    color: '#AAA',
-    marginTop: 2,
+    color: '#FFF',
   },
 });
