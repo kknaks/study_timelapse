@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -6,7 +6,6 @@ import { getMe } from '../src/api/user';
 import { getWeeklyStats } from '../src/api/stats';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
-import FocusTimelapseIcon from '../src/components/FocusTimelapseLogo';
 
 function formatTodayTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -47,7 +46,13 @@ export default function HomeScreen() {
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
-          <FocusTimelapseIcon size={88} bgColor="#1a1a1a" color="#FFFFFF" />
+          <View style={styles.logoIcon}>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={styles.appName}>FocusTimelapse</Text>
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
@@ -111,6 +116,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 14,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    tintColor: '#FFFFFF',
   },
   appName: {
     fontSize: 28,
