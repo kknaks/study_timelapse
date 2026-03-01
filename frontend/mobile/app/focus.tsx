@@ -211,8 +211,11 @@ export default function FocusScreen() {
 
       {/* Overlay */}
       <View style={styles.overlay}>
-        {/* Top: 타이머 (왼쪽) + X버튼 (오른쪽) */}
+        {/* Top: 뒤로가기(왼쪽) + 타이머 (오른쪽) */}
         <View style={styles.topRow}>
+          <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
+            <Text style={styles.exitButtonText}>←</Text>
+          </TouchableOpacity>
           <View style={styles.timerContainer}>
             <Text style={styles.timerLabel}>
               {timerMode === 'countdown' ? 'REMAINING' : 'ELAPSED'}
@@ -221,9 +224,6 @@ export default function FocusScreen() {
               {timerMode === 'countdown' ? formatTime(remaining) : formatTime(elapsed)}
             </Text>
           </View>
-          <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
-            <Text style={styles.exitButtonText}>✕</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Camera Unavailable 표시 (웹) */}
@@ -269,22 +269,22 @@ export default function FocusScreen() {
       <Modal visible={showExitModal} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>End Session?</Text>
+            <Text style={styles.modalTitle}>세션을 종료할까요?</Text>
             <Text style={styles.modalText}>
-              Your recording will be discarded. Are you sure?
+              지금 돌아가면 촬영 중인 영상은 저장되지 않아요.
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnCancel]}
                 onPress={() => setShowExitModal(false)}
               >
-                <Text style={styles.modalBtnCancelText}>Continue</Text>
+                <Text style={styles.modalBtnCancelText}>계속하기</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnConfirm]}
                 onPress={confirmExit}
               >
-                <Text style={styles.modalBtnConfirmText}>End Session</Text>
+                <Text style={styles.modalBtnConfirmText}>나가기</Text>
               </TouchableOpacity>
             </View>
           </View>
