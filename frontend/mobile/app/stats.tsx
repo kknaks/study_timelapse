@@ -52,6 +52,7 @@ export default function StatsScreen() {
   const [selectedSeconds, setSelectedSeconds] = useState(0);
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
   const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
+  const [calGridLayout, setCalGridLayout] = useState<{ x: number; width: number } | null>(null);
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -265,7 +266,13 @@ export default function StatsScreen() {
           </View>
 
           {/* Calendar Grid */}
-          <View style={styles.calGrid}>
+          <View
+            style={styles.calGrid}
+            onLayout={(e) => {
+              const { x, width } = e.nativeEvent.layout;
+              setCalGridLayout({ x, width });
+            }}
+          >
             {calendarCells.map((day, i) => {
               if (day === null) {
                 return <View key={`empty-${i}`} style={styles.calCell} />;
@@ -283,17 +290,22 @@ export default function StatsScreen() {
                     // 세션 있는 날: 클릭 가능
                     <TouchableOpacity
                       onPress={(e) => {
-                        const { pageX, pageY } = e.nativeEvent;
-                        // 캘린더는 월요일 시작 → 컬럼 인덱스 계산
-                        // getDay(): 0=일,1=월,2=화,3=수,4=목,5=금,6=토
-                        // 캘린더 컬럼: 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
+                        const { pageY } = e.nativeEvent;
+                        // 캘린더 컬럼 인덱스 (월=0 ... 일=6)
                         const dow = new Date(dateStr).getDay();
                         const calCol = dow === 0 ? 6 : dow - 1;
                         const bubbleW = 120;
-                        // 월(컬럼0): 2/5, 일(컬럼6): 4/5, 나머지: 중앙(1/2)
+
+                        // 그리드 너비로 셀 중앙 x 계산
+                        const gridW = calGridLayout?.width ?? 300;
+                        const gridX = calGridLayout?.x ?? 0;
+                        const cellW = gridW / 7;
+                        const cellCenterX = gridX + cellW * calCol + cellW / 2;
+
+                        // 말풍선 anchor 비율: 월=2/5, 일=4/5, 나머지=1/2
                         const ratio = calCol === 0 ? 2/5 : calCol === 6 ? 4/5 : 0.5;
-                        const leftOffset = Math.round(bubbleW * ratio);
-                        const left = Math.min(Math.max(pageX - leftOffset, 8), 260);
+                        const left = Math.min(Math.max(cellCenterX - bubbleW * ratio, 8), 260);
+
                         setSelectedDate(dateStr);
                         setSelectedSeconds(dayEntry?.total_seconds ?? 0);
                         setBubblePos({ x: left, y: pageY });
@@ -327,7 +339,7 @@ export default function StatsScreen() {
         >
           <View style={[styles.sharedBubble, {
             position: 'absolute',
-            top: bubblePos.y - 82,
+            top: bubblePos.y - 88,
             left: bubblePos.x,
             width: 120,
           }]}>
