@@ -10,11 +10,13 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { useQuery } from '@tanstack/react-query';
+import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
 const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
 
-type OverlayStyle = 'none' | 'timer' | 'progress';
+type OverlayStyle = 'none' | 'timer' | 'progress' | 'streak';
 
 function formatTime(seconds: number): string {
   const s = Math.floor(seconds);
@@ -47,6 +49,12 @@ export default function ResultScreen() {
   const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { data: userData } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe().then((r) => r.data),
+  });
+  const streak = userData?.data?.streak ?? 0;
 
   const player = useVideoPlayer(downloadUrl, (p) => {
     p.loop = true;
@@ -103,6 +111,7 @@ export default function ResultScreen() {
     { key: 'none', label: 'None' },
     { key: 'timer', label: 'Timer' },
     { key: 'progress', label: 'Progress Bar' },
+    { key: 'streak', label: 'Streak' },
   ];
 
   return (
@@ -153,8 +162,8 @@ export default function ResultScreen() {
           <Text style={styles.watermarkText}>FocusTimelapse</Text>
         </View>
 
-        {/* Timer / Progress overlay — top right, no background */}
-        {(overlayStyle === 'timer' || overlayStyle === 'progress') && (
+        {/* Timer / Progress / Streak overlay — top right, no background */}
+        {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
           <View style={styles.topRightOverlay} pointerEvents="none">
             {overlayStyle === 'timer' && (
               <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
@@ -163,6 +172,9 @@ export default function ResultScreen() {
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
               </View>
+            )}
+            {overlayStyle === 'streak' && (
+              <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
             )}
           </View>
         )}
