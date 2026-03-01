@@ -110,10 +110,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logoIcon: {
-    width: 96,
-    height: 96,
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: '#1a1a1a',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 12,
   },
   logoImage: {
     width: '100%',
