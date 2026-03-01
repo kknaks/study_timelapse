@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
@@ -103,58 +104,45 @@ export default function SessionSetupScreen() {
             <Text style={styles.sectionLabel}>TOTAL FOCUS TIME</Text>
             <Text style={styles.sectionValue}>{formatFocusTime(focusMinutes)}</Text>
           </View>
-          {/* 커스텀 슬라이더 (5분 단위, 터치 드래그) */}
-          <View
-            style={styles.sliderContainer}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-            onResponderGrant={(e) => {
-              const { locationX, width } = e.nativeEvent as unknown as { locationX: number; width: number };
-              const w = (e.target as unknown as { offsetWidth?: number }).offsetWidth ?? 300;
-              const ratio = Math.max(0, Math.min(1, locationX / w));
-              const raw = FOCUS_MIN + ratio * (FOCUS_MAX - FOCUS_MIN);
-              setFocusMinutes(Math.round(raw / FOCUS_STEP) * FOCUS_STEP);
-            }}
-            onResponderMove={(e) => {
-              const locationX = e.nativeEvent.locationX;
-              const w = (e.target as unknown as { offsetWidth?: number }).offsetWidth ?? 300;
-              const ratio = Math.max(0, Math.min(1, locationX / w));
-              const raw = FOCUS_MIN + ratio * (FOCUS_MAX - FOCUS_MIN);
-              setFocusMinutes(Math.round(raw / FOCUS_STEP) * FOCUS_STEP);
-            }}
-          >
-            <View style={styles.sliderTrackBg} />
-            <View
-              style={[
-                styles.sliderTrackFill,
-                { width: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
-              ]}
-            />
-            <View
-              style={[
-                styles.sliderThumb,
-                { left: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
-              ]}
-            />
-          </View>
+          {Platform.OS === 'web' ? (
+            // 웹: 네이티브 range input (정확하고 부드러움)
+            <View style={styles.webSliderWrapper}>
+              <input
+                type="range"
+                min={FOCUS_MIN}
+                max={FOCUS_MAX}
+                step={FOCUS_STEP}
+                value={focusMinutes}
+                onChange={(e) => setFocusMinutes(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  height: 4,
+                  accentColor: '#1a1a1a',
+                  cursor: 'pointer',
+                }}
+              />
+            </View>
+          ) : (
+            // 네이티브: 커스텀 슬라이더
+            <View style={styles.sliderContainer}>
+              <View style={styles.sliderTrackBg} />
+              <View
+                style={[
+                  styles.sliderTrackFill,
+                  { width: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
+                ]}
+              />
+              <View
+                style={[
+                  styles.sliderThumb,
+                  { left: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
+                ]}
+              />
+            </View>
+          )}
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMin}>5m</Text>
             <Text style={styles.sliderMax}>4h</Text>
-          </View>
-          {/* +/- 버튼 (정밀 조정) */}
-          <View style={styles.adjustRow}>
-            <TouchableOpacity
-              style={styles.adjustBtn}
-              onPress={() => setFocusMinutes(Math.max(FOCUS_MIN, focusMinutes - FOCUS_STEP))}
-            >
-              <Text style={styles.adjustBtnText}>−5m</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.adjustBtn}
-              onPress={() => setFocusMinutes(Math.min(FOCUS_MAX, focusMinutes + FOCUS_STEP))}
-            >
-              <Text style={styles.adjustBtnText}>+5m</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -364,21 +352,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
   },
-  adjustRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  adjustBtn: {
+  webSliderWrapper: {
     paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: '#F0F0F0',
-  },
-  adjustBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
   },
   quickScroll: {
     flexGrow: 0,
