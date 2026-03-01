@@ -11,46 +11,51 @@ import {
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { createSession } from '../src/api/sessions';
-import { COLORS, ASPECT_RATIOS, OUTPUT_SECONDS, OVERLAY_STYLES } from '../src/constants';
+import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest } from '../src/types';
 
-const HOUR_OPTIONS = [0, 1, 2, 3, 4];
-const MINUTE_OPTIONS = [0, 15, 30, 45];
+type TimerMode = 'countdown' | 'countup';
+type AspectRatio = '9:16' | '1:1' | '16:9';
 
-function estimateStorageMB(outputSeconds: number, aspectRatio: string): string {
-  // Rough estimate: ~2MB per 30s of 1080p video
-  const baseRate = 2; // MB per 30s
+// 슬라이더 대신 스텝 버튼 방식 (웹 호환)
+const FOCUS_OPTIONS = [30, 45, 60, 90, 120, 150, 180, 210, 240]; // 분
+const TIMELAPSE_OPTIONS = [15, 30, 45, 60, 90, 120]; // 초
+
+function formatFocusTime(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h 0m`;
+}
+
+function estimateSizeMB(outputSeconds: number, aspectRatio: string): number {
+  const base = 3.5; // MB per 30s
   const ratio = outputSeconds / 30;
-  let multiplier = 1;
-  if (aspectRatio === '16:9') multiplier = 1.2;
-  if (aspectRatio === '1:1') multiplier = 0.8;
-  const mb = baseRate * ratio * multiplier;
-  return mb.toFixed(0);
+  const mult = aspectRatio === '16:9' ? 1.2 : aspectRatio === '1:1' ? 0.8 : 1;
+  return Math.round(base * ratio * mult);
 }
 
 export default function SessionSetupScreen() {
   const router = useRouter();
 
-  const [hours, setHours] = useState(1);
-  const [minutes, setMinutes] = useState(0);
-  const [outputSeconds, setOutputSeconds] = useState<number>(60);
-  const [aspectRatio, setAspectRatio] = useState<string>('9:16');
-  const [overlayStyle, setOverlayStyle] = useState<string>('stopwatch');
-
-  const totalStudyMinutes = hours * 60 + minutes;
+  const [focusMinutes, setFocusMinutes] = useState(120);
+  const [outputSeconds, setOutputSeconds] = useState(30);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
+  const [timerMode, setTimerMode] = useState<TimerMode>('countdown');
 
   const mutation = useMutation({
     mutationFn: (data: CreateSessionRequest) => createSession(data),
-    onSuccess: (response) => {
-      const createdSession = response.data;
+    onSuccess: (res) => {
+      const session = res.data?.data;
       router.push({
         pathname: '/focus',
         params: {
-          sessionId: createdSession.id,
-          studyMinutes: String(totalStudyMinutes),
+          sessionId: session?.id ?? '',
+          studyMinutes: String(focusMinutes),
           outputSeconds: String(outputSeconds),
           aspectRatio,
-          overlayStyle,
+          overlayStyle: 'none',
+          timerMode,
         },
       });
     },
@@ -61,234 +66,349 @@ export default function SessionSetupScreen() {
   });
 
   const handleStart = () => {
-    if (totalStudyMinutes < 5) {
-      Alert.alert('Too Short', 'Please set at least 5 minutes of study time.');
+    if (focusMinutes < 1) {
+      Alert.alert('Too Short', 'Please set at least 1 minute.');
       return;
     }
-
     mutation.mutate({
       start_time: new Date().toISOString(),
       output_seconds: outputSeconds,
       aspect_ratio: aspectRatio,
-      overlay_style: overlayStyle,
+      overlay_style: 'none',
     });
   };
 
-  const renderOptionButtons = <T extends string | number>(
-    options: readonly T[],
-    selected: T,
-    onSelect: (val: T) => void,
-    formatLabel?: (val: T) => string,
-  ) => (
-    <View style={styles.optionRow}>
-      {options.map((opt) => (
-        <TouchableOpacity
-          key={String(opt)}
-          style={[styles.optionButton, selected === opt && styles.optionButtonActive]}
-          onPress={() => onSelect(opt)}
-        >
-          <Text style={[styles.optionText, selected === opt && styles.optionTextActive]}>
-            {formatLabel ? formatLabel(opt) : String(opt)}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  const sizeMB = estimateSizeMB(outputSeconds, aspectRatio);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      {/* Study Duration */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📚 Study Duration</Text>
-        <Text style={styles.sectionSubtitle}>How long will you study?</Text>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Session</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-        <Text style={styles.fieldLabel}>Hours</Text>
-        {renderOptionButtons(HOUR_OPTIONS, hours, setHours, (v) => `${v}h`)}
-
-        <Text style={styles.fieldLabel}>Minutes</Text>
-        {renderOptionButtons(MINUTE_OPTIONS, minutes, setMinutes, (v) => `${v}m`)}
-
-        <View style={styles.durationSummary}>
-          <Text style={styles.durationText}>
-            Total: {hours > 0 ? `${hours}h ` : ''}{minutes > 0 ? `${minutes}m` : hours > 0 ? '' : '0m'}
-          </Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Total Focus Time */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionLabel}>TOTAL FOCUS TIME</Text>
+            <Text style={styles.sectionValue}>{formatFocusTime(focusMinutes)}</Text>
+          </View>
+          <View style={styles.sliderTrack}>
+            {FOCUS_OPTIONS.map((val) => (
+              <TouchableOpacity
+                key={val}
+                style={[styles.sliderDot, focusMinutes === val && styles.sliderDotActive]}
+                onPress={() => setFocusMinutes(val)}
+              />
+            ))}
+          </View>
+          <View style={styles.sliderLabels}>
+            <Text style={styles.sliderMin}>30m</Text>
+            <Text style={styles.sliderMax}>4h</Text>
+          </View>
+          {/* 빠른 선택 */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll}>
+            {FOCUS_OPTIONS.map((val) => (
+              <TouchableOpacity
+                key={val}
+                style={[styles.quickChip, focusMinutes === val && styles.quickChipActive]}
+                onPress={() => setFocusMinutes(val)}
+              >
+                <Text style={[styles.quickChipText, focusMinutes === val && styles.quickChipTextActive]}>
+                  {formatFocusTime(val)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      </View>
 
-      {/* Output Length */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🎬 Output Length</Text>
-        <Text style={styles.sectionSubtitle}>Final timelapse video duration</Text>
-        {renderOptionButtons(OUTPUT_SECONDS, outputSeconds, setOutputSeconds, (v) => `${v}s`)}
-      </View>
+        {/* Timelapse Length */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionLabel}>TIMELAPSE LENGTH</Text>
+            <Text style={styles.sectionValue}>{outputSeconds}s</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll}>
+            {TIMELAPSE_OPTIONS.map((val) => (
+              <TouchableOpacity
+                key={val}
+                style={[styles.quickChip, outputSeconds === val && styles.quickChipActive]}
+                onPress={() => setOutputSeconds(val)}
+              >
+                <Text style={[styles.quickChipText, outputSeconds === val && styles.quickChipTextActive]}>
+                  {val}s
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-      {/* Aspect Ratio */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📐 Aspect Ratio</Text>
-        <Text style={styles.sectionSubtitle}>Choose for your platform</Text>
-        {renderOptionButtons(ASPECT_RATIOS, aspectRatio, setAspectRatio, (v) => {
-          if (v === '9:16') return '9:16\nReels/TikTok';
-          if (v === '1:1') return '1:1\nInstagram';
-          return '16:9\nYouTube';
-        })}
-      </View>
+        {/* Aspect Ratio */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionLabel}>🖥 ASPECT RATIO</Text>
+          </View>
+          <View style={styles.buttonRow}>
+            {(ASPECT_RATIOS as readonly string[]).map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.optionBtn, aspectRatio === r && styles.optionBtnActive]}
+                onPress={() => setAspectRatio(r as AspectRatio)}
+              >
+                <Text style={[styles.optionBtnText, aspectRatio === r && styles.optionBtnTextActive]}>
+                  {r}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
-      {/* Overlay Style */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>⏱️ Overlay Style</Text>
-        <Text style={styles.sectionSubtitle}>Timer display on the video</Text>
-        {renderOptionButtons(OVERLAY_STYLES, overlayStyle, setOverlayStyle, (v) => {
-          const labels: Record<string, string> = {
-            'stopwatch': '⏱️ Stopwatch',
-            'progress-bar': '📊 Progress',
-            'minimal': '• Minimal',
-            'none': '✕ None',
-          };
-          return labels[v] ?? v;
-        })}
-      </View>
+        {/* Timer Display */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionLabel}>⏱ TIMER DISPLAY</Text>
+          </View>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.optionBtn, timerMode === 'countdown' && styles.optionBtnActive]}
+              onPress={() => setTimerMode('countdown')}
+            >
+              <Text style={[styles.optionBtnText, timerMode === 'countdown' && styles.optionBtnTextActive]}>
+                Count Down
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.optionBtn, timerMode === 'countup' && styles.optionBtnActive]}
+              onPress={() => setTimerMode('countup')}
+            >
+              <Text style={[styles.optionBtnText, timerMode === 'countup' && styles.optionBtnTextActive]}>
+                Count Up
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      {/* Storage Estimate */}
-      <View style={styles.estimateCard}>
-        <Text style={styles.estimateTitle}>💾 Estimated Storage</Text>
-        <Text style={styles.estimateValue}>
-          ~{estimateStorageMB(outputSeconds, aspectRatio)} MB
-        </Text>
-      </View>
+        {/* Estimate Card */}
+        <View style={styles.estimateCard}>
+          <View style={styles.estimateRow}>
+            <Text style={styles.estimateLabel}>Estimated Video:</Text>
+            <Text style={styles.estimateValue}>{outputSeconds} seconds</Text>
+          </View>
+          <View style={styles.estimateRow}>
+            <Text style={styles.estimateLabel}>Estimated Size:</Text>
+            <Text style={styles.estimateValue}>~{sizeMB} MB</Text>
+          </View>
+        </View>
+      </ScrollView>
 
       {/* Start Button */}
-      <TouchableOpacity
-        style={[styles.startButton, mutation.isPending && styles.startButtonDisabled]}
-        onPress={handleStart}
-        disabled={mutation.isPending}
-        activeOpacity={0.8}
-      >
-        {mutation.isPending ? (
-          <ActivityIndicator color="#FFFFFF" size="small" />
-        ) : (
-          <Text style={styles.startButtonText}>🎥 Start Recording</Text>
-        )}
-      </TouchableOpacity>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={[styles.startButton, mutation.isPending && styles.startButtonDisabled]}
+          onPress={handleStart}
+          disabled={mutation.isPending}
+          activeOpacity={0.85}
+        >
+          {mutation.isPending ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <>
+              <Text style={styles.startIcon}>▶</Text>
+              <Text style={styles.startText}>Start Recording</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#FAFAFA',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: {
+    fontSize: 22,
+    color: '#1a1a1a',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  scroll: {
+    flex: 1,
   },
   scrollContent: {
     padding: 20,
+    gap: 24,
+    paddingBottom: 20,
   },
   section: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 12,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  optionRow: {
+  sectionHeader: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-    flexWrap: 'wrap',
-  },
-  optionButton: {
-    flex: 1,
-    minWidth: 64,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  optionButtonActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
-  },
-  optionText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  optionTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  durationSummary: {
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  durationText: {
-    fontSize: 16,
+  sectionLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    color: COLORS.text,
-  },
-  estimateCard: {
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primary + '30',
-  },
-  estimateTitle: {
-    fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    letterSpacing: 0.8,
   },
-  estimateValue: {
+  sectionValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: '#1a1a1a',
+  },
+  sliderTrack: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: 4,
+    backgroundColor: '#E8E8E8',
+    borderRadius: 2,
+    paddingHorizontal: 4,
+  },
+  sliderDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#DDD',
+  },
+  sliderDotActive: {
+    backgroundColor: '#1a1a1a',
+    transform: [{ scale: 1.3 }],
+  },
+  sliderLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sliderMin: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  sliderMax: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  quickScroll: {
+    flexGrow: 0,
+  },
+  quickChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    marginRight: 8,
+  },
+  quickChipActive: {
+    backgroundColor: '#1a1a1a',
+  },
+  quickChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1a1a',
+  },
+  quickChipTextActive: {
+    color: '#FFF',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  optionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F0F0F0',
+    alignItems: 'center',
+  },
+  optionBtnActive: {
+    backgroundColor: '#1a1a1a',
+  },
+  optionBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  optionBtnTextActive: {
+    color: '#FFF',
+  },
+  estimateCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  estimateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  estimateLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  estimateValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  bottomBar: {
+    padding: 20,
+    paddingBottom: 40,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
   startButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 18,
+    backgroundColor: '#1a1a1a',
     borderRadius: 16,
+    paddingVertical: 18,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'center',
+    gap: 10,
   },
   startButtonDisabled: {
     opacity: 0.6,
   },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
+  startIcon: {
+    color: '#FFF',
+    fontSize: 16,
+  },
+  startText: {
+    color: '#FFF',
+    fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 0.3,
   },
 });

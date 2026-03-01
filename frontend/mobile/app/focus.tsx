@@ -30,6 +30,7 @@ export default function FocusScreen() {
     outputSeconds: string;
     aspectRatio: string;
     overlayStyle: string;
+    timerMode: string;
   }>();
 
   const studyMinutes = Number(params.studyMinutes) || 60;
@@ -37,7 +38,8 @@ export default function FocusScreen() {
   const sessionId = params.sessionId ?? '';
   const outputSeconds = Number(params.outputSeconds) || 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
-  const overlayStyle = params.overlayStyle ?? 'stopwatch';
+  const overlayStyle = params.overlayStyle ?? 'none';
+  const timerMode = params.timerMode ?? 'countdown';
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
@@ -209,48 +211,55 @@ export default function FocusScreen() {
 
       {/* Overlay */}
       <View style={styles.overlay}>
-        {/* Top: X button + Remaining time */}
+        {/* Top: 타이머 (왼쪽) + X버튼 (오른쪽) */}
         <View style={styles.topRow}>
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>
+              {timerMode === 'countdown' ? 'REMAINING' : 'ELAPSED'}
+            </Text>
+            <Text style={styles.timerTime}>
+              {timerMode === 'countdown' ? formatTime(remaining) : formatTime(elapsed)}
+            </Text>
+          </View>
           <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
             <Text style={styles.exitButtonText}>✕</Text>
           </TouchableOpacity>
-          <View style={styles.remainingContainer}>
-            <Text style={styles.remainingLabel}>Remaining</Text>
-            <Text style={styles.remainingTime}>{formatTime(remaining)}</Text>
-          </View>
-          <View style={{ width: 44 }} />
         </View>
 
-        {/* Progress bar */}
-        {overlayStyle !== 'none' && (
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(progressPercent, 100)}%` }]} />
+        {/* Camera Unavailable 표시 (웹) */}
+        {!cameraPermission?.granted && (
+          <View style={styles.cameraUnavailable}>
+            <Text style={styles.cameraUnavailableText}>⊘  Camera Unavailable</Text>
           </View>
         )}
 
-        {/* Bottom: Elapsed time + controls */}
+        {/* Bottom: FOCUS SESSION ACTIVE + 버튼들 */}
         <View style={styles.bottomRow}>
-          <View style={styles.elapsedContainer}>
-            <Text style={styles.elapsedLabel}>Elapsed</Text>
-            <Text style={styles.elapsedTime}>{formatTime(elapsed)}</Text>
-          </View>
-
+          <Text style={styles.sessionActiveLabel}>FOCUS SESSION ACTIVE</Text>
           <View style={styles.controls}>
-            {/* Recording indicator */}
-            {isRecording && (
-              <View style={styles.recIndicator}>
-                <View style={styles.recDot} />
-                <Text style={styles.recText}>REC</Text>
-              </View>
-            )}
+            {/* 일시정지 버튼 */}
+            <TouchableOpacity
+              style={styles.pauseButton}
+              onPress={() => {
+                if (isRecording) {
+                  if (intervalRef.current) clearInterval(intervalRef.current);
+                  setIsRecording(false);
+                } else {
+                  setIsRecording(true);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.pauseIcon}>{isRecording ? '⏸' : '▶'}</Text>
+            </TouchableOpacity>
 
+            {/* 정지 버튼 */}
             <TouchableOpacity
               style={styles.stopButton}
               onPress={handleStop}
               activeOpacity={0.7}
             >
               <View style={styles.stopIcon} />
-              <Text style={styles.stopText}>Stop</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -299,109 +308,90 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
+  },
+  timerContainer: {
+    alignItems: 'flex-start',
+  },
+  timerLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  timerTime: {
+    color: '#FFF',
+    fontSize: 52,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   exitButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
   },
   exitButtonText: {
     color: '#FFF',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '600',
   },
-  remainingContainer: {
-    alignItems: 'center',
+  cameraUnavailable: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
   },
-  remainingLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  remainingTime: {
-    color: '#FFF',
-    fontSize: 48,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  progressBarBg: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginHorizontal: 20,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: 2,
+  cameraUnavailableText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
   },
   bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingBottom: 50,
-    paddingHorizontal: 20,
+    alignItems: 'center',
+    paddingBottom: 60,
+    gap: 20,
   },
-  elapsedContainer: {
-    flex: 1,
-  },
-  elapsedLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  elapsedTime: {
-    color: '#FFF',
-    fontSize: 24,
+  sessionActiveLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 1.5,
   },
   controls: {
-    alignItems: 'center',
-    gap: 12,
-  },
-  recIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 24,
   },
-  recDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FF3B30',
+  pauseButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  recText: {
-    color: '#FF3B30',
-    fontSize: 13,
-    fontWeight: '700',
+  pauseIcon: {
+    fontSize: 22,
+    color: '#FFF',
   },
   stopButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,59,48,0.9)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#FFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stopIcon: {
-    width: 24,
-    height: 24,
+    width: 26,
+    height: 26,
     borderRadius: 4,
-    backgroundColor: '#FFF',
-  },
-  stopText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
+    backgroundColor: '#1a1a1a',
   },
   // Permission screen
   permContainer: {

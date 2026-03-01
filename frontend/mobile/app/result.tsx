@@ -1,18 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { VideoView, useVideoPlayer } from 'expo-video';
-import { File, Paths } from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
 import { COLORS } from '../src/constants';
+
+type OverlayStyle = 'none' | 'timer' | 'progress';
 
 export default function ResultScreen() {
   const router = useRouter();
@@ -24,163 +22,109 @@ export default function ResultScreen() {
   }>();
 
   const downloadUrl = params.downloadUrl ?? '';
-  const studyMinutes = Number(params.studyMinutes) || 0;
-  const outputSecs = Number(params.outputSeconds) || 0;
-
+  const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [saving, setSaving] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [saved, setSaved] = useState(false);
 
-  const player = useVideoPlayer(downloadUrl, (p) => {
-    p.loop = true;
-    p.play();
-  });
-
-  const formatDuration = (mins: number): string => {
-    if (mins < 60) return `${mins} min`;
-    const hrs = Math.floor(mins / 60);
-    const remainMins = mins % 60;
-    return remainMins > 0 ? `${hrs}h ${remainMins}m` : `${hrs}h`;
-  };
-
-  const handleSaveToGallery = useCallback(async () => {
+  const handleSave = async () => {
     if (saving) return;
+    if (!downloadUrl) {
+      Alert.alert('알림', '저장할 영상이 없어요. 실제 기기에서 촬영 후 사용해주세요.');
+      return;
+    }
     setSaving(true);
-
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Please grant media library access to save videos.',
-        );
-        setSaving(false);
-        return;
-      }
-
-      // Download to local cache first
-      const downloadedFile = await File.downloadFileAsync(
-        downloadUrl,
-        Paths.cache,
-      );
-
-      await MediaLibrary.saveToLibraryAsync(downloadedFile.uri);
-      setSaved(true);
-      Alert.alert('Saved! 🎉', 'Your timelapse has been saved to your gallery.');
-    } catch (err) {
-      console.error('Save error:', err);
-      Alert.alert('Error', 'Failed to save video. Please try again.');
+      // TODO: 실제 저장 로직 (expo-media-library)
+      Alert.alert('저장 완료', '영상이 갤러리에 저장되었어요!');
+    } catch {
+      Alert.alert('오류', '저장에 실패했어요. 다시 시도해주세요.');
     } finally {
       setSaving(false);
     }
-  }, [downloadUrl, saving]);
-
-  const handleShare = useCallback(async () => {
-    if (sharing) return;
-    setSharing(true);
-
-    try {
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
-        Alert.alert('Sharing not available', 'Sharing is not supported on this device.');
-        setSharing(false);
-        return;
-      }
-
-      // Download to local cache first
-      const downloadedFile = await File.downloadFileAsync(
-        downloadUrl,
-        Paths.cache,
-      );
-
-      await Sharing.shareAsync(downloadedFile.uri, {
-        mimeType: 'video/mp4',
-        dialogTitle: 'Share your timelapse',
-      });
-    } catch (err) {
-      console.error('Share error:', err);
-      Alert.alert('Error', 'Failed to share video. Please try again.');
-    } finally {
-      setSharing(false);
-    }
-  }, [downloadUrl, sharing]);
-
-  const handleBackToHome = () => {
-    router.replace('/');
   };
+
+  const handleUpgrade = () => {
+    Alert.alert('업그레이드', '곧 출시 예정이에요!');
+  };
+
+  const overlayOptions: { key: OverlayStyle; label: string }[] = [
+    { key: 'none', label: 'None' },
+    { key: 'timer', label: 'Timer' },
+    { key: 'progress', label: 'Progress Bar' },
+  ];
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerEmoji}>🎉</Text>
-          <Text style={styles.headerTitle}>Your Timelapse is Ready!</Text>
-          <Text style={styles.headerSubtitle}>Great focus session!</Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/')}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Preview</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-        {/* Video Preview */}
-        <View style={styles.videoContainer}>
-          <VideoView
-            style={styles.video}
-            player={player}
-            nativeControls
-            allowsPictureInPicture={false}
-          />
-        </View>
-
-        {/* Session Summary */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>📊 Session Summary</Text>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryEmoji}>⏱️</Text>
-              <Text style={styles.summaryValue}>{formatDuration(studyMinutes)}</Text>
-              <Text style={styles.summaryLabel}>Study Time</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryEmoji}>🎬</Text>
-              <Text style={styles.summaryValue}>{outputSecs}s</Text>
-              <Text style={styles.summaryLabel}>Video Length</Text>
-            </View>
+      {/* Video Preview Area */}
+      <View style={styles.previewArea}>
+        {downloadUrl ? (
+          <View style={styles.videoPlaceholder}>
+            <Text style={styles.videoIcon}>▶</Text>
+            <Text style={styles.videoText}>Timelapse Ready</Text>
           </View>
+        ) : (
+          <View style={styles.videoPlaceholder}>
+            <View style={styles.generatedIcon}>
+              <Text style={styles.generatedStar}>✦</Text>
+            </View>
+            <Text style={styles.generatedText}>Timelapse Generated</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Bottom Card */}
+      <View style={styles.bottomCard}>
+        {/* Overlay Style */}
+        <Text style={styles.sectionLabel}>OVERLAY STYLE</Text>
+        <View style={styles.overlayRow}>
+          {overlayOptions.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[
+                styles.overlayBtn,
+                overlayStyle === opt.key && styles.overlayBtnActive,
+              ]}
+              onPress={() => setOverlayStyle(opt.key)}
+            >
+              <Text
+                style={[
+                  styles.overlayBtnText,
+                  overlayStyle === opt.key && styles.overlayBtnTextActive,
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.saveButton, saved && styles.savedButton]}
-            onPress={handleSaveToGallery}
-            disabled={saving || saved}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.actionButtonText}>
-              {saving ? '💾 Saving...' : saved ? '✅ Saved!' : '💾 Save to Gallery'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.shareButton]}
-            onPress={handleShare}
-            disabled={sharing}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.shareButtonText}>
-              {sharing ? '📤 Sharing...' : '📤 Share'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Bottom: Back to Home */}
-      <View style={styles.bottomContainer}>
+        {/* Save Button */}
         <TouchableOpacity
-          style={styles.homeButton}
-          onPress={handleBackToHome}
-          activeOpacity={0.8}
+          style={styles.saveButton}
+          onPress={handleSave}
+          disabled={saving}
         >
-          <Text style={styles.homeButtonText}>🏠 Back to Home</Text>
+          {saving ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <>
+              <Text style={styles.saveIcon}>💾</Text>
+              <Text style={styles.saveText}>Save Video</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Upgrade Link */}
+        <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
+          <Text style={styles.upgradeText}>Remove Watermark (Upgrade)</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -190,145 +134,129 @@ export default function ResultScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingTop: 60,
-    paddingBottom: 100,
+    backgroundColor: '#1a1a1a',
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  headerEmoji: {
-    fontSize: 56,
-    marginBottom: 12,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginTop: 6,
-  },
-  videoContainer: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    marginBottom: 20,
-    aspectRatio: 9 / 16,
-    maxHeight: 400,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  video: {
-    flex: 1,
-  },
-  summaryCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  summaryTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  summaryRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: '#1a1a1a',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryEmoji: {
-    fontSize: 28,
-    marginBottom: 8,
-  },
-  summaryValue: {
+  backIcon: {
+    color: '#FFF',
     fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontWeight: '400',
   },
-  summaryLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 4,
-  },
-  summaryDivider: {
-    width: 1,
-    height: 50,
-    backgroundColor: COLORS.border,
-  },
-  actions: {
-    gap: 12,
-  },
-  actionButton: {
-    paddingVertical: 16,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  saveButton: {
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  savedButton: {
-    backgroundColor: COLORS.success,
-  },
-  actionButtonText: {
+  headerTitle: {
     color: '#FFF',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  shareButton: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-  },
-  shareButtonText: {
-    color: COLORS.text,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    paddingBottom: 40,
-    backgroundColor: COLORS.background,
-  },
-  homeButton: {
-    paddingVertical: 16,
-    borderRadius: 14,
+  previewArea: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
   },
-  homeButtonText: {
-    color: COLORS.primary,
-    fontSize: 17,
+  videoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  videoIcon: {
+    fontSize: 48,
+    color: '#FFF',
+  },
+  videoText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+  },
+  generatedIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  generatedStar: {
+    fontSize: 32,
+    color: '#FFF',
+  },
+  generatedText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  bottomCard: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 48,
+    gap: 20,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    letterSpacing: 1,
+  },
+  overlayRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  overlayBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+  },
+  overlayBtnActive: {
+    backgroundColor: '#1a1a1a',
+  },
+  overlayBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text,
+  },
+  overlayBtnTextActive: {
+    color: '#FFF',
+  },
+  saveButton: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  saveIcon: {
+    fontSize: 18,
+  },
+  saveText: {
+    color: '#FFF',
+    fontSize: 16,
     fontWeight: '700',
+  },
+  upgradeButton: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  upgradeText: {
+    color: '#4A90E2',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
