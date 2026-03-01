@@ -16,6 +16,9 @@ from app.schemas.session import SessionCreateRequest, SessionResponse, SessionUp
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
+VALID_OUTPUT_SECONDS = {15, 30, 45, 60, 90, 120}
+VALID_ASPECT_RATIOS = {"9:16", "16:9", "1:1"}
+
 
 @router.post(
     "",
@@ -29,6 +32,17 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """새로운 포커스 세션을 시작한다."""
+    if request.output_seconds not in VALID_OUTPUT_SECONDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"output_seconds must be one of {sorted(VALID_OUTPUT_SECONDS)}",
+        )
+    if request.aspect_ratio not in VALID_ASPECT_RATIOS:
+        raise HTTPException(
+            status_code=422,
+            detail="aspect_ratio must be 9:16, 16:9, or 1:1",
+        )
+
     # timezone-aware → naive (DB는 TIMESTAMP WITHOUT TIME ZONE)
     st = request.start_time
     start_time = st.replace(tzinfo=None) if st.tzinfo else st
@@ -86,10 +100,18 @@ async def update_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    if request.duration is not None and request.duration < 0:
+        raise HTTPException(status_code=422, detail="duration must be non-negative")
+
     if request.end_time is not None:
         et = request.end_time
         session.end_time = et.replace(tzinfo=None) if et.tzinfo else et
-    if request.duration is not None:
+        # duration 자동 계산 (end_time - start_time, 초 단위)
+        if session.start_time:
+            calculated = int((session.end_time - session.start_time).total_seconds())
+            session.duration = max(0, calculated)
+    elif request.duration is not None:
+        # end_time 없으면 프론트가 보낸 duration 사용 (fallback)
         session.duration = request.duration
     if request.status is not None:
         session.status = request.status
@@ -99,9 +121,9 @@ async def update_session(
         session.task_id = request.task_id
 
     # 세션 완료 시 daily_focus 업데이트 & 유저 총 포커스 시간 갱신
-    if request.status == "completed" and request.duration:
-        await _update_daily_focus(db, current_user, request.duration)
-        current_user.total_focus_time += request.duration
+    if request.status == "completed" and session.duration:
+        await _update_daily_focus(db, current_user, session.duration)
+        current_user.total_focus_time += session.duration
 
     await db.flush()
 
