@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -52,7 +52,7 @@ export default function StatsScreen() {
   const [selectedSeconds, setSelectedSeconds] = useState(0);
   const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
   const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
-  const [calGridLayout, setCalGridLayout] = useState<{ x: number; width: number } | null>(null);
+  const cellRefs = useRef<Map<string, View>>(new Map());
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -266,13 +266,7 @@ export default function StatsScreen() {
           </View>
 
           {/* Calendar Grid */}
-          <View
-            style={styles.calGrid}
-            onLayout={(e) => {
-              const { x, width } = e.nativeEvent.layout;
-              setCalGridLayout({ x, width });
-            }}
-          >
+          <View style={styles.calGrid}>
             {calendarCells.map((day, i) => {
               if (day === null) {
                 return <View key={`empty-${i}`} style={styles.calCell} />;
@@ -285,18 +279,28 @@ export default function StatsScreen() {
               const dayEntry = calData.find((d: any) => d.date === dateStr);
 
               return (
-                <View key={dateStr} style={styles.calCell}>
+                <View
+                  key={dateStr}
+                  style={styles.calCell}
+                  ref={(el) => {
+                    if (el) cellRefs.current.set(dateStr, el);
+                    else cellRefs.current.delete(dateStr);
+                  }}
+                >
                   {hasSession ? (
                     // 세션 있는 날: 클릭 가능
                     <TouchableOpacity
-                      onPress={(e) => {
-                        const { pageX, pageY } = e.nativeEvent;
-                        const bubbleW = 120;
-                        // 툴팁 중앙을 클릭 위치(날짜 중앙)에 맞춤
-                        const left = Math.min(Math.max(pageX - bubbleW / 2, 8), 260);
-                        setSelectedDate(dateStr);
-                        setSelectedSeconds(dayEntry?.total_seconds ?? 0);
-                        setBubblePos({ x: left, y: pageY });
+                      onPress={() => {
+                        const cell = cellRefs.current.get(dateStr);
+                        if (!cell) return;
+                        cell.measure((_fx, _fy, width, _height, px, py) => {
+                          const tooltipW = 120;
+                          const left = Math.min(Math.max(px + width / 2 - tooltipW / 2, 8), 260);
+                          const top = py - 82;
+                          setSelectedDate(dateStr);
+                          setSelectedSeconds(dayEntry?.total_seconds ?? 0);
+                          setBubblePos({ x: left, y: top });
+                        });
                       }}
                     >
                       <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
@@ -327,7 +331,7 @@ export default function StatsScreen() {
         >
           <View style={[styles.sharedBubble, {
             position: 'absolute',
-            top: bubblePos.y - 88,
+            top: bubblePos.y,
             left: bubblePos.x,
             width: 120,
           }]}>
