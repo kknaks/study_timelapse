@@ -7,7 +7,6 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
-  Modal,
   Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -181,8 +180,8 @@ export default function ResultScreen() {
         setSaveSteps(prev => setStepDone(2, prev));
 
         setTimeout(() => {
-          setSaveModalVisible(false);
           setSaving(false);
+          router.replace('/stats');
         }, 1500);
         return;
       }
@@ -228,8 +227,8 @@ export default function ResultScreen() {
       setSaveSteps(prev => setStepDone(currentStep, prev));
 
       setTimeout(() => {
-        setSaveModalVisible(false);
         setSaving(false);
+        router.replace('/stats');
       }, 1500);
     } catch (e) {
       console.error('Save error:', e);
@@ -360,47 +359,51 @@ export default function ResultScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Save Progress Modal */}
-      <Modal visible={saveModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Saving Video</Text>
+      {/* Save Progress — full screen overlay */}
+      {saveModalVisible && (
+        <View style={styles.savingScreen}>
+          <Text style={styles.savingTitle}>Saving your timelapse</Text>
+          <Text style={styles.savingSubtitle}>Just a moment...</Text>
+
+          <View style={styles.stepsContainer}>
             {saveSteps.map((step, i) => (
               <View key={i} style={styles.stepRow}>
-                {step.status === 'active' ? (
-                  <ActivityIndicator size="small" color={COLORS.primary} style={styles.stepIcon} />
-                ) : step.status === 'done' ? (
-                  <Text style={styles.stepCheck}>✓</Text>
-                ) : (
-                  <Text style={styles.stepDot}>○</Text>
-                )}
-                <Text
-                  style={[
-                    styles.stepLabel,
-                    step.status === 'done' && styles.stepLabelDone,
-                    step.status === 'pending' && styles.stepLabelPending,
-                  ]}
-                >
+                <View style={styles.stepIconBox}>
+                  {step.status === 'active' ? (
+                    <ActivityIndicator size="small" color="#1a1a1a" />
+                  ) : step.status === 'done' ? (
+                    <Text style={styles.stepCheck}>✓</Text>
+                  ) : (
+                    <Text style={styles.stepDot}>·</Text>
+                  )}
+                </View>
+                <Text style={[
+                  styles.stepLabel,
+                  step.status === 'done' && styles.stepLabelDone,
+                  step.status === 'pending' && styles.stepLabelPending,
+                ]}>
                   {step.label}
                 </Text>
               </View>
             ))}
-            <View style={styles.modalProgressTrack}>
-              <Animated.View
-                style={[
-                  styles.modalProgressFill,
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-            </View>
+          </View>
+
+          {/* Progress bar */}
+          <View style={styles.savingProgressTrack}>
+            <Animated.View
+              style={[
+                styles.savingProgressFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
@@ -506,72 +509,75 @@ const styles = StyleSheet.create({
   upgradeButton: { alignItems: 'center', paddingVertical: 4 },
   upgradeText: { color: '#4A90E2', fontSize: 15, fontWeight: '500' },
 
-  // Save progress modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+  // Save progress — full screen
+  savingScreen: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: '#F5F5F5',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 40,
+    gap: 12,
   },
-  modalCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 20,
-    paddingVertical: 28,
-    paddingHorizontal: 28,
-    width: 280,
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
+  savingTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1a1a1a',
     marginBottom: 4,
+  },
+  savingSubtitle: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginBottom: 32,
+  },
+  stepsContainer: {
+    width: '100%',
+    gap: 20,
+    marginBottom: 36,
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
-  stepIcon: {
-    width: 20,
-    height: 20,
+  stepIconBox: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepCheck: {
-    fontSize: 16,
-    color: COLORS.success,
-    fontWeight: '700',
-    width: 20,
-    textAlign: 'center',
+    fontSize: 18,
+    color: '#22C55E',
+    fontWeight: '800',
   },
   stepDot: {
-    fontSize: 14,
+    fontSize: 22,
     color: '#CCC',
-    width: 20,
-    textAlign: 'center',
+    lineHeight: 24,
   },
   stepLabel: {
-    fontSize: 14,
-    color: COLORS.text,
+    fontSize: 16,
+    color: '#1a1a1a',
     fontWeight: '500',
     flex: 1,
   },
   stepLabelDone: {
-    color: COLORS.success,
+    color: '#22C55E',
   },
   stepLabelPending: {
-    color: '#CCC',
+    color: '#BBBBBB',
   },
-  modalProgressTrack: {
-    height: 4,
+  savingProgressTrack: {
+    width: '100%',
+    height: 6,
     backgroundColor: '#E5E7EB',
-    borderRadius: 2,
-    marginTop: 6,
+    borderRadius: 3,
     overflow: 'hidden',
   },
-  modalProgressFill: {
+  savingProgressFill: {
     height: '100%',
-    backgroundColor: COLORS.success,
-    borderRadius: 2,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 3,
   },
 });
