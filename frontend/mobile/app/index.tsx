@@ -47,11 +47,11 @@ export default function HomeScreen() {
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
-          {/* Icon + wordmark in a horizontal row */}
-          <View style={styles.logoRow}>
-            <FocusTimelapseIcon size={48} color="#1a1a1a" />
-            <Text style={styles.appName}>FocusTimelapse</Text>
+          {/* Rounded square box with SVG icon inside */}
+          <View style={styles.logoIcon}>
+            <FocusTimelapseIcon size={44} color="#FFFFFF" />
           </View>
+          <Text style={styles.appName}>FocusTimelapse</Text>
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
 
@@ -104,13 +104,16 @@ const styles = StyleSheet.create({
   },
   logoArea: {
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     marginBottom: 8,
   },
-  logoRow: {
-    flexDirection: 'row',
+  logoIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: '#1a1a1a',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
   },
   appName: {
     fontSize: 28,
