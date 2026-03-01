@@ -312,19 +312,17 @@ export default function ResultScreen() {
           <Text style={styles.watermarkText}>FocusTimelapse</Text>
         </View>
 
-        {/* Timer Overlay */}
-        {overlayStyle === 'timer' && (
-          <View style={styles.timerOverlay}>
-            <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
-          </View>
-        )}
-
-        {/* Progress Bar Overlay */}
-        {overlayStyle === 'progress' && (
-          <View style={styles.progressOverlay}>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
-            </View>
+        {/* Timer + Progress overlay — top right, no background */}
+        {(overlayStyle === 'timer' || overlayStyle === 'progress') && (
+          <View style={styles.topRightOverlay} pointerEvents="none">
+            {overlayStyle === 'timer' && (
+              <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
+            )}
+            {overlayStyle === 'progress' && (
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -444,38 +442,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // Timer overlay
-  timerOverlay: {
+  // Timer + Progress — top right, no background
+  topRightOverlay: {
     position: 'absolute',
     top: 16,
     right: 16,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    alignItems: 'flex-end',
+    gap: 6,
   },
   timerText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
-  },
-
-  // Progress bar overlay
-  progressOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 0,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   progressTrack: {
-    height: 5,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 100,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 2,
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#FFF',
+    borderRadius: 2,
   },
 
   // Bottom card
