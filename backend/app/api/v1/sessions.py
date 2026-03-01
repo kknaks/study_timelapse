@@ -87,7 +87,8 @@ async def update_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     if request.end_time is not None:
-        session.end_time = request.end_time
+        et = request.end_time
+        session.end_time = et.replace(tzinfo=None) if et.tzinfo else et
     if request.duration is not None:
         session.duration = request.duration
     if request.status is not None:
