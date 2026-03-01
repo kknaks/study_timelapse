@@ -82,6 +82,24 @@ export default function ProcessingScreen() {
   }, []);
 
   const processVideo = async () => {
+    // 웹 환경 또는 카메라 미지원 시 (videoUri 없음) → 바로 결과 화면으로
+    if (!videoUri) {
+      setStage('done');
+      setProgress(100);
+      setTimeout(() => {
+        router.replace({
+          pathname: '/result',
+          params: {
+            downloadUrl: '',
+            sessionId,
+            studyMinutes: String(Math.round(recordingSecs / 60)),
+            outputSeconds: String(outputSecs),
+          },
+        });
+      }, 800);
+      return;
+    }
+
     try {
       // Stage 1: Upload
       setStage('uploading');

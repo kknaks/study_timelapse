@@ -134,22 +134,17 @@ export default function FocusScreen() {
     // Small delay to let recordAsync resolve
     setTimeout(() => {
       const uri = videoUriRef.current;
-      if (uri) {
-        router.replace({
-          pathname: '/processing',
-          params: {
-            videoUri: uri,
-            sessionId,
-            outputSeconds: String(outputSeconds),
-            recordingSeconds: String(elapsed),
-            aspectRatio,
-          },
-        });
-      } else {
-        Alert.alert('Error', 'No video was recorded. Please try again.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      }
+      // uri가 없어도 결과 화면으로 이동 (웹 환경 또는 카메라 미지원 시)
+      router.replace({
+        pathname: '/processing',
+        params: {
+          videoUri: uri || '',
+          sessionId,
+          outputSeconds: String(outputSeconds),
+          recordingSeconds: String(elapsed),
+          aspectRatio,
+        },
+      });
     }, 500);
   }, [elapsed, sessionId, outputSeconds, aspectRatio, router]);
 
