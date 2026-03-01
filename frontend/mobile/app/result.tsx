@@ -291,7 +291,6 @@ const styles = StyleSheet.create({
   watermarkIcon: {
     width: 18,
     height: 18,
-    tintColor: '#FFFFFF',
   },
   watermarkText: {
     color: 'rgba(255,255,255,0.9)',
