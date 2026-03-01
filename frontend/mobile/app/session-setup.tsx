@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { createSession } from '../src/api/sessions';
+import Slider from '@react-native-community/slider';
 import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest } from '../src/types';
 
@@ -106,7 +107,7 @@ export default function SessionSetupScreen() {
             <Text style={styles.sectionValue}>{formatFocusTime(focusMinutes)}</Text>
           </View>
           {Platform.OS === 'web' ? (
-            // 웹: 네이티브 range input (정확하고 부드러움)
+            // 웹: 네이티브 range input
             <View style={styles.webSliderWrapper}>
               <input
                 type="range"
@@ -124,22 +125,18 @@ export default function SessionSetupScreen() {
               />
             </View>
           ) : (
-            // 네이티브: 커스텀 슬라이더
-            <View style={styles.sliderContainer}>
-              <View style={styles.sliderTrackBg} />
-              <View
-                style={[
-                  styles.sliderTrackFill,
-                  { width: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
-                ]}
-              />
-              <View
-                style={[
-                  styles.sliderThumb,
-                  { left: `${((focusMinutes - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN)) * 100}%` },
-                ]}
-              />
-            </View>
+            // 모바일: community slider
+            <Slider
+              style={{ width: '100%', height: 40 }}
+              minimumValue={FOCUS_MIN}
+              maximumValue={FOCUS_MAX}
+              step={FOCUS_STEP}
+              value={focusMinutes}
+              onValueChange={(val) => setFocusMinutes(val)}
+              minimumTrackTintColor="#1a1a1a"
+              maximumTrackTintColor="#E0E0E0"
+              thumbTintColor="#1a1a1a"
+            />
           )}
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMin}>5m</Text>
