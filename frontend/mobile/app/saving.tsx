@@ -161,9 +161,11 @@ export default function SavingScreen() {
           ))}
         </View>
 
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
-        </View>
+        {!finished && (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+          </View>
+        )}
 
         {finished && (
           <View style={styles.actionButtons}>
@@ -171,7 +173,7 @@ export default function SavingScreen() {
               <Text style={styles.saveBtnText}>Save Video →</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
-              <Text style={styles.instaBtnText}>Share to Instagram</Text>
+              <Text style={styles.instaBtnText}>↗</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -201,21 +203,30 @@ const styles = StyleSheet.create({
   stepLabelPending: { color: GRAY },
   progressTrack: { width: '100%', height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: DARK, borderRadius: 3 },
-  actionButtons: { width: '100%', gap: 12, marginTop: 24 },
+  actionButtons: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 24,
+  },
   saveBtn: {
+    flex: 4,
     backgroundColor: DARK,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   instaBtn: {
+    flex: 1.5,
     backgroundColor: '#FFF',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
   },
-  instaBtnText: { color: DARK, fontSize: 16, fontWeight: '600' },
+  instaBtnText: { color: DARK, fontSize: 20, fontWeight: '600' },
 });
