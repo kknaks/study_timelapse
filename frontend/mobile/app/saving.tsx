@@ -64,27 +64,21 @@ export default function SavingScreen() {
 
     try {
       if (isWeb) {
+        // Web: just show progress animation, no actual file download
+        // (download happens via the browser's built-in video controls or is skipped)
         updateStep(0, 'active');
-        await wait(400);
+        await wait(500);
         updateStep(0, 'done');
 
         updateStep(1, 'active');
-        if (downloadUrl) {
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = 'timelapse.mp4';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }
-        await wait(400);
+        await wait(600);
         updateStep(1, 'done');
 
         updateStep(2, 'active');
-        await wait(300);
+        await wait(400);
         updateStep(2, 'done');
 
-        await wait(1000);
+        await wait(800);
         console.log('[saving] web flow complete, setDone(true)');
         setDone(true);
         return;
