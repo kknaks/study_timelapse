@@ -230,17 +230,22 @@ export default function ProcessingScreen() {
           {stage === 'error' ? 'Oops!' : 'Creating Your Timelapse'}
         </Text>
 
+        {/* Progress bar — 달성 비율 표시 */}
+        {stage !== 'error' && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBg}>
+              <View style={[styles.progressFill, { width: `${Math.round(achievementRatio * 100)}%` }]} />
+            </View>
+            <Text style={styles.achievementLabel}>
+              {Math.round(achievementRatio * 100)}% of goal achieved
+            </Text>
+          </View>
+        )}
+
         {/* 동기부여 문구 */}
         <Text style={styles.motivationLabel}>
           {stage === 'error' ? 'Something went wrong' : getMotivationMessage(achievementRatio)}
         </Text>
-
-        {/* 달성 비율 */}
-        {stage !== 'error' && (
-          <Text style={styles.achievementLabel}>
-            {Math.round(achievementRatio * 100)}% of goal achieved
-          </Text>
-        )}
 
         {/* 달성률 낮을 때 보장 메시지 */}
         {achievementRatio < 0.9 && stage !== 'error' && (
@@ -249,21 +254,12 @@ export default function ProcessingScreen() {
           </Text>
         )}
 
-        {/* Progress bar — 달성 비율 표시 */}
-        {stage !== 'error' && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBg}>
-              <View style={[styles.progressFill, { width: `${Math.round(achievementRatio * 100)}%` }]} />
-            </View>
-          </View>
-        )}
-
         {/* Error message */}
         {stage === 'error' && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{errorMessage}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-              <Text style={styles.retryButtonText}>🔄 Try Again</Text>
+              <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -379,15 +375,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   achievementLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginTop: 8,
   },
   progressContainer: {
     width: '100%',
     maxWidth: 300,
     alignItems: 'center',
+    marginBottom: 24,
   },
   progressBg: {
     width: '100%',
