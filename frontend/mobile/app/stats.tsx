@@ -290,22 +290,10 @@ export default function StatsScreen() {
                     // 세션 있는 날: 클릭 가능
                     <TouchableOpacity
                       onPress={(e) => {
-                        const { pageY } = e.nativeEvent;
-                        // 캘린더 컬럼 인덱스 (월=0 ... 일=6)
-                        const dow = new Date(dateStr).getDay();
-                        const calCol = dow === 0 ? 6 : dow - 1;
+                        const { pageX, pageY } = e.nativeEvent;
                         const bubbleW = 120;
-
-                        // 그리드 너비로 셀 중앙 x 계산
-                        const gridW = calGridLayout?.width ?? 300;
-                        const gridX = calGridLayout?.x ?? 0;
-                        const cellW = gridW / 7;
-                        const cellCenterX = gridX + cellW * calCol + cellW / 2;
-
-                        // 말풍선 anchor 비율: 월=2/5, 일=4/5, 나머지=1/2
-                        const ratio = calCol === 0 ? 2/5 : calCol === 6 ? 4/5 : 0.5;
-                        const left = Math.min(Math.max(cellCenterX - bubbleW * ratio, 8), 260);
-
+                        // 툴팁 중앙을 클릭 위치(날짜 중앙)에 맞춤
+                        const left = Math.min(Math.max(pageX - bubbleW / 2, 8), 260);
                         setSelectedDate(dateStr);
                         setSelectedSeconds(dayEntry?.total_seconds ?? 0);
                         setBubblePos({ x: left, y: pageY });
