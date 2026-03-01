@@ -85,7 +85,8 @@ export default function SavingScreen() {
         updateStep(2, 'done');
 
         await wait(1000);
-        setDone(true); // triggers <Redirect to="/stats" />
+        console.log('[saving] web flow complete, setDone(true)');
+        setDone(true);
         return;
       }
 
@@ -134,10 +135,12 @@ export default function SavingScreen() {
 
   // Navigate to stats when done
   useEffect(() => {
+    console.log('[saving] done changed:', done);
     if (!done) return;
+    console.log('[saving] navigating to stats...');
     const t = setTimeout(() => {
+      console.log('[saving] executing navigate');
       if (Platform.OS === 'web') {
-        // Force hard navigation — most reliable on web
         (window as any).location.assign('/stats');
       } else {
         router.replace('/stats');
