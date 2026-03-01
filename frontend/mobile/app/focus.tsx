@@ -165,7 +165,7 @@ export default function FocusScreen() {
       // ignore
     }
     setShowExitModal(false);
-    router.back();
+    router.canGoBack() ? router.back() : router.replace('/');
   };
 
   // Permissions not yet granted
@@ -187,7 +187,7 @@ export default function FocusScreen() {
         >
           <Text style={styles.permButtonText}>Grant Permissions</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.permBackButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.permBackButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <Text style={styles.permBackText}>Go Back</Text>
         </TouchableOpacity>
       </View>
