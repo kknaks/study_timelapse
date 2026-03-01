@@ -88,9 +88,21 @@ export default function StatsScreen() {
   const totalWeekHours = (totalWeekSeconds / 3600).toFixed(1);
   const dailyData = weeklyStats?.daily ?? [];
 
+  // week_start 기준으로 7일 배열 만들기 (sparse → dense)
+  const weekDailyData = useMemo(() => {
+    const weekStart = weeklyStats?.week_start;
+    if (!weekStart) return Array(7).fill({ total_seconds: 0, session_count: 0 });
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      return dailyData.find((entry) => entry.date === dateStr) ?? { date: dateStr, total_seconds: 0, session_count: 0 };
+    });
+  }, [weeklyStats, dailyData]);
+
   const maxDailySeconds = useMemo(
-    () => Math.max(...dailyData.map((d) => d.total_seconds), 1),
-    [dailyData],
+    () => Math.max(...weekDailyData.map((d) => d.total_seconds), 1),
+    [weekDailyData],
   );
 
   // Calendar
@@ -195,7 +207,7 @@ export default function StatsScreen() {
           )}
           <View style={styles.barChart}>
             {DAY_LABELS.map((label, i) => {
-              const dayData = dailyData[i];
+              const dayData = weekDailyData[i];
               const secs = dayData?.total_seconds ?? 0;
               const hasData = secs > 0;
               const barHeight = hasData
