@@ -8,6 +8,7 @@ import {
   Alert,
   TouchableOpacity,
   Linking,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
@@ -173,7 +174,7 @@ export default function SavingScreen() {
               <Text style={styles.saveBtnText}>Save Video →</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
-              <Text style={styles.instaBtnText}>↗</Text>
+              <Image source={require('../assets/instagram.png')} style={styles.instaIcon} resizeMode="contain" />
             </TouchableOpacity>
           </View>
         )}
@@ -229,4 +230,5 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   instaBtnText: { color: DARK, fontSize: 20, fontWeight: '600' },
+  instaIcon: { width: 28, height: 28 },
 });
