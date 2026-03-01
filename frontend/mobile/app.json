@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FocusTimelapse",
-    "slug": "focus-timelapse",
+    "slug": "study-timelapse-frontend",
     "scheme": "focustimelapse",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kknaks.studytimelapse",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,6 +35,11 @@
       "expo-router",
       "expo-sharing",
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fda29fe8-c1f2-4124-af3d-9167f2b6872b"
+      }
+    }
   }
 }
