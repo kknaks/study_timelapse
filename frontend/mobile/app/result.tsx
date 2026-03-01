@@ -6,9 +6,14 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { COLORS } from '../src/constants';
+
+// 웹 테스트용 샘플 타임랩스 영상
+const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
 
 type OverlayStyle = 'none' | 'timer' | 'progress';
 
@@ -21,9 +26,14 @@ export default function ResultScreen() {
     outputSeconds: string;
   }>();
 
-  const downloadUrl = params.downloadUrl ?? '';
+  const downloadUrl = params.downloadUrl || SAMPLE_VIDEO_URL;
   const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [saving, setSaving] = useState(false);
+
+  const player = useVideoPlayer(downloadUrl, (p) => {
+    p.loop = true;
+    p.play();
+  });
 
   const handleSave = async () => {
     if (saving) return;
@@ -65,18 +75,23 @@ export default function ResultScreen() {
 
       {/* Video Preview Area */}
       <View style={styles.previewArea}>
-        {downloadUrl ? (
-          <View style={styles.videoPlaceholder}>
-            <Text style={styles.videoIcon}>▶</Text>
-            <Text style={styles.videoText}>Timelapse Ready</Text>
-          </View>
+        {Platform.OS === 'web' ? (
+          // 웹: HTML video 태그
+          <video
+            src={downloadUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
-          <View style={styles.videoPlaceholder}>
-            <View style={styles.generatedIcon}>
-              <Text style={styles.generatedStar}>✦</Text>
-            </View>
-            <Text style={styles.generatedText}>Timelapse Generated</Text>
-          </View>
+          // 네이티브: expo-video
+          <VideoView
+            style={styles.video}
+            player={player}
+            nativeControls={false}
+          />
         )}
       </View>
 
@@ -163,39 +178,13 @@ const styles = StyleSheet.create({
   },
   previewArea: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#000',
+    overflow: 'hidden',
   },
-  videoPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  videoIcon: {
-    fontSize: 48,
-    color: '#FFF',
-  },
-  videoText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-  },
-  generatedIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  generatedStar: {
-    fontSize: 32,
-    color: '#FFF',
-  },
-  generatedText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-    fontWeight: '500',
+  video: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   bottomCard: {
     backgroundColor: '#FFF',
