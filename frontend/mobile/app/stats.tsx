@@ -188,7 +188,7 @@ export default function StatsScreen() {
         <View style={styles.card}>
           <View style={styles.chartTitleRow}>
             <Text style={styles.cardTitle}>This Week</Text>
-            <Text style={styles.chartSubtitle}>{totalWeekHours} hrs total</Text>
+            <Text style={styles.chartSubtitle}>{totalWeekHours}h focused</Text>
           </View>
 
           {/* 바 클릭 말풍선 — 카드 우측 상단 고정 */}
