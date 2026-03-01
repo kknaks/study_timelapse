@@ -13,6 +13,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import { COLORS } from '../src/constants';
+import FocusTimelapseIcon from '../src/components/FocusTimelapseLogo';
 
 const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
 
@@ -194,6 +195,12 @@ export default function ResultScreen() {
           />
         )}
 
+        {/* Watermark Overlay — always visible */}
+        <View style={styles.watermark} pointerEvents="none">
+          <FocusTimelapseIcon size={18} color="#FFFFFF" />
+          <Text style={styles.watermarkText}>FocusTimelapse</Text>
+        </View>
+
         {/* Timer Overlay */}
         {overlayStyle === 'timer' && (
           <View style={styles.timerOverlay}>
@@ -263,6 +270,26 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '600' },
   previewArea: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   video: { flex: 1, width: '100%', height: '100%' },
+
+  // Watermark
+  watermark: {
+    position: 'absolute',
+    bottom: 16,
+    left: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+  },
+  watermarkText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
 
   // Timer overlay
   timerOverlay: {
