@@ -242,6 +242,13 @@ export default function ProcessingScreen() {
           </Text>
         )}
 
+        {/* 달성률 낮을 때 보장 메시지 */}
+        {achievementRatio < 0.9 && stage !== 'error' && (
+          <Text style={styles.guaranteeText}>
+            You'll still get your full {outputSecs}s timelapse!
+          </Text>
+        )}
+
         {/* Progress bar — 달성 비율 표시 */}
         {stage !== 'error' && (
           <View style={styles.progressContainer}>
@@ -393,6 +400,12 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: COLORS.primary,
     borderRadius: 4,
+  },
+  guaranteeText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
   },
   progressText: {
     marginTop: 8,

@@ -44,6 +44,7 @@ export default function SessionSetupScreen() {
   const [outputSeconds, setOutputSeconds] = useState(30);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
   const [timerMode, setTimerMode] = useState<TimerMode>('countdown');
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
 
   const mutation = useMutation({
     mutationFn: (data: CreateSessionRequest) => createSession(data),
@@ -149,7 +150,15 @@ export default function SessionSetupScreen() {
         {/* Timelapse Length */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>TIMELAPSE LENGTH</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.sectionLabel}>TIMELAPSE LENGTH</Text>
+              <TouchableOpacity
+                onPress={() => setShowInfoTooltip(!showInfoTooltip)}
+                style={styles.infoBtn}
+              >
+                <Text style={styles.infoBtnText}>i</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.sectionValue}>{outputSeconds}s</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll}>
@@ -165,6 +174,13 @@ export default function SessionSetupScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+          {showInfoTooltip && (
+            <View style={styles.infoTooltip}>
+              <Text style={styles.infoTooltipText}>
+                Even if you don't reach your goal, you'll still get a full {outputSeconds}s timelapse!
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Aspect Ratio */}
@@ -375,6 +391,33 @@ const styles = StyleSheet.create({
   },
   quickChipTextActive: {
     color: '#FFF',
+  },
+  infoBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: COLORS.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    lineHeight: 14,
+  },
+  infoTooltip: {
+    backgroundColor: '#F0F0F0',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 8,
+  },
+  infoTooltipText: {
+    fontSize: 13,
+    color: COLORS.text,
+    lineHeight: 18,
   },
   buttonRow: {
     flexDirection: 'row',
