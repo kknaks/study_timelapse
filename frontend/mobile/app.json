@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "FocusTimelapse",
-    "slug": "study-timelapse-frontend",
+    "slug": "focus-timelapse",
     "scheme": "focustimelapse",
     "version": "1.0.0",
     "orientation": "portrait",
