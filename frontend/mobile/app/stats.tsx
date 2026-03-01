@@ -284,9 +284,17 @@ export default function StatsScreen() {
                     <TouchableOpacity
                       onPress={(e) => {
                         const { pageX, pageY } = e.nativeEvent;
+                        // 요일 계산 (0=일, 1=월 ... 6=토)
+                        const dow = new Date(dateStr).getDay();
+                        const bubbleW = 120;
+                        // 기본: 중앙(1/2), 월요일: 2/5, 일요일: 4/5
+                        const ratio = dow === 1 ? 0.4 : dow === 0 ? 0.8 : 0.5;
+                        const leftOffset = Math.round(bubbleW * ratio);
+                        // 화면 밖으로 나가지 않도록 clamp
+                        const left = Math.min(Math.max(pageX - leftOffset, 8), 260);
                         setSelectedDate(dateStr);
                         setSelectedSeconds(dayEntry?.total_seconds ?? 0);
-                        setBubblePos({ x: pageX, y: pageY });
+                        setBubblePos({ x: left, y: pageY });
                       }}
                     >
                       <View style={[styles.calDotFilled, isToday && styles.calDotTodayRing]}>
@@ -318,7 +326,8 @@ export default function StatsScreen() {
           <View style={[styles.sharedBubble, {
             position: 'absolute',
             top: bubblePos.y - 82,
-            left: Math.min(Math.max(bubblePos.x - 60, 8), 230),
+            left: bubblePos.x,
+            width: 120,
           }]}>
             <Text style={styles.sharedBubbleDate}>
               {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
@@ -583,7 +592,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 8,
-    minWidth: 110,
+    minWidth: 120,
   },
   sharedBubbleDate: {
     fontSize: 11,
