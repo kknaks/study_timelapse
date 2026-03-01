@@ -50,7 +50,7 @@ export default function StatsScreen() {
   // 날짜/바 클릭 말풍선
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSeconds, setSelectedSeconds] = useState(0);
-  const [bubblePos, setBubblePos] = useState<{ x: number; y: number } | null>(null);
+  const [bubblePos, setBubblePos] = useState<{ x: number; y: number; cellCenterX: number } | null>(null);
   const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
   const cellRefs = useRef<Map<string, View>>(new Map());
 
@@ -299,16 +299,18 @@ export default function StatsScreen() {
                   {hasSession ? (
                     // 세션 있는 날: 클릭 가능
                     <TouchableOpacity
+                      style={Platform.OS === 'web' ? ({ outlineWidth: 0 } as any) : undefined}
                       onPress={() => {
                         const cell = cellRefs.current.get(dateStr);
                         if (!cell) return;
                         cell.measure((_fx, _fy, width, _height, px, py) => {
-                          const tooltipW = 120;
-                          const left = Math.min(Math.max(px + width / 2 - tooltipW / 2, 8), 260);
-                          const top = py - 90;
+                          const tooltipW = 140;
+                          const cellCenterX = px + width / 2;
+                          const left = Math.min(Math.max(cellCenterX - tooltipW / 2, 8), 300);
+                          const top = py - 98;
                           setSelectedDate(dateStr);
                           setSelectedSeconds(dayEntry?.total_seconds ?? 0);
-                          setBubblePos({ x: left, y: top });
+                          setBubblePos({ x: left, y: top, cellCenterX });
                         });
                       }}
                     >
@@ -338,8 +340,8 @@ export default function StatsScreen() {
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={{ position: 'absolute', top: bubblePos.y, left: bubblePos.x, alignItems: 'center', width: 120 }}>
-            <View style={styles.sharedBubble}>
+          <View style={{ position: 'absolute', top: bubblePos.y, left: bubblePos.x, width: 140 }}>
+            <View style={[styles.sharedBubble, { width: 140 }]}>
               <Text style={styles.sharedBubbleDate}>
                 {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
               </Text>
@@ -351,7 +353,11 @@ export default function StatsScreen() {
                 })()}
               </Text>
             </View>
-            <View style={styles.bubbleTail} />
+            {/* 꼬리: 날짜 셀 중앙을 가리키도록 offset 계산 */}
+            <View style={[styles.bubbleTail, {
+              alignSelf: 'flex-start',
+              marginLeft: Math.max(0, Math.min(bubblePos.cellCenterX - bubblePos.x - 7, 126)),
+            }]} />
           </View>
         </TouchableOpacity>
       )}
