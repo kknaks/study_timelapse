@@ -6,6 +6,8 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
@@ -44,6 +46,7 @@ export default function SavingScreen() {
   };
 
   const [steps, setSteps] = useState<Step[]>(buildSteps);
+  const [finished, setFinished] = useState(false);
 
   const setActive = (idx: number) =>
     setSteps(prev => prev.map((s, i) =>
@@ -62,6 +65,14 @@ export default function SavingScreen() {
     }
   };
 
+  const handleShareInstagram = () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Instagram', 'Open Instagram app to share your timelapse!');
+    } else {
+      Linking.openURL('instagram://');
+    }
+  };
+
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
@@ -75,8 +86,7 @@ export default function SavingScreen() {
         setActive(0); await wait(600); setDone(0);
         setActive(1); await wait(700); setDone(1);
         setActive(2); await wait(400); setDone(2);
-        await wait(800);
-        navigateToStats();
+        setFinished(true);
         return;
       }
 
@@ -110,8 +120,7 @@ export default function SavingScreen() {
       await wait(300);
       setDone(idx);
 
-      await wait(800);
-      navigateToStats();
+      setFinished(true);
     } catch (e) {
       console.error('Save error:', e);
       Alert.alert('Error', 'Failed to save. Please try again.', [
@@ -155,6 +164,17 @@ export default function SavingScreen() {
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
         </View>
+
+        {finished && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.saveBtn} onPress={navigateToStats}>
+              <Text style={styles.saveBtnText}>Save Video →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
+              <Text style={styles.instaBtnText}>Share to Instagram</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -181,4 +201,21 @@ const styles = StyleSheet.create({
   stepLabelPending: { color: GRAY },
   progressTrack: { width: '100%', height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: DARK, borderRadius: 3 },
+  actionButtons: { width: '100%', gap: 12, marginTop: 24 },
+  saveBtn: {
+    backgroundColor: DARK,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  instaBtn: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+  },
+  instaBtnText: { color: DARK, fontSize: 16, fontWeight: '600' },
 });
