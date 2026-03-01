@@ -190,7 +190,7 @@ export default function SessionSetupScreen() {
         {/* Timer Display */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>⏱ TIMER DISPLAY</Text>
+            <Text style={styles.sectionLabel}>TIMER DISPLAY</Text>
           </View>
           <View style={styles.buttonRow}>
             <TouchableOpacity

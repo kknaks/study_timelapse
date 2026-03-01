@@ -22,7 +22,7 @@ type Step = { label: string; status: StepStatus };
 const WEB_STEPS: Step[] = [
   { label: 'Preparing...', status: 'pending' },
   { label: 'Processing video...', status: 'pending' },
-  { label: 'Done! 🎉', status: 'pending' },
+  { label: 'Done!', status: 'pending' },
 ];
 
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -39,7 +39,7 @@ export default function SavingScreen() {
     if (isWeb) return WEB_STEPS.map(s => ({ ...s }));
     const s: Step[] = [{ label: 'Requesting permission...', status: 'pending' }];
     if (isRemoteUrl) s.push({ label: 'Downloading video...', status: 'pending' });
-    s.push({ label: 'Saving to gallery...', status: 'pending' }, { label: 'Done! 🎉', status: 'pending' });
+    s.push({ label: 'Saving to gallery...', status: 'pending' }, { label: 'Done!', status: 'pending' });
     return s;
   };
 

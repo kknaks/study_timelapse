@@ -149,10 +149,7 @@ export default function StatsScreen() {
         <View style={styles.cardsRow}>
           {/* Today Card */}
           <View style={styles.statCard}>
-            <View style={styles.statCardHeader}>
-              <Text style={styles.statCardIcon}>🕐</Text>
-              <Text style={styles.statCardLabel}>TODAY</Text>
-            </View>
+            <Text style={styles.statCardLabel}>TODAY</Text>
             <Text style={styles.statCardValue}>
               {todayH}h {todayM}m
             </Text>
@@ -160,10 +157,7 @@ export default function StatsScreen() {
 
           {/* Streak Card */}
           <View style={styles.statCard}>
-            <View style={styles.statCardHeader}>
-              <Text style={styles.statCardIcon}>↗</Text>
-              <Text style={styles.statCardLabel}>STREAK</Text>
-            </View>
+            <Text style={styles.statCardLabel}>STREAK</Text>
             <Text style={styles.statCardValue}>
               <Text style={styles.streakNumber}>{streak}</Text>
               <Text style={styles.streakUnit}> days</Text>
@@ -209,7 +203,6 @@ export default function StatsScreen() {
         {/* Activity Log Card */}
         <View style={styles.card}>
           <View style={styles.activityHeader}>
-            <Text style={styles.calendarIcon}>📅</Text>
             <Text style={styles.cardTitle}>Activity Log</Text>
           </View>
 
