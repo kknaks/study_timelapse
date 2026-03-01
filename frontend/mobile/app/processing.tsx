@@ -208,8 +208,10 @@ export default function ProcessingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {/* Emoji */}
-        <Text style={styles.stageIcon}>{getStageIcon(stage)}</Text>
+        {/* Stage Icon */}
+        <View style={[styles.stageIconWrap, stage === 'done' && styles.stageIconWrapDone, stage === 'error' && styles.stageIconWrapError]}>
+          <Text style={styles.stageIcon}>{getStageIcon(stage)}</Text>
+        </View>
 
         {/* Title */}
         <Text style={styles.title}>
@@ -316,11 +318,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
+  stageIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2.5,
+    borderColor: '#CCCCCC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  stageIconWrapDone: {
+    borderColor: COLORS.text,
+  },
+  stageIconWrapError: {
+    borderColor: '#E53935',
+  },
   stageIcon: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: '300',
     color: COLORS.text,
-    marginBottom: 24,
   },
   title: {
     fontSize: 24,
