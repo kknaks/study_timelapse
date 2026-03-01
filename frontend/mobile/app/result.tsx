@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 import { COLORS } from '../src/constants';
 
 const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
@@ -79,9 +81,40 @@ export default function ResultScreen() {
   const handleSave = async () => {
     if (saving) return;
     setSaving(true);
+
     try {
-      Alert.alert('Saved!', 'Video saved to your gallery.');
-    } catch {
+      if (Platform.OS === 'web') {
+        // 웹: 다운로드 링크로 처리
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = 'timelapse.mp4';
+        a.click();
+        Alert.alert('Download started', 'Your timelapse is being downloaded.');
+        return;
+      }
+
+      // 앱: 갤러리 저장
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save to your gallery.');
+        return;
+      }
+
+      // TODO: 오버레이 합성은 서버사이드 FFmpeg으로 처리 (Phase 2)
+      // 현재는 원본 영상 저장
+      let localUri = downloadUrl;
+      if (downloadUrl.startsWith('http')) {
+        // 원격 URL이면 로컬에 다운로드 먼저
+        const filename = `timelapse_${Date.now()}.mp4`;
+        const dest = `${FileSystem.documentDirectory}${filename}`;
+        const { uri } = await FileSystem.downloadAsync(downloadUrl, dest);
+        localUri = uri;
+      }
+
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      Alert.alert('Saved! 🎉', 'Timelapse saved to your gallery.');
+    } catch (e) {
+      console.error('Save error:', e);
       Alert.alert('Error', 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
