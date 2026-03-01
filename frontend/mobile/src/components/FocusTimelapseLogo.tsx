@@ -1,85 +1,96 @@
 import React from 'react';
 import { View } from 'react-native';
-import Svg, {
-  Circle,
-  Path,
-  Line,
-  Rect,
-  Polygon,
-} from 'react-native-svg';
+import Svg, { Circle, Line, Polygon, Rect } from 'react-native-svg';
 
 interface Props {
-  size?: number;       // icon height (px), default 52
-  color?: string;      // fill/stroke colour, default '#1a1a1a'
-  iconOnly?: boolean;  // render icon without text (text handled outside)
+  size?: number;   // icon height in px, default 52
+  color?: string;  // fill colour, default '#1a1a1a'
 }
 
 /**
- * FocusTimelapse logo mark:
- *   - Stopwatch (filled circle body + crown at top)
- *   - Camera-play triangle on the right side
- * Matches the top-left variant (dark on white, horizontal layout).
+ * FocusTimelapse logo mark
+ *
+ * Layout (viewBox 64 × 60):
+ *   - Thick-ring stopwatch centred at (28, 32), outer r=26, inner r=17
+ *   - Small crown nub at top-centre
+ *   - Hour hand ~10 o'clock, minute hand ~12-1 o'clock
+ *   - Play/camera triangle on right, tip at x=62, base from (42,20)→(42,44)
+ *     overlapping the ring so it looks "attached"
  */
 export default function FocusTimelapseIcon({
   size = 52,
   color = '#1a1a1a',
 }: Props) {
-  // All coordinates are in a 56×52 local viewport so the icon keeps
-  // proportions regardless of the `size` prop.
-  const vw = 56;
-  const vh = 52;
+  const vw = 64;
+  const vh = 60;
+  const cx = 28;  // stopwatch centre x
+  const cy = 32;  // stopwatch centre y
+  const ro = 26;  // outer radius
+  const ri = 17;  // inner (clock-face) radius
 
   return (
     <View style={{ width: size * (vw / vh), height: size }}>
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${vw} ${vh}`}
-        fill="none"
-      >
-        {/* ── Stopwatch body ── */}
-        {/* Crown / stem at top-center */}
-        <Rect x="22" y="1" width="8" height="4" rx="2" fill={color} />
-        {/* Side crown nub (left) */}
-        <Rect x="16" y="3" width="6" height="3" rx="1.5" fill={color} />
+      <Svg width="100%" height="100%" viewBox={`0 0 ${vw} ${vh}`} fill="none">
 
-        {/* Main circle body (filled) */}
-        <Circle cx="26" cy="28" r="20" fill={color} />
+        {/* ── Crown nub at top-centre ── */}
+        <Rect x={cx - 4} y={2} width={8} height={5} rx={2.5} fill={color} />
 
-        {/* Inner clock face (cut-out white) */}
-        <Circle cx="26" cy="28" r="14" fill="white" />
+        {/* ── Stopwatch outer filled circle ── */}
+        <Circle cx={cx} cy={cy} r={ro} fill={color} />
 
-        {/* Clock tick marks */}
-        <Line x1="26" y1="15.5" x2="26" y2="18.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
-        <Line x1="26" y1="37.5" x2="26" y2="40.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
-        <Line x1="13.5" y1="28" x2="16.5" y2="28" stroke={color} strokeWidth="2" strokeLinecap="round" />
-        <Line x1="35.5" y1="28" x2="38.5" y2="28" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        {/* ── Inner clock-face (white cutout) ── */}
+        <Circle cx={cx} cy={cy} r={ri} fill="white" />
 
-        {/* Hour hand  (pointing ~10 o'clock) */}
+        {/* ── Tick marks at 12 / 3 / 6 / 9 ── */}
+        <Line x1={cx}      y1={cy - ri + 0.5} x2={cx}      y2={cy - ri + 4} stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Line x1={cx}      y1={cy + ri - 0.5} x2={cx}      y2={cy + ri - 4} stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Line x1={cx - ri + 0.5} y1={cy} x2={cx - ri + 4} y2={cy}           stroke={color} strokeWidth="2" strokeLinecap="round" />
+        {/* right tick deliberately omitted — covered by triangle */}
+
+        {/* ── Hour hand: ~10 o'clock (210° from top = pointing upper-left) ── */}
         <Line
-          x1="26" y1="28"
-          x2="19" y2="21"
-          stroke={color}
-          strokeWidth="2.2"
-          strokeLinecap="round"
+          x1={cx} y1={cy}
+          x2={cx - 8} y2={cy - 9}
+          stroke={color} strokeWidth="2.5" strokeLinecap="round"
         />
-        {/* Minute hand (pointing ~2 o'clock, slightly longer) */}
-        <Line
-          x1="26" y1="28"
-          x2="32" y2="20"
-          stroke={color}
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-        {/* Center dot */}
-        <Circle cx="26" cy="28" r="1.8" fill={color} />
 
-        {/* ── Camera play-triangle (right side, partially overlapping circle) ── */}
-        {/* Triangle pointing right — like a record/play button */}
+        {/* ── Minute hand: ~1 o'clock (pointing upper-right, longer) ── */}
+        <Line
+          x1={cx} y1={cy}
+          x2={cx + 6} y2={cy - 13}
+          stroke={color} strokeWidth="2" strokeLinecap="round"
+        />
+
+        {/* ── Centre dot ── */}
+        <Circle cx={cx} cy={cy} r={2} fill={color} />
+
+        {/* ── Camera / play triangle (right side, overlaps ring) ── */}
+        {/* Base of triangle sits at x=42 (inside ring edge), tip at x=62 */}
         <Polygon
-          points="40,20 40,36 52,28"
+          points={`42,${cy - 12} 42,${cy + 12} 62,${cy}`}
           fill={color}
         />
+
+        {/* White "bite" to cleanly separate triangle from clock face */}
+        <Circle cx={cx} cy={cy} r={ri} fill="white" />
+
+        {/* Re-draw hands & dot on top of the white circle */}
+        <Line
+          x1={cx} y1={cy}
+          x2={cx - 8} y2={cy - 9}
+          stroke={color} strokeWidth="2.5" strokeLinecap="round"
+        />
+        <Line
+          x1={cx} y1={cy}
+          x2={cx + 6} y2={cy - 13}
+          stroke={color} strokeWidth="2" strokeLinecap="round"
+        />
+        <Circle cx={cx} cy={cy} r={2} fill={color} />
+        {/* Re-draw tick marks */}
+        <Line x1={cx}      y1={cy - ri + 0.5} x2={cx}      y2={cy - ri + 4} stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Line x1={cx}      y1={cy + ri - 0.5} x2={cx}      y2={cy + ri - 4} stroke={color} strokeWidth="2" strokeLinecap="round" />
+        <Line x1={cx - ri + 0.5} y1={cy} x2={cx - ri + 4} y2={cy}           stroke={color} strokeWidth="2" strokeLinecap="round" />
+
       </Svg>
     </View>
   );
