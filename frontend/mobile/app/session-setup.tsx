@@ -186,7 +186,7 @@ export default function SessionSetupScreen() {
         {/* Aspect Ratio */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>🖥 ASPECT RATIO</Text>
+            <Text style={styles.sectionLabel}>ASPECT RATIO</Text>
           </View>
           <View style={styles.buttonRow}>
             {(ASPECT_RATIOS as readonly string[]).map((r) => (
@@ -231,10 +231,6 @@ export default function SessionSetupScreen() {
         {/* Estimate Card */}
         <View style={styles.estimateCard}>
           <View style={styles.estimateRow}>
-            <Text style={styles.estimateLabel}>Estimated Video:</Text>
-            <Text style={styles.estimateValue}>{outputSeconds} seconds</Text>
-          </View>
-          <View style={styles.estimateRow}>
             <Text style={styles.estimateLabel}>Estimated Size:</Text>
             <Text style={styles.estimateValue}>~{sizeMB} MB</Text>
           </View>
@@ -272,7 +268,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 56,
+    paddingTop: Platform.OS === 'web' ? 16 : 56,
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: '#FFF',
