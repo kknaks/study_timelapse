@@ -307,7 +307,7 @@ export default function StatsScreen() {
                           const tooltipW = 140;
                           const cellCenterX = px + width / 2;
                           const left = Math.min(Math.max(cellCenterX - tooltipW / 2, 8), 300);
-                          const top = py - 98;
+                          const top = py - 65;
                           setSelectedDate(dateStr);
                           setSelectedSeconds(dayEntry?.total_seconds ?? 0);
                           setBubblePos({ x: left, y: top, cellCenterX });
