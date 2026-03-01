@@ -14,13 +14,13 @@ import { updateSession } from '../src/api/sessions';
 
 type Stage = 'uploading' | 'converting' | 'polling' | 'done' | 'error';
 
-function getStageEmoji(stage: Stage): string {
+function getStageIcon(stage: Stage): string {
   switch (stage) {
-    case 'uploading': return '📤';
-    case 'converting': return '🎬';
-    case 'polling': return '⏳';
-    case 'done': return '✅';
-    case 'error': return '❌';
+    case 'uploading': return '↑';
+    case 'converting': return '▶';
+    case 'polling': return '···';
+    case 'done': return '✓';
+    case 'error': return '✕';
   }
 }
 
@@ -209,7 +209,7 @@ export default function ProcessingScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         {/* Emoji */}
-        <Text style={styles.emoji}>{getStageEmoji(stage)}</Text>
+        <Text style={styles.stageIcon}>{getStageIcon(stage)}</Text>
 
         {/* Title */}
         <Text style={styles.title}>
@@ -316,8 +316,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  emoji: {
-    fontSize: 64,
+  stageIcon: {
+    fontSize: 48,
+    fontWeight: '300',
+    color: COLORS.text,
     marginBottom: 24,
   },
   title: {
