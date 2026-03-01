@@ -94,6 +94,18 @@ export default function ProcessingScreen() {
   const processVideo = async () => {
     // 웹 환경 또는 카메라 미지원 시 (videoUri 없음) → 바로 결과 화면으로
     if (!videoUri) {
+      // 세션 완료 업데이트
+      if (sessionId) {
+        try {
+          await updateSession(sessionId, {
+            end_time: new Date().toISOString(),
+            duration: recordingSecs,
+            status: 'completed',
+          });
+        } catch (e) {
+          console.warn('Failed to update session:', e);
+        }
+      }
       setStage('done');
       setProgress(100);
       return;
