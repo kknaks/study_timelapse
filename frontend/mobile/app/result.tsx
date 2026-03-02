@@ -182,18 +182,6 @@ export default function ResultScreen() {
           setAreaSize({ width, height });
         }}
       >
-        {/* ViewShot: 영상+오버레이 영역만 캡처 */}
-        <ViewShot
-          ref={viewShotRef}
-          style={{
-            position: 'absolute',
-            left: offsetX,
-            top: offsetY,
-            width: vidW,
-            height: vidH,
-          }}
-          options={{ format: 'jpg', quality: 0.95 }}
-        >
         {Platform.OS === 'web' ? (
           <video
             src={downloadUrl}
@@ -209,13 +197,22 @@ export default function ResultScreen() {
             } as React.CSSProperties}
           />
         ) : (
-          <>
-            {/* ViewShot 안에 VideoView + 오버레이 */}
+          /* ViewShot: offsetX/offsetY 위치에 딱 맞게, 내부는 left:0 top:0 기준 */
+          <ViewShot
+            ref={viewShotRef}
+            style={{
+              position: 'absolute',
+              left: offsetX,
+              top: offsetY,
+              width: vidW,
+              height: vidH,
+              overflow: 'hidden',
+            }}
+            options={{ format: 'jpg', quality: 0.95 }}
+          >
+            {/* VideoView: ViewShot 안에서 꽉 채움 */}
             <View
               style={{
-                position: 'absolute',
-                left: offsetX,
-                top: offsetY,
                 width: vidW,
                 height: vidH,
                 overflow: 'hidden',
@@ -230,7 +227,7 @@ export default function ResultScreen() {
               />
             </View>
 
-            {/* 오버레이 (ViewShot 안) */}
+            {/* 오버레이: ViewShot 안 left:0, top:0 기준 */}
             <View
               pointerEvents="none"
               style={{ position: 'absolute', left: 0, top: 0, width: vidW, height: vidH }}
@@ -253,9 +250,8 @@ export default function ResultScreen() {
                 </View>
               )}
             </View>
-          </>
+          </ViewShot>
         )}
-        </ViewShot>
       </View>
 
       {/* Bottom Card */}

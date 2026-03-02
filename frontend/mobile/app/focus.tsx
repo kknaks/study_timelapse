@@ -321,14 +321,16 @@ export default function FocusScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 정지 버튼 */}
-            <TouchableOpacity
-              style={styles.stopButton}
-              onPress={handleStop}
-              activeOpacity={0.7}
-            >
-              <View style={styles.stopIcon} />
-            </TouchableOpacity>
+            {/* 정지 버튼 — 시작 후에만 표시 */}
+            {hasStarted && (
+              <TouchableOpacity
+                style={styles.stopButton}
+                onPress={handleStop}
+                activeOpacity={0.7}
+              >
+                <View style={styles.stopIcon} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
