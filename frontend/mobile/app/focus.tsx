@@ -5,12 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  Alert,
   StatusBar,
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { COLORS } from '../src/constants';
 
 function formatTime(totalSeconds: number): string {
@@ -43,7 +42,6 @@ export default function FocusScreen() {
   const timerMode = params.timerMode ?? 'countdown';
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -51,29 +49,25 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
+  const [frameCount, setFrameCount] = useState(0);
 
   const cameraRef = useRef<CameraView>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoUriRef = useRef<string>('');
+  const photoUrisRef = useRef<string[]>([]);
+  const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isStoppingRef = useRef(false);
-  const navigateAfterRecordRef = useRef<((uri: string) => void) | null>(null);
 
   const remaining = Math.max(0, totalSeconds - elapsed);
 
-  // Request permissions on mount
+  // Request camera permission on mount
   useEffect(() => {
     const requestPerms = async () => {
       if (!cameraPermission?.granted) {
         await requestCameraPermission();
       }
-      if (!micPermission?.granted) {
-        await requestMicPermission();
-      }
     };
     requestPerms();
-  }, [cameraPermission, micPermission, requestCameraPermission, requestMicPermission]);
-
-  // 자동 시작 제거 — 사용자가 시작 버튼 누를 때 startRecording 호출
+  }, [cameraPermission, requestCameraPermission]);
 
   // Timer interval
   useEffect(() => {
@@ -98,77 +92,66 @@ export default function FocusScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, totalSeconds, isRecording]);
 
-  const startRecording = useCallback(async () => {
-    if (!cameraRef.current || isRecording) return;
-    setIsRecording(true);
-    try {
-      const video = await cameraRef.current.recordAsync({
-        maxDuration: totalSeconds + 5, // buffer
-      });
-      // recordAsync resolves when recording stops
-      if (video?.uri) {
-        videoUriRef.current = video.uri;
-        console.log('[focus] recordAsync resolved, uri:', video.uri);
+  const startCapture = useCallback(() => {
+    const interval = Math.max(1, totalSeconds / (outputSeconds * 30));
+    captureIntervalRef.current = setInterval(async () => {
+      if (!cameraRef.current) return;
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.85,
+          skipProcessing: true,
+        });
+        if (photo?.uri) {
+          photoUrisRef.current.push(photo.uri);
+          setFrameCount(photoUrisRef.current.length);
+        }
+      } catch (e) {
+        console.warn('[focus] capture error:', e);
       }
-      // recordAsync가 resolve되면 navigateRef 콜백 실행
-      if (navigateAfterRecordRef.current) {
-        navigateAfterRecordRef.current(video?.uri || '');
-        navigateAfterRecordRef.current = null;
-      }
-    } catch (err) {
-      console.error('Recording error:', err);
-    }
-  }, [isRecording, totalSeconds]);
+    }, interval * 1000);
+  }, [totalSeconds, outputSeconds]);
 
-  const handleStop = useCallback(async () => {
+  const startRecording = useCallback(() => {
+    if (isRecording) return;
+    setIsRecording(true);
+    if (Platform.OS !== 'web') {
+      startCapture();
+    }
+  }, [isRecording, startCapture]);
+
+  const handleStop = useCallback(() => {
     if (isStoppingRef.current) return;
     isStoppingRef.current = true;
 
+    // Clear timer interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    try {
-      cameraRef.current?.stopRecording();
-    } catch (err) {
-      console.error('Stop recording error:', err);
+    // Clear capture interval
+    if (captureIntervalRef.current) {
+      clearInterval(captureIntervalRef.current);
+      captureIntervalRef.current = null;
     }
 
     setIsRecording(false);
 
-    const navigateToProcessing = (uri: string) => {
-      console.log('[focus] navigating to processing with uri:', uri);
-      router.replace({
-        pathname: '/processing',
-        params: {
-          videoUri: uri || '',
-          sessionId,
-          outputSeconds: String(outputSeconds),
-          recordingSeconds: String(elapsed),
-          aspectRatio,
-          studyMinutes: String(studyMinutes),
-          timerMode,
-        },
-      });
-    };
+    const photoUris = photoUrisRef.current.join(',');
 
-    if (Platform.OS === 'web') {
-      // 웹: 카메라 없으므로 바로 이동
-      navigateToProcessing('');
-    } else {
-      // 모바일: recordAsync resolve 기다림 (콜백 등록)
-      navigateAfterRecordRef.current = navigateToProcessing;
-      // 안전장치: 3초 후에도 안 오면 강제 이동
-      setTimeout(() => {
-        if (navigateAfterRecordRef.current) {
-          console.log('[focus] timeout fallback, uri:', videoUriRef.current);
-          navigateAfterRecordRef.current(videoUriRef.current);
-          navigateAfterRecordRef.current = null;
-        }
-      }, 3000);
-    }
-  }, [elapsed, sessionId, outputSeconds, aspectRatio, router]);
+    router.replace({
+      pathname: '/processing',
+      params: {
+        photoUris,
+        sessionId,
+        outputSeconds: String(outputSeconds),
+        recordingSeconds: String(elapsed),
+        aspectRatio,
+        studyMinutes: String(studyMinutes),
+        timerMode,
+      },
+    });
+  }, [elapsed, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, router]);
 
   const handleExit = () => {
     setShowExitModal(true);
@@ -179,35 +162,33 @@ export default function FocusScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    try {
-      cameraRef.current?.stopRecording();
-    } catch (_e) {
-      // ignore
+    if (captureIntervalRef.current) {
+      clearInterval(captureIntervalRef.current);
+      captureIntervalRef.current = null;
     }
     setShowExitModal(false);
     router.canGoBack() ? router.back() : router.replace('/');
   };
 
   // Permissions not yet granted
-  if (!cameraPermission?.granted || !micPermission?.granted) {
+  if (!cameraPermission?.granted) {
     return (
       <View style={styles.permContainer}>
         <StatusBar barStyle="light-content" />
         <View style={styles.permIconWrap}>
           <Text style={styles.permIconText}>⊙</Text>
         </View>
-        <Text style={styles.permTitle}>Camera & Microphone Access</Text>
+        <Text style={styles.permTitle}>Camera Access</Text>
         <Text style={styles.permText}>
-          We need camera and microphone permissions to record your focus session.
+          We need camera permission to capture your focus session.
         </Text>
         <TouchableOpacity
           style={styles.permButton}
           onPress={async () => {
             await requestCameraPermission();
-            await requestMicPermission();
           }}
         >
-          <Text style={styles.permButtonText}>Grant Permissions</Text>
+          <Text style={styles.permButtonText}>Grant Permission</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.permBackButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <Text style={styles.permBackText}>Go Back</Text>
@@ -236,10 +217,10 @@ export default function FocusScreen() {
       <StatusBar barStyle="light-content" />
 
       {/* Camera Preview — aspect ratio 맞게 중앙 배치, 나머지 검정 */}
-      <View style={[
+      <View style={webCameraStyle ?? [
         styles.cameraWrapper,
         aspectRatio === '16:9' && styles.cameraWrapper16x9,
-      ]} {...(webCameraStyle ? { style: webCameraStyle } : {})}>
+      ]}>
         <CameraView
           ref={cameraRef}
           style={[
@@ -254,7 +235,6 @@ export default function FocusScreen() {
               : { aspectRatio: 16/9, width: '100%', height: undefined }),
           ]}
           facing={cameraFacing}
-          mode="video"
           onCameraReady={() => setCameraReady(true)}
         />
       </View>
@@ -267,6 +247,9 @@ export default function FocusScreen() {
             <Text style={styles.exitButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.timerContainer}>
+            {hasStarted && (
+              <Text style={styles.frameCounter}>{frameCount} frames captured</Text>
+            )}
             <Text style={styles.timerLabel}>
               {timerMode === 'countdown' ? 'REMAINING' : 'ELAPSED'}
             </Text>
@@ -308,10 +291,18 @@ export default function FocusScreen() {
                   setHasStarted(true);
                   startRecording();
                 } else if (isRecording) {
-                  if (intervalRef.current) clearInterval(intervalRef.current);
+                  // 일시정지
+                  if (captureIntervalRef.current) {
+                    clearInterval(captureIntervalRef.current);
+                    captureIntervalRef.current = null;
+                  }
                   setIsRecording(false);
                 } else {
+                  // 재개
                   setIsRecording(true);
+                  if (Platform.OS !== 'web') {
+                    startCapture();
+                  }
                 }
               }}
               activeOpacity={0.7}
@@ -412,6 +403,13 @@ const styles = StyleSheet.create({
   },
   timerContainer: {
     alignItems: 'flex-start',
+  },
+  frameCounter: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   timerLabel: {
     color: 'rgba(255,255,255,0.6)',
