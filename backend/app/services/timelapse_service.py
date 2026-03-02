@@ -119,23 +119,23 @@ class TimelapseService:
         configs = {
             "9:16": (
                 "crop=trunc(ih*9/16/2)*2:ih:(iw-trunc(ih*9/16/2)*2)/2:0",
-                "scale=1080:1920",
-                "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
+                "scale=720:1280",
+                "pad=720:1280:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "1:1": (
-                "crop=trunc(ih/2)*2:trunc(ih/2)*2:(iw-trunc(ih/2)*2)/2:0",
-                "scale=1080:1080",
-                "pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black",
+                "crop=trunc(iw/2)*2:trunc(iw/2)*2:0:(ih-trunc(iw/2)*2)/2",
+                "scale=720:720",
+                "pad=720:720:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "4:5": (
                 "crop=trunc(ih*4/5/2)*2:ih:(iw-trunc(ih*4/5/2)*2)/2:0",
-                "scale=1080:1350",
-                "pad=1080:1350:(ow-iw)/2:(oh-ih)/2:black",
+                "scale=720:900",
+                "pad=720:900:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "16:9": (
                 "",
-                "scale=1920:1080",
-                "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black",
+                "scale=1280:720",
+                "pad=1280:720:(ow-iw)/2:(oh-ih)/2:black",
             ),
         }
         return configs.get(aspect_ratio, configs["16:9"])
@@ -207,10 +207,11 @@ class TimelapseService:
                 "-profile:v", "high",
                 "-level", "4.1",
                 "-pix_fmt", "yuv420p",
+                "-threads", "0",
                 "-crf", "23",
                 "-maxrate", "5M",
                 "-bufsize", "10M",
-                "-preset", "fast",
+                "-preset", "ultrafast",
                 "-movflags", "+faststart",
                 output_path,
             ]
