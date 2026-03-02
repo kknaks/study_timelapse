@@ -12,6 +12,8 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
+import ViewShot from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
@@ -39,6 +41,7 @@ function getRatio(ar: string): number {
 export default function ResultScreen() {
   const router = useRouter();
   const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
+  const viewShotRef = useRef<ViewShot>(null);
 
   const params = useLocalSearchParams<{
     downloadUrl: string;
@@ -122,8 +125,33 @@ export default function ResultScreen() {
       : ((goalSeconds - elapsed) / goalSeconds) * 100
     : 0;
 
-  const handleSave = () => {
-    router.push({ pathname: '/saving', params: { downloadUrl } });
+  const handleSave = async () => {
+    if (Platform.OS === 'web') {
+      router.push({ pathname: '/saving', params: { downloadUrl } });
+      return;
+    }
+    // 네이티브: ViewShot으로 영상+오버레이 캡처 → 갤러리 저장
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save to your gallery.');
+        return;
+      }
+      if (!viewShotRef.current?.capture) {
+        // ViewShot 없으면 기존 방식으로
+        router.push({ pathname: '/saving', params: { downloadUrl } });
+        return;
+      }
+      Alert.alert('Saving...', 'Capturing your timelapse with overlay...');
+      const uri = await viewShotRef.current.capture();
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('Saved!', 'Your timelapse has been saved to your gallery.', [
+        { text: 'OK', onPress: () => router.replace('/stats') },
+      ]);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('Error', `Failed to save: ${msg}`);
+    }
   };
 
   const handleUpgrade = () => Alert.alert('Coming Soon', 'Upgrade to remove watermark!');
@@ -154,8 +182,19 @@ export default function ResultScreen() {
           setAreaSize({ width, height });
         }}
       >
+        {/* ViewShot: 영상+오버레이 영역만 캡처 */}
+        <ViewShot
+          ref={viewShotRef}
+          style={{
+            position: 'absolute',
+            left: offsetX,
+            top: offsetY,
+            width: vidW,
+            height: vidH,
+          }}
+          options={{ format: 'jpg', quality: 0.95 }}
+        >
         {Platform.OS === 'web' ? (
-          /* 웹: video 태그 직접 사용 */
           <video
             src={downloadUrl}
             autoPlay loop muted playsInline
@@ -170,61 +209,53 @@ export default function ResultScreen() {
             } as React.CSSProperties}
           />
         ) : (
-          /* 네이티브: VideoView를 미러링 wrapper로 감쌈 */
-          <View
-            style={{
-              position: 'absolute',
-              left: offsetX,
-              top: offsetY,
-              width: vidW,
-              height: vidH,
-              overflow: 'hidden',
-              transform: isMirrored ? [{ scaleX: -1 }] : undefined,
-            }}
-          >
-            <VideoView
-              style={{ width: vidW, height: vidH }}
-              player={player}
-              nativeControls={false}
-              contentFit="cover"
-            />
-          </View>
-        )}
+          <>
+            {/* ViewShot 안에 VideoView + 오버레이 */}
+            <View
+              style={{
+                position: 'absolute',
+                left: offsetX,
+                top: offsetY,
+                width: vidW,
+                height: vidH,
+                overflow: 'hidden',
+                transform: isMirrored ? [{ scaleX: -1 }] : undefined,
+              }}
+            >
+              <VideoView
+                style={{ width: vidW, height: vidH }}
+                player={player}
+                nativeControls={false}
+                contentFit="cover"
+              />
+            </View>
 
-        {/* 오버레이: 영상 정확한 영역 위에 */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: offsetX,
-            top: offsetY,
-            width: vidW,
-            height: vidH,
-          }}
-        >
-          {/* Watermark */}
-          <View style={styles.watermark}>
-            <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
-            <Text style={styles.watermarkText}>FocusTimelapse</Text>
-          </View>
-
-          {/* Overlay */}
-          {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
-            <View style={styles.topRightOverlay}>
-              {overlayStyle === 'timer' && (
-                <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
-              )}
-              {overlayStyle === 'progress' && (
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+            {/* 오버레이 (ViewShot 안) */}
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', left: 0, top: 0, width: vidW, height: vidH }}
+            >
+              <View style={styles.watermark}>
+                <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
+                <Text style={styles.watermarkText}>FocusTimelapse</Text>
+              </View>
+              {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
+                <View style={styles.topRightOverlay}>
+                  {overlayStyle === 'timer' && <Text style={styles.timerText}>{formatTime(elapsed)}</Text>}
+                  {overlayStyle === 'progress' && (
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+                    </View>
+                  )}
+                  {overlayStyle === 'streak' && (
+                    <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
+                  )}
                 </View>
               )}
-              {overlayStyle === 'streak' && (
-                <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
-              )}
             </View>
-          )}
-        </View>
+          </>
+        )}
+        </ViewShot>
       </View>
 
       {/* Bottom Card */}
