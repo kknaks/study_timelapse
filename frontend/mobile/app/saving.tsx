@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const GREEN = '#22C55E';
@@ -111,7 +111,8 @@ export default function SavingScreen() {
         console.log('[saving] downloading from:', downloadUrl);
         const result = await FileSystem.downloadAsync(downloadUrl, dest);
         console.log('[saving] download result:', result.status, result.uri);
-        if (result.status !== 200) {
+        // 200 or 206 (partial content) 모두 정상
+        if (result.status !== 200 && result.status !== 206) {
           throw new Error(`Download failed: HTTP ${result.status}`);
         }
         localUri = result.uri;
