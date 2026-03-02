@@ -124,7 +124,8 @@ export default function SavingScreen() {
       setFinished(true);
     } catch (e) {
       console.error('Save error:', e);
-      Alert.alert('Error', 'Failed to save. Please try again.', [
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('Error', `Failed to save: ${msg}`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
     }
