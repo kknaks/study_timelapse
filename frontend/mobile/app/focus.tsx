@@ -54,6 +54,7 @@ export default function FocusScreen() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string>('');
   const isStoppingRef = useRef(false);
+  const navigateAfterRecordRef = useRef<((uri: string) => void) | null>(null);
 
   const remaining = Math.max(0, totalSeconds - elapsed);
 
@@ -111,6 +112,12 @@ export default function FocusScreen() {
       // recordAsync resolves when recording stops
       if (video?.uri) {
         videoUriRef.current = video.uri;
+        console.log('[focus] recordAsync resolved, uri:', video.uri);
+      }
+      // recordAsync가 resolve되면 navigateRef 콜백 실행
+      if (navigateAfterRecordRef.current) {
+        navigateAfterRecordRef.current(video?.uri || '');
+        navigateAfterRecordRef.current = null;
       }
     } catch (err) {
       console.error('Recording error:', err);
@@ -134,11 +141,8 @@ export default function FocusScreen() {
 
     setIsRecording(false);
 
-    // Wait for recordAsync to resolve (needs enough time on real device)
-    setTimeout(() => {
-      const uri = videoUriRef.current;
-      console.log('[focus] videoUri after stop:', uri);
-      // uri가 없어도 결과 화면으로 이동 (웹 환경 또는 카메라 미지원 시)
+    const navigateToProcessing = (uri: string) => {
+      console.log('[focus] navigating to processing with uri:', uri);
       router.replace({
         pathname: '/processing',
         params: {
@@ -151,7 +155,23 @@ export default function FocusScreen() {
           timerMode,
         },
       });
-    }, 1500);
+    };
+
+    if (Platform.OS === 'web') {
+      // 웹: 카메라 없으므로 바로 이동
+      navigateToProcessing('');
+    } else {
+      // 모바일: recordAsync resolve 기다림 (콜백 등록)
+      navigateAfterRecordRef.current = navigateToProcessing;
+      // 안전장치: 3초 후에도 안 오면 강제 이동
+      setTimeout(() => {
+        if (navigateAfterRecordRef.current) {
+          console.log('[focus] timeout fallback, uri:', videoUriRef.current);
+          navigateAfterRecordRef.current(videoUriRef.current);
+          navigateAfterRecordRef.current = null;
+        }
+      }, 3000);
+    }
   }, [elapsed, sessionId, outputSeconds, aspectRatio, router]);
 
   const handleExit = () => {
