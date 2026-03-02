@@ -46,9 +46,11 @@ export default function FocusScreen() {
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
   const [isRecording, setIsRecording] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
 
   const cameraRef = useRef<CameraView>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,13 +73,7 @@ export default function FocusScreen() {
     requestPerms();
   }, [cameraPermission, micPermission, requestCameraPermission, requestMicPermission]);
 
-  // Start recording once camera is ready
-  useEffect(() => {
-    if (cameraReady && !isRecording && cameraPermission?.granted) {
-      startRecording();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraReady, cameraPermission?.granted]);
+  // 자동 시작 제거 — 사용자가 시작 버튼 누를 때 startRecording 호출
 
   // Timer interval
   useEffect(() => {
@@ -255,7 +251,7 @@ export default function FocusScreen() {
               ? ({ width: '100%', aspectRatio: '16/9' } as any)
               : { aspectRatio: 16/9, width: '100%', height: undefined }),
           ]}
-          facing="front"
+          facing={cameraFacing}
           mode="video"
           onCameraReady={() => setCameraReady(true)}
         />
@@ -287,13 +283,29 @@ export default function FocusScreen() {
 
         {/* Bottom: FOCUS SESSION ACTIVE + 버튼들 */}
         <View style={styles.bottomRow}>
-          <Text style={styles.sessionActiveLabel}>FOCUS SESSION ACTIVE</Text>
+          <Text style={styles.sessionActiveLabel}>
+            {!hasStarted ? 'READY TO RECORD' : isRecording ? 'FOCUS SESSION ACTIVE' : 'PAUSED'}
+          </Text>
           <View style={styles.controls}>
-            {/* 일시정지 버튼 */}
+            {/* 카메라 전환 버튼 */}
+            {!hasStarted && Platform.OS !== 'web' && (
+              <TouchableOpacity
+                style={styles.flipButton}
+                onPress={() => setCameraFacing(f => f === 'front' ? 'back' : 'front')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.flipIcon}>⇄</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* 시작/일시정지 버튼 */}
             <TouchableOpacity
               style={styles.pauseButton}
               onPress={() => {
-                if (isRecording) {
+                if (!hasStarted) {
+                  setHasStarted(true);
+                  startRecording();
+                } else if (isRecording) {
                   if (intervalRef.current) clearInterval(intervalRef.current);
                   setIsRecording(false);
                 } else {
@@ -302,7 +314,9 @@ export default function FocusScreen() {
               }}
               activeOpacity={0.7}
             >
-              {isRecording ? (
+              {!hasStarted ? (
+                <View style={styles.playIcon} />
+              ) : isRecording ? (
                 <View style={styles.pauseIconWrap}>
                   <View style={styles.pauseBar} />
                   <View style={styles.pauseBar} />
@@ -449,6 +463,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 24,
+  },
+  flipButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  flipIcon: {
+    fontSize: 22,
+    color: '#FFF',
+    fontWeight: '600',
   },
   pauseButton: {
     width: 60,
