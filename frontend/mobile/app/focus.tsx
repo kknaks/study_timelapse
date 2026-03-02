@@ -99,7 +99,7 @@ export default function FocusScreen() {
       try {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.85,
-          skipProcessing: true,
+          skipProcessing: false, // iOS 색 보정 적용
           shutterSound: false,
         });
         if (photo?.uri) {
