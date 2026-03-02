@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
   },
   calCell: {
     width: '14.285%',
-    aspectRatio: 1,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
