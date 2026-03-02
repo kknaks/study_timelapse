@@ -6,21 +6,17 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS } from '../src/constants';
-import { uploadPhotos, requestTimelapseFromPhotos, getTimelapseStatus } from '../src/api/timelapse';
 import { updateSession } from '../src/api/sessions';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
-
-type Stage = 'uploading' | 'converting' | 'polling' | 'done' | 'error';
+type Stage = 'converting' | 'done' | 'error';
 
 function getStageIcon(stage: Stage): string {
   switch (stage) {
-    case 'uploading': return '↑';
     case 'converting': return '▶';
-    case 'polling': return '···';
     case 'done': return '✓';
     case 'error': return '✕';
   }
@@ -34,6 +30,13 @@ function getMotivationMessage(ratio: number): string {
   if (ratio >= 0.25) return 'Solid start! Every session counts!';
   return 'Every step forward matters. Keep going!';
 }
+
+const getScaleFilter = (ar: string): string => {
+  if (ar === '9:16') return 'scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black';
+  if (ar === '1:1') return 'scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2:black';
+  if (ar === '4:5') return 'scale=720:900:force_original_aspect_ratio=decrease,pad=720:900:(ow-iw)/2:(oh-ih)/2:black';
+  return 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black'; // 16:9
+};
 
 export default function ProcessingScreen() {
   const router = useRouter();
@@ -59,20 +62,22 @@ export default function ProcessingScreen() {
   const timerMode = params.timerMode ?? 'countdown';
   const achievementRatio = Math.min(1, recordingSecs / (studyMinutes * 60));
 
-  const [stage, setStage] = useState<Stage>('uploading');
+  const [stage, setStage] = useState<Stage>('converting');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
 
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelledRef = useRef(false);
   const [resultUrl, setResultUrl] = useState('');
 
   const navigateToResult = useCallback((url = '') => {
+    const localUri = url && !url.startsWith('file://') && !url.startsWith('http')
+      ? `file://${url}`
+      : url;
     router.replace({
       pathname: '/result',
       params: {
-        downloadUrl: url,
+        downloadUrl: localUri,
         sessionId,
         studyMinutes: String(studyMinutes),
         recordingSeconds: String(recordingSecs),
@@ -84,22 +89,14 @@ export default function ProcessingScreen() {
     });
   }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode, cameraFacing]);
 
-  const cleanup = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
     processVideo();
-    return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const processVideo = async () => {
     // 웹 환경 또는 사진 없음 → 바로 결과 화면으로
-    if (photoUris.length === 0) {
+    if (Platform.OS === 'web' || photoUris.length === 0) {
       if (sessionId) {
         try {
           await updateSession(sessionId, {
@@ -117,31 +114,65 @@ export default function ProcessingScreen() {
     }
 
     try {
-      // Stage 1: Upload photos
-      setStage('uploading');
+      // 동적 import — 웹에서는 이 코드에 도달하지 않음
+      const { FFmpegKit, ReturnCode } = await import('ffmpeg-kit-react-native');
+      const FileSystem = await import('expo-file-system/legacy');
+
+      setStage('converting');
       setProgress(10);
 
-      const uploadRes = await uploadPhotos(photoUris);
+      // filelist.txt 생성
+      const frameDuration = 1.0 / 30;
+      const filelistContent = photoUris
+        .map(uri => `file '${uri}'\nduration ${frameDuration.toFixed(6)}`)
+        .join('\n');
+      const filelistPath = `${FileSystem.documentDirectory}filelist_${Date.now()}.txt`;
+      await FileSystem.writeAsStringAsync(filelistPath, filelistContent);
+
+      if (cancelledRef.current) return;
+      setProgress(20);
+
+      // 출력 파일 경로
+      const outputPath = `${FileSystem.documentDirectory}timelapse_${Date.now()}.mp4`;
+
+      // FFmpeg 명령어 실행
+      const scaleFilter = getScaleFilter(aspectRatio);
+      const cmd = `-y -f concat -safe 0 -i "${filelistPath}" -vf "${scaleFilter}" -r 30 -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p -movflags +faststart "${outputPath}"`;
+
+      setProgress(40);
+
+      const session = await FFmpegKit.execute(cmd);
+
       if (cancelledRef.current) return;
 
-      const { fileIds } = uploadRes.data;
-      setProgress(35);
+      const returnCode = await session.getReturnCode();
 
-      // Stage 2: Request timelapse from photos
-      setStage('converting');
-      const timelapseRes = await requestTimelapseFromPhotos({
-        fileIds,
-        outputSeconds: outputSecs,
-        aspectRatio,
-      });
-      if (cancelledRef.current) return;
+      if (!ReturnCode.isSuccess(returnCode)) {
+        const logs = await session.getAllLogsAsString();
+        throw new Error(`FFmpeg failed: ${logs?.slice(-200)}`);
+      }
 
-      const { taskId } = timelapseRes.data;
-      setProgress(45);
+      // filelist 정리
+      await FileSystem.deleteAsync(filelistPath, { idempotent: true });
 
-      // Stage 3: Poll for status
-      setStage('polling');
-      await pollStatus(taskId);
+      setProgress(100);
+      setStage('done');
+
+      // 세션 업데이트
+      if (sessionId) {
+        try {
+          await updateSession(sessionId, {
+            end_time: new Date().toISOString(),
+            duration: recordingSecs,
+            status: 'completed',
+          });
+        } catch (e) {
+          console.warn('session update failed:', e);
+        }
+      }
+
+      setResultUrl(outputPath);
+      navigateToResult(outputPath);
     } catch (err) {
       if (cancelledRef.current) return;
       console.error('Processing error:', err);
@@ -150,75 +181,18 @@ export default function ProcessingScreen() {
     }
   };
 
-  const pollStatus = (taskId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      pollingRef.current = setInterval(async () => {
-        try {
-          if (cancelledRef.current) {
-            cleanup();
-            resolve();
-            return;
-          }
-
-          const statusRes = await getTimelapseStatus(taskId);
-          const { status, progress: serverProgress, downloadUrl } = statusRes.data;
-
-          // Map server progress (0-100) to our range (40-90)
-          const mappedProgress = 40 + (serverProgress / 100) * 50;
-          setProgress(Math.min(mappedProgress, 90));
-
-          if (status === 'completed' && downloadUrl) {
-            cleanup();
-            setProgress(95);
-            setStage('done');
-            // 상대경로면 절대 URL로 변환
-            const fullDownloadUrl = downloadUrl.startsWith('http')
-              ? downloadUrl
-              : `${API_BASE_URL}${downloadUrl}`;
-
-            // Update session
-            try {
-              await updateSession(sessionId, {
-                end_time: new Date().toISOString(),
-                duration: recordingSecs,
-                status: 'completed',
-              });
-            } catch (e) {
-              console.warn('Failed to update session:', e);
-            }
-
-            setProgress(100);
-            setResultUrl(fullDownloadUrl);
-            setStage('done');
-
-            resolve();
-          } else if (status === 'failed') {
-            cleanup();
-            setStage('error');
-            setErrorMessage('Timelapse conversion failed. Please try again.');
-            reject(new Error('Conversion failed'));
-          }
-        } catch (err) {
-          console.error('Poll error:', err);
-          // Don't stop polling on transient errors
-        }
-      }, 2000);
-    });
-  };
-
   const handleCancel = () => {
     setShowCancelModal(true);
   };
 
   const confirmCancel = () => {
     cancelledRef.current = true;
-    cleanup();
     setShowCancelModal(false);
     router.replace('/');
   };
 
   const handleRetry = () => {
-    setStage('uploading');
+    setStage('converting');
     setProgress(0);
     setErrorMessage('');
     cancelledRef.current = false;
