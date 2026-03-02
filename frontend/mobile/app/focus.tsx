@@ -134,9 +134,10 @@ export default function FocusScreen() {
 
     setIsRecording(false);
 
-    // Small delay to let recordAsync resolve
+    // Wait for recordAsync to resolve (needs enough time on real device)
     setTimeout(() => {
       const uri = videoUriRef.current;
+      console.log('[focus] videoUri after stop:', uri);
       // uri가 없어도 결과 화면으로 이동 (웹 환경 또는 카메라 미지원 시)
       router.replace({
         pathname: '/processing',
@@ -150,7 +151,7 @@ export default function FocusScreen() {
           timerMode,
         },
       });
-    }, 500);
+    }, 1500);
   }, [elapsed, sessionId, outputSeconds, aspectRatio, router]);
 
   const handleExit = () => {
