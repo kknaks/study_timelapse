@@ -178,6 +178,7 @@ export default function ResultScreen() {
               ]}
               player={player}
               nativeControls={false}
+              contentFit="cover"
             />
           )}
 
