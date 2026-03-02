@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS } from '../src/constants';
-import { uploadVideo, requestTimelapse, getTimelapseStatus } from '../src/api/timelapse';
+import { uploadPhotos, requestTimelapseFromPhotos, getTimelapseStatus } from '../src/api/timelapse';
 import { updateSession } from '../src/api/sessions';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
@@ -38,7 +38,7 @@ function getMotivationMessage(ratio: number): string {
 export default function ProcessingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    videoUri: string;
+    photoUris: string;
     sessionId: string;
     outputSeconds: string;
     recordingSeconds: string;
@@ -47,7 +47,8 @@ export default function ProcessingScreen() {
     timerMode: string;
   }>();
 
-  const videoUri = params.videoUri ?? '';
+  const photoUrisRaw = params.photoUris ?? '';
+  const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
   const sessionId = params.sessionId ?? '';
   const outputSecs = Number(params.outputSeconds) || 60;
   const recordingSecs = Number(params.recordingSeconds) || 0;
@@ -94,9 +95,8 @@ export default function ProcessingScreen() {
   }, []);
 
   const processVideo = async () => {
-    // 웹 환경 또는 카메라 미지원 시 (videoUri 없음) → 바로 결과 화면으로
-    if (!videoUri) {
-      // 세션 완료 업데이트
+    // 웹 환경 또는 사진 없음 → 바로 결과 화면으로
+    if (photoUris.length === 0) {
       if (sessionId) {
         try {
           await updateSession(sessionId, {
@@ -114,32 +114,31 @@ export default function ProcessingScreen() {
     }
 
     try {
-      // Stage 1: Upload
+      // Stage 1: Upload photos
       setStage('uploading');
       setProgress(10);
 
-      const uploadRes = await uploadVideo(videoUri, 'video/mp4');
+      const uploadRes = await uploadPhotos(photoUris);
       if (cancelledRef.current) return;
 
-      const { fileId } = uploadRes.data;
-      setProgress(30);
+      const { fileIds } = uploadRes.data;
+      setProgress(35);
 
-      // Stage 2: Request timelapse conversion
+      // Stage 2: Request timelapse from photos
       setStage('converting');
-      const timelapseRes = await requestTimelapse({
-        fileId,
+      const timelapseRes = await requestTimelapseFromPhotos({
+        fileIds,
         outputSeconds: outputSecs,
-        recordingSeconds: recordingSecs,
         aspectRatio,
       });
       if (cancelledRef.current) return;
 
       const { taskId } = timelapseRes.data;
-      setProgress(40);
+      setProgress(45);
 
       // Stage 3: Poll for status
       setStage('polling');
-      await pollStatus(taskId, fileId);
+      await pollStatus(taskId);
     } catch (err) {
       if (cancelledRef.current) return;
       console.error('Processing error:', err);
@@ -148,7 +147,7 @@ export default function ProcessingScreen() {
     }
   };
 
-  const pollStatus = (taskId: string, fileId: string): Promise<void> => {
+  const pollStatus = (taskId: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       pollingRef.current = setInterval(async () => {
         try {

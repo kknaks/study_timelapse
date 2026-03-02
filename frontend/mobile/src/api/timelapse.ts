@@ -24,3 +24,28 @@ export const requestTimelapse = (data: {
 
 export const getTimelapseStatus = (taskId: string) =>
   apiClient.get<TimelapseStatus>(`/api/timelapse/${taskId}`);
+
+export const uploadPhotos = async (photoUris: string[]) => {
+  const formData = new FormData();
+  photoUris.forEach((uri, i) => {
+    formData.append('files', {
+      uri,
+      name: `frame_${String(i).padStart(4, '0')}.jpg`,
+      type: 'image/jpeg',
+    } as unknown as Blob);
+  });
+  return apiClient.post<{ fileIds: string[]; count: number }>(
+    '/api/upload-photos',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000, // 2분
+    },
+  );
+};
+
+export const requestTimelapseFromPhotos = (data: {
+  fileIds: string[];
+  outputSeconds: number;
+  aspectRatio: string;
+}) => apiClient.post<{ taskId: string }>('/api/timelapse-from-photos', data);
