@@ -12,6 +12,8 @@ import { COLORS } from '../src/constants';
 import { uploadVideo, requestTimelapse, getTimelapseStatus } from '../src/api/timelapse';
 import { updateSession } from '../src/api/sessions';
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
+
 type Stage = 'uploading' | 'converting' | 'polling' | 'done' | 'error';
 
 function getStageIcon(stage: Stage): string {
@@ -167,6 +169,10 @@ export default function ProcessingScreen() {
             cleanup();
             setProgress(95);
             setStage('done');
+            // 상대경로면 절대 URL로 변환
+            const fullDownloadUrl = downloadUrl.startsWith('http')
+              ? downloadUrl
+              : `${API_BASE_URL}${downloadUrl}`;
 
             // Update session
             try {
@@ -180,7 +186,7 @@ export default function ProcessingScreen() {
             }
 
             setProgress(100);
-            setResultUrl(downloadUrl);
+            setResultUrl(fullDownloadUrl);
             setStage('done');
 
             resolve();

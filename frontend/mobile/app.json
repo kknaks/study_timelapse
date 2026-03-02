@@ -34,7 +34,15 @@
     "plugins": [
       "expo-router",
       "expo-sharing",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow FocusTimelapse to save your timelapse videos.",
+          "savePhotosPermission": "Allow FocusTimelapse to save your timelapse videos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
     ],
     "extra": {
       "eas": {
