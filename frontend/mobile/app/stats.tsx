@@ -321,7 +321,7 @@ export default function StatsScreen() {
                         const cell = cellRefs.current.get(dateStr);
                         if (!cell) return;
                         cell.measure((_fx, _fy, width, _height, px, py) => {
-                          const tooltipW = 140;
+                          const tooltipW = 110;
                           const cellCenterX = px + width / 2;
                           const left = Math.min(Math.max(cellCenterX - tooltipW / 2, 8), 300);
                           const top = py - 65;
@@ -405,8 +405,8 @@ export default function StatsScreen() {
           activeOpacity={1}
           onPress={() => setSelectedDate(null)}
         >
-          <View style={{ position: 'absolute', top: bubblePos.y, left: bubblePos.x, width: 140 }}>
-            <View style={[styles.sharedBubble, { width: 140 }]}>
+          <View style={{ position: 'absolute', top: bubblePos.y, left: bubblePos.x, width: 110 }}>
+            <View style={[styles.sharedBubble, { width: 110 }]}>
               <Text style={styles.sharedBubbleDate}>
                 {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
               </Text>
@@ -421,7 +421,7 @@ export default function StatsScreen() {
             {/* 꼬리: 날짜 셀 중앙을 가리키도록 offset 계산 */}
             <View style={[styles.bubbleTail, {
               alignSelf: 'flex-start',
-              marginLeft: Math.max(0, Math.min(bubblePos.cellCenterX - bubblePos.x - 7, 126)),
+              marginLeft: Math.max(0, Math.min(bubblePos.cellCenterX - bubblePos.x - 7, 96)),
             }]} />
           </View>
         </TouchableOpacity>
