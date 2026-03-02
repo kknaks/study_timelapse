@@ -7,7 +7,6 @@ import {
   Alert,
   Platform,
   Image,
-  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -38,7 +37,7 @@ function getRatio(ar: string): number {
 
 export default function ResultScreen() {
   const router = useRouter();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const [videoLayout, setVideoLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   const params = useLocalSearchParams<{
     downloadUrl: string;
@@ -60,20 +59,6 @@ export default function ResultScreen() {
   const cameraFacing = params.cameraFacing ?? 'front';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
-
-  // previewArea 높이 계산 (헤더 제외한 남은 공간)
-  const HEADER_HEIGHT = 56 + 16 + 16; // paddingTop + paddingBottom + 대략
-  const BOTTOM_CARD_HEIGHT = 220; // bottomCard 대략적 높이
-  const availableHeight = screenHeight - HEADER_HEIGHT - BOTTOM_CARD_HEIGHT;
-
-  // 영상 실제 렌더링 크기 계산 (letterbox/pillarbox 제거하고 정확한 영역 계산)
-  const ratio = getRatio(aspectRatio);
-  let videoW = screenWidth;
-  let videoH = screenWidth / ratio;
-  if (videoH > availableHeight) {
-    videoH = availableHeight;
-    videoW = availableHeight * ratio;
-  }
 
   const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [elapsed, setElapsed] = useState(0);
@@ -152,59 +137,71 @@ export default function ResultScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Video Preview Area — 검정 배경, 영상은 중앙 정렬 */}
+      {/* Video Preview Area */}
       <View style={styles.previewArea}>
-        {/* 영상 + 오버레이를 정확한 크기의 컨테이너로 감쌈 */}
-        <View style={[styles.videoContainer, { width: videoW, height: videoH }]}>
-          {Platform.OS === 'web' ? (
-            <video
-              src={downloadUrl}
-              autoPlay
-              loop
-              muted
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: isMirrored ? 'scaleX(-1)' : undefined,
-              } as React.CSSProperties}
-            />
-          ) : (
-            <VideoView
-              style={[
-                styles.video,
-                isMirrored && { transform: [{ scaleX: -1 }] },
-              ]}
-              player={player}
-              nativeControls={false}
-              contentFit="cover"
-            />
-          )}
+        {Platform.OS === 'web' ? (
+          <video
+            src={downloadUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              transform: isMirrored ? 'scaleX(-1)' : undefined,
+            } as React.CSSProperties}
+          />
+        ) : (
+          <VideoView
+            style={[styles.video, isMirrored && { transform: [{ scaleX: -1 }] }]}
+            player={player}
+            nativeControls={false}
+            contentFit="contain"
+            onLayout={(e) => {
+              const { x, y, width, height } = e.nativeEvent.layout;
+              setVideoLayout({ x, y, width, height });
+            }}
+          />
+        )}
 
-          {/* Watermark — 영상 컨테이너 기준 좌측 하단 */}
-          <View style={styles.watermark} pointerEvents="none">
-            <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
-            <Text style={styles.watermarkText}>FocusTimelapse</Text>
-          </View>
-
-          {/* Overlay — 영상 컨테이너 기준 우측 상단 */}
-          {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
-            <View style={styles.topRightOverlay} pointerEvents="none">
-              {overlayStyle === 'timer' && (
-                <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
-              )}
-              {overlayStyle === 'progress' && (
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
-                </View>
-              )}
-              {overlayStyle === 'streak' && (
-                <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
-              )}
+        {/* 오버레이: VideoView 실제 렌더링 영역 기준으로 absolute 위치 */}
+        {videoLayout.width > 0 && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: videoLayout.x,
+              top: videoLayout.y,
+              width: videoLayout.width,
+              height: videoLayout.height,
+            }}
+          >
+            {/* Watermark — 좌측 하단 */}
+            <View style={styles.watermark}>
+              <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
+              <Text style={styles.watermarkText}>FocusTimelapse</Text>
             </View>
-          )}
-        </View>
+
+            {/* Overlay — 우측 상단 */}
+            {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
+              <View style={styles.topRightOverlay}>
+                {overlayStyle === 'timer' && (
+                  <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
+                )}
+                {overlayStyle === 'progress' && (
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+                  </View>
+                )}
+                {overlayStyle === 'streak' && (
+                  <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Bottom Card */}
@@ -254,16 +251,10 @@ const styles = StyleSheet.create({
   previewArea: {
     flex: 1,
     backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
     overflow: 'hidden',
-  },
-  videoContainer: {
-    // 정확한 영상 크기, 오버레이는 이 안에서 absolute
-    overflow: 'hidden',
-    position: 'relative',
   },
   video: {
+    flex: 1,
     width: '100%',
     height: '100%',
   },
