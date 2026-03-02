@@ -149,6 +149,7 @@ export default function FocusScreen() {
         aspectRatio,
         studyMinutes: String(studyMinutes),
         timerMode,
+        cameraFacing,
       },
     });
   }, [elapsed, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, router]);

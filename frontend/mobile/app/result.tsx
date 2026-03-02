@@ -7,6 +7,7 @@ import {
   Alert,
   Platform,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -26,8 +27,19 @@ function formatTime(seconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
+// aspect ratio 문자열 → 숫자 비율 (w/h)
+function getRatio(ar: string): number {
+  if (ar === '9:16') return 9 / 16;
+  if (ar === '16:9') return 16 / 9;
+  if (ar === '1:1') return 1;
+  if (ar === '4:5') return 4 / 5;
+  return 9 / 16;
+}
+
 export default function ResultScreen() {
   const router = useRouter();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
   const params = useLocalSearchParams<{
     downloadUrl: string;
     sessionId: string;
@@ -36,6 +48,7 @@ export default function ResultScreen() {
     outputSeconds: string;
     aspectRatio: string;
     timerMode: string;
+    cameraFacing: string;
   }>();
 
   const downloadUrl = params.downloadUrl || SAMPLE_VIDEO_URL;
@@ -44,7 +57,23 @@ export default function ResultScreen() {
   const recordingSecs = Number(params.recordingSeconds) || studyMinutes * 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
+  const cameraFacing = params.cameraFacing ?? 'front';
   const goalSeconds = studyMinutes * 60;
+  const isMirrored = cameraFacing === 'front';
+
+  // previewArea 높이 계산 (헤더 제외한 남은 공간)
+  const HEADER_HEIGHT = 56 + 16 + 16; // paddingTop + paddingBottom + 대략
+  const BOTTOM_CARD_HEIGHT = 220; // bottomCard 대략적 높이
+  const availableHeight = screenHeight - HEADER_HEIGHT - BOTTOM_CARD_HEIGHT;
+
+  // 영상 실제 렌더링 크기 계산 (letterbox/pillarbox 제거하고 정확한 영역 계산)
+  const ratio = getRatio(aspectRatio);
+  let videoW = screenWidth;
+  let videoH = screenWidth / ratio;
+  if (videoH > availableHeight) {
+    videoH = availableHeight;
+    videoW = availableHeight * ratio;
+  }
 
   const [overlayStyle, setOverlayStyle] = useState<OverlayStyle>('none');
   const [elapsed, setElapsed] = useState(0);
@@ -54,7 +83,7 @@ export default function ResultScreen() {
     queryKey: ['me'],
     queryFn: () => getMe().then((r) => r.data),
   });
-  const streak = userData?.data?.streak ?? 0;
+  const streak = (userData as any)?.data?.streak ?? userData?.streak ?? 0;
 
   const player = useVideoPlayer(downloadUrl, (p) => {
     p.loop = true;
@@ -70,8 +99,6 @@ export default function ResultScreen() {
     const speedMultiplier = outputSecs > 0 ? Math.max(1, recordingSecs / outputSecs) : 1;
     const tickMs = 100;
     const tickAmount = (speedMultiplier * tickMs) / 1000;
-    // countdown: 목표 시간(goalSeconds)에서 시작해서 실제 녹화 시간만큼 줄어듦
-    // countup: 0에서 시작해서 실제 녹화 시간만큼 올라감
     setElapsed(timerMode === 'countdown' ? goalSeconds : 0);
     const endValue = timerMode === 'countdown'
       ? Math.max(0, goalSeconds - recordingSecs)
@@ -125,59 +152,58 @@ export default function ResultScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Video Preview Area */}
+      {/* Video Preview Area — 검정 배경, 영상은 중앙 정렬 */}
       <View style={styles.previewArea}>
-        {Platform.OS === 'web' ? (
-          <div style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#000',
-          }}>
+        {/* 영상 + 오버레이를 정확한 크기의 컨테이너로 감쌈 */}
+        <View style={[styles.videoContainer, { width: videoW, height: videoH }]}>
+          {Platform.OS === 'web' ? (
             <video
               src={downloadUrl}
               autoPlay
               loop
-              muted={true}
+              muted
               playsInline
               style={{
-                width: aspectRatio === '1:1' ? 'auto' : '100%',
+                width: '100%',
                 height: '100%',
-                aspectRatio: aspectRatio === '1:1' ? '1/1' : aspectRatio === '16:9' ? '16/9' : undefined,
                 objectFit: 'cover',
-                maxWidth: '100%',
-                maxHeight: '100%',
-              }}
+                transform: isMirrored ? 'scaleX(-1)' : undefined,
+              } as React.CSSProperties}
             />
-          </div>
-        ) : (
-          <VideoView style={styles.video} player={player} nativeControls={false} />
-        )}
+          ) : (
+            <VideoView
+              style={[
+                styles.video,
+                isMirrored && { transform: [{ scaleX: -1 }] },
+              ]}
+              player={player}
+              nativeControls={false}
+            />
+          )}
 
-        {/* Watermark */}
-        <View style={styles.watermark} pointerEvents="none">
-          <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
-          <Text style={styles.watermarkText}>FocusTimelapse</Text>
-        </View>
-
-        {/* Timer / Progress / Streak overlay — top right, no background */}
-        {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
-          <View style={styles.topRightOverlay} pointerEvents="none">
-            {overlayStyle === 'timer' && (
-              <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
-            )}
-            {overlayStyle === 'progress' && (
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
-              </View>
-            )}
-            {overlayStyle === 'streak' && (
-              <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
-            )}
+          {/* Watermark — 영상 컨테이너 기준 좌측 하단 */}
+          <View style={styles.watermark} pointerEvents="none">
+            <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
+            <Text style={styles.watermarkText}>FocusTimelapse</Text>
           </View>
-        )}
+
+          {/* Overlay — 영상 컨테이너 기준 우측 상단 */}
+          {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
+            <View style={styles.topRightOverlay} pointerEvents="none">
+              {overlayStyle === 'timer' && (
+                <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
+              )}
+              {overlayStyle === 'progress' && (
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+                </View>
+              )}
+              {overlayStyle === 'streak' && (
+                <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
+              )}
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Bottom Card */}
@@ -198,7 +224,6 @@ export default function ResultScreen() {
         </View>
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveIcon}></Text>
           <Text style={styles.saveText}>Create Video</Text>
         </TouchableOpacity>
 
@@ -224,35 +249,50 @@ const styles = StyleSheet.create({
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   backIcon: { color: '#FFF', fontSize: 22 },
   headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '600' },
-  previewArea: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
-  video: { flex: 1, width: '100%', height: '100%' },
+
+  previewArea: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  videoContainer: {
+    // 정확한 영상 크기, 오버레이는 이 안에서 absolute
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  video: {
+    width: '100%',
+    height: '100%',
+  },
 
   watermark: {
     position: 'absolute',
-    bottom: 16,
-    left: 14,
+    bottom: 12,
+    left: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
-  watermarkIcon: { width: 18, height: 18 },
+  watermarkIcon: { width: 16, height: 16 },
   watermarkText: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
 
   topRightOverlay: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 12,
+    right: 12,
     alignItems: 'flex-end',
     gap: 6,
   },
   timerText: {
     color: '#FFF',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -260,7 +300,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   progressTrack: {
-    width: 100,
+    width: 90,
     height: 4,
     backgroundColor: 'rgba(255,255,255,0.35)',
     borderRadius: 2,
@@ -276,15 +316,15 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 48,
-    gap: 20,
+    paddingTop: 24,
+    paddingBottom: 44,
+    gap: 18,
   },
   sectionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary, letterSpacing: 1 },
-  overlayRow: { flexDirection: 'row', gap: 10 },
+  overlayRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   overlayBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: '#F0F0F0',
   },
@@ -295,12 +335,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 16,
     paddingVertical: 18,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  saveIcon: { fontSize: 18 },
   saveText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   upgradeButton: { alignItems: 'center', paddingVertical: 4 },
   upgradeText: { color: '#4A90E2', fontSize: 15, fontWeight: '500' },

@@ -45,10 +45,12 @@ export default function ProcessingScreen() {
     aspectRatio: string;
     studyMinutes: string;
     timerMode: string;
+    cameraFacing: string;
   }>();
 
   const photoUrisRaw = params.photoUris ?? '';
   const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
+  const cameraFacing = params.cameraFacing ?? 'front';
   const sessionId = params.sessionId ?? '';
   const outputSecs = Number(params.outputSeconds) || 60;
   const recordingSecs = Number(params.recordingSeconds) || 0;
@@ -72,14 +74,15 @@ export default function ProcessingScreen() {
       params: {
         downloadUrl: url,
         sessionId,
-        studyMinutes: String(studyMinutes),       // 목표 시간 (분)
-        recordingSeconds: String(recordingSecs),   // 실제 촬영 시간 (초)
+        studyMinutes: String(studyMinutes),
+        recordingSeconds: String(recordingSecs),
         outputSeconds: String(outputSecs),
         aspectRatio,
         timerMode,
+        cameraFacing,
       },
     });
-  }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode]);
+  }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode, cameraFacing]);
 
   const cleanup = useCallback(() => {
     if (pollingRef.current) {
