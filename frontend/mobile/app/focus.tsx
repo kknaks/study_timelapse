@@ -339,29 +339,30 @@ export default function FocusScreen() {
       </View>
 
       {/* Exit Confirmation Modal */}
-      <Modal visible={showExitModal} transparent animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>세션을 종료할까요?</Text>
+      <Modal visible={showExitModal} transparent animationType="slide" onRequestClose={() => setShowExitModal(false)}>
+        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={() => setShowExitModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>End Session?</Text>
             <Text style={styles.modalText}>
-              지금 돌아가면 촬영 중인 영상은 저장되지 않아요.
+              If you leave now, your recording will not be saved.
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnCancel]}
                 onPress={() => setShowExitModal(false)}
               >
-                <Text style={styles.modalBtnCancelText}>계속하기</Text>
+                <Text style={styles.modalBtnCancelText}>Keep Going</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnConfirm]}
                 onPress={confirmExit}
               >
-                <Text style={styles.modalBtnConfirmText}>나가기</Text>
+                <Text style={styles.modalBtnConfirmText}>Leave</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -573,49 +574,53 @@ const styles = StyleSheet.create({
   // Modal
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: '#FFF',
-    borderRadius: 20,
-    padding: 28,
-    marginHorizontal: 32,
-    width: '85%',
-    maxWidth: 340,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DDD',
+    alignSelf: 'center',
+    marginBottom: 4,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 8,
   },
   modalText: {
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: 20,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
+    marginTop: 8,
   },
   modalBtn: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
   },
   modalBtnCancel: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: '#F5F5F5',
   },
   modalBtnCancelText: {
-    color: COLORS.primary,
+    color: COLORS.text,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   modalBtnConfirm: {
     backgroundColor: '#FF3B30',
