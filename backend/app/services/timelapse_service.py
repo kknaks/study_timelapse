@@ -116,24 +116,39 @@ class TimelapseService:
     # ── 비율별 crop/scale ──
 
     def _get_crop_and_scale(self, aspect_ratio: str) -> tuple[str, str, str]:
+        # 모든 수식은 세로(portrait) 영상 기준: iw <= ih
+        # 9:16: 세로 영상 → 세로 출력 (iw 기준 9:16 crop)
+        #   crop_w = iw, crop_h = iw*16/9 → iw*16/9 > ih이면 ih로 제한
+        #   실제로 iw/ih = 9/16이므로 crop_w=iw, crop_h=ih (그대로)
+        #   x=0, y=0
+        # 1:1: 세로 영상 → 정사각형 (너비 기준 중앙 crop)
+        #   crop_w = iw, crop_h = iw, y = (ih-iw)/2
+        # 4:5: 세로 영상 → 4:5 (너비 기준: width=iw, height=iw*5/4)
+        #   iw=1080 → height=1350 → y=(1920-1350)/2=285
+        # 16:9: 세로 영상 → 가로 출력 (너비 기준: width=iw, height=iw*9/16)
+        #   iw=1080 → height=607 → y=(1920-607)/2=656
         configs = {
             "9:16": (
-                "crop=trunc(ih*9/16/2)*2:ih:(iw-trunc(ih*9/16/2)*2)/2:0",
+                # iw*16/9이 ih보다 작을 수도 있으므로 min(ih, iw*16/9) 사용
+                "crop=trunc(iw/2)*2:trunc(iw*16/9/2)*2:0:(ih-trunc(iw*16/9/2)*2)/2",
                 "scale=720:1280",
                 "pad=720:1280:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "1:1": (
+                # 너비 기준 정사각형 중앙 crop
                 "crop=trunc(iw/2)*2:trunc(iw/2)*2:0:(ih-trunc(iw/2)*2)/2",
                 "scale=720:720",
                 "pad=720:720:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "4:5": (
-                "crop=trunc(ih*4/5/2)*2:ih:(iw-trunc(ih*4/5/2)*2)/2:0",
+                # 너비 기준 4:5 중앙 crop (height = iw * 5/4)
+                "crop=trunc(iw/2)*2:trunc(iw*5/4/2)*2:0:(ih-trunc(iw*5/4/2)*2)/2",
                 "scale=720:900",
                 "pad=720:900:(ow-iw)/2:(oh-ih)/2:black",
             ),
             "16:9": (
-                "",
+                # 너비 기준 16:9 중앙 crop (height = iw * 9/16)
+                "crop=trunc(iw/2)*2:trunc(iw*9/16/2)*2:0:(ih-trunc(iw*9/16/2)*2)/2",
                 "scale=1280:720",
                 "pad=1280:720:(ow-iw)/2:(oh-ih)/2:black",
             ),
