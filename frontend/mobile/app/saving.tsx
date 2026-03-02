@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { uploadPhotos, requestTimelapseFromPhotos, getTimelapseStatus } from '../src/api/timelapse';
 
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
@@ -22,26 +23,60 @@ const DARK = '#1a1a1a';
 type StepStatus = 'pending' | 'active' | 'done';
 type Step = { label: string; status: StepStatus };
 
-const WEB_STEPS: Step[] = [
-  { label: 'Preparing...', status: 'pending' },
-  { label: 'Processing video...', status: 'pending' },
-  { label: 'Done!', status: 'pending' },
-];
-
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_COUNT = 150;
 
 export default function SavingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ downloadUrl: string }>();
+  const params = useLocalSearchParams<{
+    downloadUrl: string;
+    overlayStyle: string;
+    streak: string;
+    studyMinutes: string;
+    recordingSeconds: string;
+    outputSeconds: string;
+    aspectRatio: string;
+    timerMode: string;
+    overlayText: string;
+    photoUris: string;
+  }>();
+
   const downloadUrl = params.downloadUrl ?? '';
+  const overlayStyle = params.overlayStyle ?? 'none';
+  const streak = Number(params.streak) || 0;
+  const studyMinutes = Number(params.studyMinutes) || 0;
+  const recordingSeconds = Number(params.recordingSeconds) || 0;
+  const outputSeconds = Number(params.outputSeconds) || 30;
+  const aspectRatio = params.aspectRatio ?? '9:16';
+  const timerMode = params.timerMode ?? 'countdown';
+  const overlayText = params.overlayText ?? '';
+  const photoUrisRaw = params.photoUris ?? '';
+  const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
+
   const isWeb = Platform.OS === 'web';
   const isRemoteUrl = downloadUrl.startsWith('http');
+  const hasOverlay = overlayStyle !== 'none';
+  // 오버레이가 있고 사진 URI가 있으면 서버 재합성, 없으면 기존 URL 다운로드
+  const needsRecomposite = hasOverlay && photoUris.length > 0;
   const hasRun = useRef(false);
 
   const buildSteps = (): Step[] => {
-    if (isWeb) return WEB_STEPS.map(s => ({ ...s }));
+    if (isWeb) {
+      return [
+        { label: 'Preparing...', status: 'pending' },
+        { label: 'Processing video...', status: 'pending' },
+        { label: 'Done!', status: 'pending' },
+      ];
+    }
     const s: Step[] = [{ label: 'Requesting permission...', status: 'pending' }];
-    if (isRemoteUrl) s.push({ label: 'Downloading video...', status: 'pending' });
+    if (needsRecomposite) {
+      s.push({ label: 'Compositing overlay...', status: 'pending' });
+    }
+    if (isRemoteUrl || needsRecomposite) {
+      s.push({ label: 'Downloading video...', status: 'pending' });
+    }
     s.push({ label: 'Saving to gallery...', status: 'pending' }, { label: 'Done!', status: 'pending' });
     return s;
   };
@@ -103,15 +138,71 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      let localUri = downloadUrl;
-      if (isRemoteUrl) {
+      let finalDownloadUrl = downloadUrl;
+
+      // ── 오버레이 서버 합성 (사진이 있을 때만) ──
+      if (needsRecomposite) {
+        setActive(idx);
+
+        try {
+          // 사진 업로드
+          const CHUNK_SIZE = 50;
+          const allFileIds: string[] = [];
+          const totalChunks = Math.ceil(photoUris.length / CHUNK_SIZE);
+          for (let ci = 0; ci < totalChunks; ci++) {
+            const chunk = photoUris.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
+            const res = await uploadPhotos(chunk);
+            allFileIds.push(...res.data.fileIds);
+          }
+
+          // 오버레이 포함 타임랩스 요청
+          const taskRes = await requestTimelapseFromPhotos({
+            fileIds: allFileIds,
+            outputSeconds,
+            aspectRatio,
+            overlayStyle,
+            overlayText,
+            streak,
+            studyMinutes,
+            recordingSeconds,
+            timerMode,
+          });
+          const taskId = taskRes.data.taskId;
+
+          // 폴링
+          let pollCount = 0;
+          while (pollCount < MAX_POLL_COUNT) {
+            await wait(POLL_INTERVAL_MS);
+            pollCount++;
+            const statusRes = await getTimelapseStatus(taskId);
+            const { status: taskStatus, downloadUrl: url } = statusRes.data as any;
+            if (taskStatus === 'completed' && url) {
+              const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
+              finalDownloadUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+              break;
+            }
+            if (taskStatus === 'failed') {
+              throw new Error('Overlay compositing failed on server');
+            }
+          }
+        } catch (overlayErr) {
+          console.warn('[saving] overlay compositing failed, using original:', overlayErr);
+          // 오버레이 합성 실패 시 원본 URL 사용
+          finalDownloadUrl = downloadUrl;
+        }
+
+        setDone(idx); idx++;
+      }
+
+      // ── 다운로드 ──
+      let localUri = finalDownloadUrl;
+      if (finalDownloadUrl.startsWith('http')) {
         setActive(idx);
         const filename = `timelapse_${Date.now()}.mp4`;
         const dest = `${FileSystem.documentDirectory}${filename}`;
-        console.log('[saving] downloading from:', downloadUrl);
-        const result = await FileSystem.downloadAsync(downloadUrl, dest);
+        console.log('[saving] downloading from:', finalDownloadUrl);
+        const result = await FileSystem.downloadAsync(finalDownloadUrl, dest);
         console.log('[saving] download result:', result.status, result.uri);
-        // 200 or 206 (partial content) 모두 정상
         if (result.status !== 200 && result.status !== 206) {
           throw new Error(`Download failed: HTTP ${result.status}`);
         }
@@ -119,6 +210,7 @@ export default function SavingScreen() {
         setDone(idx); idx++;
       }
 
+      // ── 갤러리 저장 ──
       console.log('[saving] saving to library:', localUri);
       setActive(idx);
       await MediaLibrary.saveToLibraryAsync(localUri);

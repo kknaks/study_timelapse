@@ -11,11 +11,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS } from '../src/constants';
 import { updateSession } from '../src/api/sessions';
+import { uploadPhotos, requestTimelapseFromPhotos, getTimelapseStatus } from '../src/api/timelapse';
 
-type Stage = 'converting' | 'done' | 'error';
+type Stage = 'uploading' | 'converting' | 'done' | 'error';
 
 function getStageIcon(stage: Stage): string {
   switch (stage) {
+    case 'uploading': return '↑';
     case 'converting': return '▶';
     case 'done': return '✓';
     case 'error': return '✕';
@@ -31,12 +33,8 @@ function getMotivationMessage(ratio: number): string {
   return 'Every step forward matters. Keep going!';
 }
 
-const getScaleFilter = (ar: string): string => {
-  if (ar === '9:16') return 'scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black';
-  if (ar === '1:1') return 'scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2:black';
-  if (ar === '4:5') return 'scale=720:900:force_original_aspect_ratio=decrease,pad=720:900:(ow-iw)/2:(oh-ih)/2:black';
-  return 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black'; // 16:9
-};
+const POLL_INTERVAL_MS = 2000; // 2초마다 상태 폴링
+const MAX_POLL_COUNT = 150;    // 최대 5분 대기
 
 export default function ProcessingScreen() {
   const router = useRouter();
@@ -49,6 +47,9 @@ export default function ProcessingScreen() {
     studyMinutes: string;
     timerMode: string;
     cameraFacing: string;
+    overlayStyle: string;
+    overlayText: string;
+    streak: string;
   }>();
 
   const photoUrisRaw = params.photoUris ?? '';
@@ -60,15 +61,19 @@ export default function ProcessingScreen() {
   const aspectRatio = params.aspectRatio ?? '9:16';
   const studyMinutes = Number(params.studyMinutes) || 60;
   const timerMode = params.timerMode ?? 'countdown';
+  const overlayStyle = params.overlayStyle ?? 'none';
+  const overlayText = params.overlayText ?? '';
+  const streak = Number(params.streak) || 0;
   const achievementRatio = Math.min(1, recordingSecs / (studyMinutes * 60));
 
-  const [stage, setStage] = useState<Stage>('converting');
+  const [stage, setStage] = useState<Stage>('uploading');
+  const [stageLabel, setStageLabel] = useState('Uploading photos...');
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [showCancelModal, setShowCancelModal] = useState(false);
 
   const cancelledRef = useRef(false);
-  const [resultUrl, setResultUrl] = useState('');
+  const pollCountRef = useRef(0);
 
   const navigateToResult = useCallback((url = '') => {
     const localUri = url && !url.startsWith('file://') && !url.startsWith('http')
@@ -85,9 +90,11 @@ export default function ProcessingScreen() {
         aspectRatio,
         timerMode,
         cameraFacing,
+        // 원본 사진 URI 목록: result → saving에서 오버레이 합성 시 재사용
+        photoUris: photoUrisRaw,
       },
     });
-  }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode, cameraFacing]);
+  }, [router, sessionId, studyMinutes, recordingSecs, outputSecs, aspectRatio, timerMode, cameraFacing, photoUrisRaw]);
 
   useEffect(() => {
     processVideo();
@@ -114,49 +121,86 @@ export default function ProcessingScreen() {
     }
 
     try {
-      // 동적 import — 웹에서는 이 코드에 도달하지 않음
-      const { FFmpegKit, ReturnCode } = await import('ffmpeg-kit-react-native');
-      const FileSystem = await import('expo-file-system/legacy');
+      // ── Step 1: 사진 업로드 ──
+      setStage('uploading');
+      setStageLabel(`Uploading ${photoUris.length} photos...`);
+      setProgress(5);
 
-      setStage('converting');
-      setProgress(10);
+      const CHUNK_SIZE = 50; // 50장씩 청크 업로드
+      const allFileIds: string[] = [];
+      const totalChunks = Math.ceil(photoUris.length / CHUNK_SIZE);
 
-      // filelist.txt 생성
-      const frameDuration = 1.0 / 30;
-      const filelistContent = photoUris
-        .map(uri => `file '${uri}'\nduration ${frameDuration.toFixed(6)}`)
-        .join('\n');
-      const filelistPath = `${FileSystem.documentDirectory}filelist_${Date.now()}.txt`;
-      await FileSystem.writeAsStringAsync(filelistPath, filelistContent);
+      for (let ci = 0; ci < totalChunks; ci++) {
+        if (cancelledRef.current) return;
 
-      if (cancelledRef.current) return;
-      setProgress(20);
+        const chunk = photoUris.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
+        const res = await uploadPhotos(chunk);
+        allFileIds.push(...res.data.fileIds);
 
-      // 출력 파일 경로
-      const outputPath = `${FileSystem.documentDirectory}timelapse_${Date.now()}.mp4`;
-
-      // FFmpeg 명령어 실행
-      const scaleFilter = getScaleFilter(aspectRatio);
-      const cmd = `-y -f concat -safe 0 -i "${filelistPath}" -vf "${scaleFilter}" -r 30 -c:v libx264 -preset ultrafast -crf 23 -pix_fmt yuv420p -movflags +faststart "${outputPath}"`;
-
-      setProgress(40);
-
-      const session = await FFmpegKit.execute(cmd);
-
-      if (cancelledRef.current) return;
-
-      const returnCode = await session.getReturnCode();
-
-      if (!ReturnCode.isSuccess(returnCode)) {
-        const logs = await session.getAllLogsAsString();
-        throw new Error(`FFmpeg failed: ${logs?.slice(-200)}`);
+        const uploadProgress = Math.round(((ci + 1) / totalChunks) * 40);
+        setProgress(5 + uploadProgress);
+        setStageLabel(`Uploading... (${allFileIds.length}/${photoUris.length})`);
       }
 
-      // filelist 정리
-      await FileSystem.deleteAsync(filelistPath, { idempotent: true });
+      if (cancelledRef.current) return;
 
+      // ── Step 2: 타임랩스 변환 요청 (오버레이 포함) ──
+      setStage('converting');
+      setStageLabel('Creating timelapse...');
+      setProgress(50);
+
+      const taskRes = await requestTimelapseFromPhotos({
+        fileIds: allFileIds,
+        outputSeconds: outputSecs,
+        aspectRatio,
+        overlayStyle,
+        overlayText,
+        streak,
+        studyMinutes,
+        recordingSeconds: recordingSecs,
+        timerMode,
+      });
+      const taskId = taskRes.data.taskId;
+
+      if (cancelledRef.current) return;
+
+      // ── Step 3: 변환 완료 폴링 ──
+      setStageLabel('Processing video...');
+      setProgress(60);
+
+      let downloadUrl = '';
+      pollCountRef.current = 0;
+
+      while (pollCountRef.current < MAX_POLL_COUNT) {
+        if (cancelledRef.current) return;
+
+        await new Promise<void>(r => setTimeout(r, POLL_INTERVAL_MS));
+        pollCountRef.current++;
+
+        const statusRes = await getTimelapseStatus(taskId);
+        const { status, downloadUrl: url } = statusRes.data as any;
+
+        if (status === 'completed' && url) {
+          downloadUrl = url;
+          break;
+        }
+        if (status === 'failed') {
+          throw new Error('Server failed to create timelapse');
+        }
+
+        // 진행률 표시 (60~95% 범위)
+        const pollProgress = 60 + Math.min(35, Math.round((pollCountRef.current / MAX_POLL_COUNT) * 35));
+        setProgress(pollProgress);
+      }
+
+      if (!downloadUrl) {
+        throw new Error('Timelapse conversion timed out');
+      }
+
+      // ── Step 4: 완료 ──
       setProgress(100);
       setStage('done');
+      setStageLabel('Done!');
 
       // 세션 업데이트
       if (sessionId) {
@@ -171,8 +215,12 @@ export default function ProcessingScreen() {
         }
       }
 
-      setResultUrl(outputPath);
-      navigateToResult(outputPath);
+      // 서버 URL 그대로 result 화면으로 이동
+      // API base URL 구성
+      const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
+      const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${baseUrl}${downloadUrl}`;
+      navigateToResult(fullUrl);
+
     } catch (err) {
       if (cancelledRef.current) return;
       console.error('Processing error:', err);
@@ -192,10 +240,11 @@ export default function ProcessingScreen() {
   };
 
   const handleRetry = () => {
-    setStage('converting');
+    setStage('uploading');
     setProgress(0);
     setErrorMessage('');
     cancelledRef.current = false;
+    pollCountRef.current = 0;
     processVideo();
   };
 
@@ -203,7 +252,11 @@ export default function ProcessingScreen() {
     <View style={styles.container}>
       <View style={styles.content}>
         {/* Stage Icon */}
-        <View style={[styles.stageIconWrap, stage === 'done' && styles.stageIconWrapDone, stage === 'error' && styles.stageIconWrapError]}>
+        <View style={[
+          styles.stageIconWrap,
+          stage === 'done' && styles.stageIconWrapDone,
+          stage === 'error' && styles.stageIconWrapError,
+        ]}>
           <Text style={styles.stageIcon}>{getStageIcon(stage)}</Text>
         </View>
 
@@ -211,6 +264,11 @@ export default function ProcessingScreen() {
         <Text style={styles.title}>
           {stage === 'error' ? 'Oops!' : 'Creating Your Timelapse'}
         </Text>
+
+        {/* Stage Label */}
+        {stage !== 'error' && (
+          <Text style={styles.stageLabel}>{stageLabel}</Text>
+        )}
 
         {/* Progress bar — 달성 비율 표시 */}
         {stage !== 'error' && (
@@ -259,7 +317,7 @@ export default function ProcessingScreen() {
         {stage === 'done' && (
           <TouchableOpacity
             style={styles.viewResultsButton}
-            onPress={() => navigateToResult(resultUrl)}
+            onPress={() => navigateToResult('')}
           >
             <Text style={styles.viewResultsText}>View Results →</Text>
           </TouchableOpacity>
@@ -344,10 +402,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageLabel: {
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   motivationLabel: {
     fontSize: 17,
@@ -385,18 +443,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     marginTop: 6,
-  },
-  progressText: {
-    marginTop: 8,
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  tip: {
-    marginTop: 40,
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
   },
   viewResultsButton: {
     marginTop: 32,

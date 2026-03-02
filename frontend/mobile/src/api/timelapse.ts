@@ -48,4 +48,10 @@ export const requestTimelapseFromPhotos = (data: {
   fileIds: string[];
   outputSeconds: number;
   aspectRatio: string;
+  overlayStyle?: string;
+  overlayText?: string;
+  streak?: number;
+  studyMinutes?: number;
+  recordingSeconds?: number;
+  timerMode?: string;
 }) => apiClient.post<{ taskId: string }>('/api/timelapse-from-photos', data);
