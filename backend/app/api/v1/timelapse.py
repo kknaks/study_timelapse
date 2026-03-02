@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import os
+import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from app.schemas.timelapse import TimelapseCreateResponse, TimelapseStatusResponse
+from app.config import settings
+from app.schemas.timelapse import (
+    TimelapseCreateResponse,
+    TimelapseFromPhotosRequest,
+    TimelapseStatusResponse,
+    UploadPhotosResponse,
+)
 from app.services.timelapse_service import TimelapseService
 from app.services.upload_service import UploadService
 
@@ -94,6 +101,58 @@ async def download_timelapse(task_id: str) -> FileResponse:
         media_type="video/mp4",
         filename="timelapse.mp4",
     )
+
+
+@router.post(
+    "/upload-photos",
+    summary="사진 배열 업로드",
+    response_model=UploadPhotosResponse,
+    status_code=201,
+)
+async def upload_photos(files: list[UploadFile]) -> UploadPhotosResponse:
+    """여러 장의 JPEG 사진을 업로드하고 fileId 목록을 반환한다."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    file_ids: list[str] = []
+
+    for file in files:
+        file_id = str(uuid.uuid4())
+        file_path = os.path.join(settings.upload_dir, f"{file_id}.jpg")
+
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        upload_service.store_photo(file_id, file_path)
+        file_ids.append(file_id)
+
+    return UploadPhotosResponse(fileIds=file_ids, count=len(file_ids))
+
+
+@router.post(
+    "/timelapse-from-photos",
+    summary="사진 배열로 타임랩스 생성",
+    response_model=TimelapseCreateResponse,
+    status_code=202,
+)
+async def create_timelapse_from_photos(
+    request: TimelapseFromPhotosRequest,
+) -> TimelapseCreateResponse:
+    """저장된 사진 ID 배열을 타임랩스 영상으로 변환하는 작업을 시작한다."""
+    if not request.fileIds:
+        raise HTTPException(status_code=400, detail="fileIds must not be empty")
+
+    try:
+        task_id = await timelapse_service.create_task_from_photos(
+            request.fileIds,
+            request.outputSeconds,
+            request.aspectRatio,
+        )
+        return TimelapseCreateResponse(taskId=task_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post(

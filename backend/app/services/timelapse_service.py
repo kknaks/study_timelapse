@@ -66,6 +66,41 @@ class TimelapseService:
     def get_task(self, task_id: str) -> dict | None:
         return task_store.get(task_id)
 
+    async def create_task_from_photos(
+        self,
+        file_ids: list[str],
+        output_seconds: int,
+        aspect_ratio: str = "9:16",
+    ) -> str:
+        """저장된 사진 ID 배열로 타임랩스 영상 생성 태스크를 만든다."""
+        photo_paths: list[str] = []
+        for fid in file_ids:
+            info = self.upload_service.get_file(fid)
+            if not info:
+                raise FileNotFoundError(f"Photo {fid} not found")
+            photo_paths.append(info["file_path"])
+
+        task_id = str(uuid.uuid4())
+        output_path = os.path.join(settings.upload_dir, f"{task_id}_timelapse.mp4")
+
+        task_store[task_id] = {
+            "task_id": task_id,
+            "file_ids": file_ids,
+            "output_seconds": output_seconds,
+            "aspect_ratio": aspect_ratio,
+            "status": "processing",
+            "progress": 0,
+            "output_path": output_path,
+        }
+
+        asyncio.create_task(
+            self._run_ffmpeg_from_photos(
+                task_id, photo_paths, output_path, output_seconds, aspect_ratio,
+            )
+        )
+
+        return task_id
+
     # ── 타임랩스 파라미터 계산 ──
 
     def _calc_timelapse_params(
@@ -253,6 +288,80 @@ class TimelapseService:
         except Exception as e:
             task["status"] = "failed"
             logger.exception(f"[{task_id}] Conversion error: {e}")
+
+    async def _run_ffmpeg_from_photos(
+        self,
+        task_id: str,
+        photo_paths: list[str],
+        output_path: str,
+        output_seconds: int,
+        aspect_ratio: str = "9:16",
+    ) -> None:
+        """사진 목록을 concat 방식으로 타임랩스 영상으로 변환한다."""
+        task = task_store[task_id]
+        filelist_path = os.path.join(settings.upload_dir, f"{task_id}_filelist.txt")
+        try:
+            frame_duration = 1.0 / BASE_FPS  # 각 사진 = 1/30초 (1프레임)
+
+            # filelist.txt 생성
+            lines: list[str] = []
+            for path in photo_paths:
+                lines.append(f"file '{path}'")
+                lines.append(f"duration {frame_duration:.6f}")
+            # concat demuxer 마지막 항목 처리 (마지막 파일도 한 번 더 기록)
+            if photo_paths:
+                lines.append(f"file '{photo_paths[-1]}'")
+            with open(filelist_path, "w") as f:
+                f.write("\n".join(lines) + "\n")
+
+            _, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
+            vf = (
+                f"{scale_filter}:force_original_aspect_ratio=decrease,"
+                f"{pad_filter}"
+            )
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", filelist_path,
+                "-vf", vf,
+                "-r", str(BASE_FPS),
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+
+            logger.info(f"[{task_id}] photos→timelapse cmd: {' '.join(cmd)}")
+
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+
+            stderr_text = stderr.decode() if stderr else ""
+            logger.info(f"[{task_id}] photos ffmpeg exit: {process.returncode}")
+            if stderr_text:
+                logger.info(f"[{task_id}] stderr (last 500): {stderr_text[-500:]}")
+
+            if process.returncode == 0 and os.path.exists(output_path):
+                task["status"] = "completed"
+                task["progress"] = 100
+            else:
+                task["status"] = "failed"
+                logger.error(f"[{task_id}] photos ffmpeg failed (code {process.returncode})")
+
+        except Exception as e:
+            task["status"] = "failed"
+            logger.exception(f"[{task_id}] Photo timelapse error: {e}")
+        finally:
+            # filelist.txt 정리
+            if os.path.exists(filelist_path):
+                os.remove(filelist_path)
 
     async def _probe_clean(self, file_path: str, fallback_seconds: float) -> tuple[int, float]:
         """깨끗한 mp4에서 프레임수/길이 파악."""

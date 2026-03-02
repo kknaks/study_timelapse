@@ -66,6 +66,18 @@ class UploadService:
     def get_file(self, file_id: str) -> dict | None:
         return file_store.get(file_id)
 
+    def store_photo(self, file_id: str, file_path: str) -> None:
+        """사진 파일 정보를 file_store에 등록한다."""
+        file_store[file_id] = {
+            "file_id": file_id,
+            "filename": os.path.basename(file_path),
+            "original_filename": os.path.basename(file_path),
+            "file_path": file_path,
+            "mime_type": "image/jpeg",
+            "total_frames": 1,
+            "duration": 0.0,
+        }
+
     async def _probe_video(self, file_path: str) -> tuple[int, float]:
         """ffprobe로 총 프레임 수와 길이(초)를 반환한다."""
         # 프레임 수 + 길이를 한번에 (count_frames로 정확한 값)

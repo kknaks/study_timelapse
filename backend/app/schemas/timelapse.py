@@ -31,3 +31,29 @@ class TimelapseStatusResponse(BaseModel):
     progress: int
     outputSeconds: int | None = None
     downloadUrl: str | None = None
+
+
+# ── 사진 배열 → 타임랩스 ──
+
+
+class UploadPhotosResponse(BaseModel):
+    """사진 업로드 응답."""
+
+    fileIds: list[str]
+    count: int
+
+
+class TimelapseFromPhotosRequest(BaseModel):
+    """사진 배열로 타임랩스 생성 요청."""
+
+    fileIds: list[str]
+    outputSeconds: int = 15
+    aspectRatio: str = "9:16"
+
+    @field_validator("aspectRatio")
+    @classmethod
+    def validate_aspect_ratio(cls, v: str) -> str:
+        valid = ("9:16", "1:1", "4:5", "16:9")
+        if v not in valid:
+            raise ValueError(f"aspectRatio must be one of {valid}")
+        return v
