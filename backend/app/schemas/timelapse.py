@@ -49,6 +49,12 @@ class TimelapseFromPhotosRequest(BaseModel):
     fileIds: list[str]
     outputSeconds: int = 15
     aspectRatio: str = "9:16"
+    overlayStyle: str = "none"  # none | timer | progress | streak
+    overlayText: str = ""       # 타이머 표시 텍스트 (예: "00:25:00")
+    streak: int = 0             # streak 일수
+    studyMinutes: int = 0       # 공부 목표 시간 (분)
+    recordingSeconds: int = 0   # 실제 녹화 시간 (초)
+    timerMode: str = "countdown"  # countdown | countup
 
     @field_validator("aspectRatio")
     @classmethod
@@ -56,4 +62,12 @@ class TimelapseFromPhotosRequest(BaseModel):
         valid = ("9:16", "1:1", "4:5", "16:9")
         if v not in valid:
             raise ValueError(f"aspectRatio must be one of {valid}")
+        return v
+
+    @field_validator("overlayStyle")
+    @classmethod
+    def validate_overlay_style(cls, v: str) -> str:
+        valid = ("none", "timer", "progress", "streak")
+        if v not in valid:
+            raise ValueError(f"overlayStyle must be one of {valid}")
         return v

@@ -149,6 +149,12 @@ async def create_timelapse_from_photos(
             request.fileIds,
             request.outputSeconds,
             request.aspectRatio,
+            overlay_style=request.overlayStyle,
+            overlay_text=request.overlayText,
+            streak=request.streak,
+            study_minutes=request.studyMinutes,
+            recording_seconds=request.recordingSeconds,
+            timer_mode=request.timerMode,
         )
         return TimelapseCreateResponse(taskId=task_id)
     except FileNotFoundError as e:

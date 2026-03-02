@@ -71,6 +71,12 @@ class TimelapseService:
         file_ids: list[str],
         output_seconds: int,
         aspect_ratio: str = "9:16",
+        overlay_style: str = "none",
+        overlay_text: str = "",
+        streak: int = 0,
+        study_minutes: int = 0,
+        recording_seconds: int = 0,
+        timer_mode: str = "countdown",
     ) -> str:
         """저장된 사진 ID 배열로 타임랩스 영상 생성 태스크를 만든다."""
         photo_paths: list[str] = []
@@ -88,6 +94,7 @@ class TimelapseService:
             "file_ids": file_ids,
             "output_seconds": output_seconds,
             "aspect_ratio": aspect_ratio,
+            "overlay_style": overlay_style,
             "status": "processing",
             "progress": 0,
             "output_path": output_path,
@@ -96,6 +103,8 @@ class TimelapseService:
         asyncio.create_task(
             self._run_ffmpeg_from_photos(
                 task_id, photo_paths, output_path, output_seconds, aspect_ratio,
+                overlay_style, overlay_text, streak,
+                study_minutes, recording_seconds, timer_mode,
             )
         )
 
@@ -289,6 +298,128 @@ class TimelapseService:
             task["status"] = "failed"
             logger.exception(f"[{task_id}] Conversion error: {e}")
 
+    def _build_overlay_filters(
+        self,
+        overlay_style: str,
+        overlay_text: str,
+        streak: int,
+        study_minutes: int,
+        recording_seconds: int,
+        timer_mode: str,
+        output_seconds: int,
+        aspect_ratio: str,
+    ) -> list[str]:
+        """오버레이 스타일에 따른 FFmpeg drawtext/drawbox 필터 목록 반환."""
+        filters: list[str] = []
+
+        # 영상 크기 결정
+        size_map = {
+            "9:16": (720, 1280),
+            "1:1": (720, 720),
+            "4:5": (720, 900),
+            "16:9": (1280, 720),
+        }
+        vid_w, vid_h = size_map.get(aspect_ratio, (720, 1280))
+
+        # 폰트 크기 (영상 너비 기준)
+        font_size = max(28, int(vid_w * 0.05))
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+        # 워터마크 (항상 표시: 좌하단)
+        watermark_text = "FocusTimelapse"
+        watermark_size = max(18, int(vid_w * 0.032))
+        filters.append(
+            f"drawtext=text='{watermark_text}'"
+            f":fontfile={font_path}"
+            f":fontsize={watermark_size}"
+            f":fontcolor=white@0.9"
+            f":x=14:y=h-th-14"
+            f":shadowcolor=black@0.5:shadowx=1:shadowy=1"
+        )
+
+        if overlay_style == "none":
+            return filters
+
+        # 타이머 오버레이: 우상단에 타이머 텍스트 표시
+        if overlay_style == "timer":
+            # 영상 재생 시간에 따라 타이머 값 변화
+            goal_seconds = study_minutes * 60
+            if timer_mode == "countdown":
+                # 카운트다운: 목표시간에서 감소
+                start_val = goal_seconds
+                # FFmpeg pts 기반: 시작값 - (경과시간 / 출력시간 * 녹화시간)
+                speed = recording_seconds / max(1, output_seconds)
+                timer_expr = (
+                    f"drawtext=text='%{{eif\\:max(0\\,{start_val}-t*{speed:.4f})\\:d}}'"
+                    f":fontfile={font_path}"
+                    f":fontsize={font_size}"
+                    f":fontcolor=white"
+                    f":x=w-tw-14:y=14"
+                    f":shadowcolor=black@0.6:shadowx=0:shadowy=1"
+                )
+            else:
+                # 카운트업: 0에서 증가
+                speed = recording_seconds / max(1, output_seconds)
+                timer_expr = (
+                    f"drawtext=text='%{{eif\\:min({recording_seconds}\\,t*{speed:.4f})\\:d}}'"
+                    f":fontfile={font_path}"
+                    f":fontsize={font_size}"
+                    f":fontcolor=white"
+                    f":x=w-tw-14:y=14"
+                    f":shadowcolor=black@0.6:shadowx=0:shadowy=1"
+                )
+            # HH:MM:SS 형식으로 drawtext pts 활용
+            if overlay_text:
+                # 고정 텍스트로 표시 (시뮬레이션 불필요 시)
+                safe_text = overlay_text.replace("'", "\\'").replace(":", "\\:")
+                filters.append(
+                    f"drawtext=text='{safe_text}'"
+                    f":fontfile={font_path}"
+                    f":fontsize={font_size}"
+                    f":fontcolor=white"
+                    f":x=w-tw-14:y=14"
+                    f":shadowcolor=black@0.6:shadowx=0:shadowy=1"
+                )
+            else:
+                filters.append(timer_expr)
+
+        elif overlay_style == "progress":
+            # 진행 바: 우상단
+            goal_seconds = study_minutes * 60
+            if goal_seconds > 0:
+                bar_w = int(vid_w * 0.25)  # 영상 너비의 25%
+                bar_h = 6
+                bar_x = vid_w - bar_w - 14
+                bar_y = 14
+                # 배경 바 (반투명 흰색)
+                filters.append(
+                    f"drawbox=x={bar_x}:y={bar_y}:w={bar_w}:h={bar_h}"
+                    f":color=white@0.35:t=fill"
+                )
+                # 진행 바: 실제 달성율 기반 (정적)
+                achieved = min(1.0, recording_seconds / goal_seconds)
+                fill_w = max(2, int(bar_w * achieved))
+                filters.append(
+                    f"drawbox=x={bar_x}:y={bar_y}:w={fill_w}:h={bar_h}"
+                    f":color=white@0.95:t=fill"
+                )
+
+        elif overlay_style == "streak":
+            streak_label = f"Day {streak} Streak"
+            if streak == 1:
+                streak_label = "1 Day Streak"
+            safe_streak = streak_label.replace("'", "\\'")
+            filters.append(
+                f"drawtext=text='{safe_streak}'"
+                f":fontfile={font_path}"
+                f":fontsize={font_size}"
+                f":fontcolor=white"
+                f":x=w-tw-14:y=14"
+                f":shadowcolor=black@0.6:shadowx=0:shadowy=1"
+            )
+
+        return filters
+
     async def _run_ffmpeg_from_photos(
         self,
         task_id: str,
@@ -296,8 +427,14 @@ class TimelapseService:
         output_path: str,
         output_seconds: int,
         aspect_ratio: str = "9:16",
+        overlay_style: str = "none",
+        overlay_text: str = "",
+        streak: int = 0,
+        study_minutes: int = 0,
+        recording_seconds: int = 0,
+        timer_mode: str = "countdown",
     ) -> None:
-        """사진 목록을 concat 방식으로 타임랩스 영상으로 변환한다."""
+        """사진 목록을 concat 방식으로 타임랩스 영상으로 변환한다 (오버레이 합성 포함)."""
         task = task_store[task_id]
         filelist_path = os.path.join(settings.upload_dir, f"{task_id}_filelist.txt")
         try:
@@ -315,10 +452,22 @@ class TimelapseService:
                 f.write("\n".join(lines) + "\n")
 
             _, scale_filter, pad_filter = self._get_crop_and_scale(aspect_ratio)
-            vf = (
-                f"{scale_filter}:force_original_aspect_ratio=decrease,"
-                f"{pad_filter}"
+
+            # 기본 비디오 필터: scale + pad
+            vf_parts = [
+                f"{scale_filter}:force_original_aspect_ratio=decrease",
+                pad_filter,
+            ]
+
+            # 오버레이 필터 추가
+            overlay_filters = self._build_overlay_filters(
+                overlay_style, overlay_text, streak,
+                study_minutes, recording_seconds, timer_mode,
+                output_seconds, aspect_ratio,
             )
+            vf_parts.extend(overlay_filters)
+
+            vf = ",".join(vf_parts)
 
             cmd = [
                 "ffmpeg", "-y",
@@ -335,6 +484,7 @@ class TimelapseService:
             ]
 
             logger.info(f"[{task_id}] photos→timelapse cmd: {' '.join(cmd)}")
+            logger.info(f"[{task_id}] overlay_style={overlay_style}, vf={vf[:200]}")
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
