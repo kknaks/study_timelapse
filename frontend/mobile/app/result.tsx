@@ -38,7 +38,7 @@ function getRatio(ar: string): number {
 
 export default function ResultScreen() {
   const router = useRouter();
-  const { width: screenW, height: screenH } = useWindowDimensions();
+  const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
 
   const params = useLocalSearchParams<{
     downloadUrl: string;
@@ -61,20 +61,16 @@ export default function ResultScreen() {
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
 
-  // 실제 영상 렌더 크기 계산 (비율 기반)
-  // 헤더 ~88px, 바텀카드 ~220px 제외
-  const HEADER_H = 88;
-  const BOTTOM_H = 220;
-  const areaW = screenW;
-  const areaH = screenH - HEADER_H - BOTTOM_H;
+  // previewArea onLayout으로 실측한 크기 기반 계산
+  const areaW = areaSize.width;
+  const areaH = areaSize.height;
   const ratio = getRatio(aspectRatio);
   let vidW = areaW;
-  let vidH = areaW / ratio;
+  let vidH = areaW > 0 ? areaW / ratio : 0;
   if (vidH > areaH) {
     vidH = areaH;
     vidW = areaH * ratio;
   }
-  // previewArea 안에서 중앙 배치 시 offset
   const offsetX = (areaW - vidW) / 2;
   const offsetY = (areaH - vidH) / 2;
 
@@ -150,8 +146,14 @@ export default function ResultScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Preview Area */}
-      <View style={[styles.previewArea, { height: areaH }]}>
+      {/* Preview Area — flex:1로 실제 높이 측정 */}
+      <View
+        style={styles.previewArea}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setAreaSize({ width, height });
+        }}
+      >
         {Platform.OS === 'web' ? (
           /* 웹: video 태그 직접 사용 */
           <video
@@ -268,6 +270,7 @@ const styles = StyleSheet.create({
   backIcon: { color: '#FFF', fontSize: 22 },
   headerTitle: { color: '#FFF', fontSize: 17, fontWeight: '600' },
   previewArea: {
+    flex: 1,
     width: '100%',
     backgroundColor: '#000',
     overflow: 'hidden',
