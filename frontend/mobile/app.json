@@ -50,7 +50,8 @@
           "savePhotosPermission": "Allow FocusTimelapse to save your timelapse videos.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      "expo-updates"
     ],
     "extra": {
       "eas": {

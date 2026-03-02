@@ -17,6 +17,7 @@
     "expo-file-system": "~55.0.10",
     "expo-linking": "~55.0.7",
     "expo-media-library": "~55.0.9",
+    "expo-updates": "~0.27.4",
     "expo-router": "~55.0.3",
     "expo-sharing": "~55.0.11",
     "expo-status-bar": "~55.0.4",
