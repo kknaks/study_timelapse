@@ -100,6 +100,7 @@ export default function FocusScreen() {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.85,
           skipProcessing: true,
+          shutterSound: false,
         });
         if (photo?.uri) {
           photoUrisRef.current.push(photo.uri);
