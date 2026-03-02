@@ -27,10 +27,10 @@ async def create_timelapse(request: dict) -> TimelapseCreateResponse:
     recording_seconds = request.get("recordingSeconds")
     aspect_ratio = request.get("aspectRatio", "9:16")
 
-    if not file_id or output_seconds not in (30, 60, 90):
+    if not file_id or output_seconds not in (15, 30, 45, 60, 90, 120):
         raise HTTPException(
             status_code=400,
-            detail="Invalid request: outputSeconds must be 30, 60, or 90",
+            detail="Invalid request: outputSeconds must be 15, 30, 45, 60, 90, or 120",
         )
 
     if recording_seconds is None:
