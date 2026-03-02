@@ -104,6 +104,7 @@ export default function FocusScreen() {
     try {
       const video = await cameraRef.current.recordAsync({
         maxDuration: totalSeconds + 5, // buffer
+        videoQuality: '720p', // 파일 크기 최소화 (기본 4K → 720p)
       });
       // recordAsync resolves when recording stops
       if (video?.uri) {
