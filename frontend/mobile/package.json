@@ -28,7 +28,8 @@
     "react-native-screens": "~4.23.0",
     "react-native-svg": "15.15.3",
     "react-native-view-shot": "4.0.3",
-    "react-native-web": "^0.21.0"
+    "react-native-web": "^0.21.0",
+    "ffmpeg-kit-react-native": "6.0.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

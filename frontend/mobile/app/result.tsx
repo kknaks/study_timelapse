@@ -12,7 +12,6 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
-import ViewShot from 'react-native-view-shot';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
@@ -40,7 +39,6 @@ function getRatio(ar: string): number {
 export default function ResultScreen() {
   const router = useRouter();
   const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
-  const viewShotRef = useRef<ViewShot>(null);
 
   const params = useLocalSearchParams<{
     downloadUrl: string;
@@ -166,69 +164,55 @@ export default function ResultScreen() {
             autoPlay loop muted playsInline
             style={{
               position: 'absolute',
-              left: offsetX,
-              top: offsetY,
-              width: vidW,
-              height: vidH,
+              left: offsetX, top: offsetY,
+              width: vidW, height: vidH,
               objectFit: 'cover',
               transform: isMirrored ? 'scaleX(-1)' : undefined,
             } as React.CSSProperties}
           />
         ) : (
-          /* ViewShot: offsetX/offsetY 위치에 딱 맞게, 내부는 left:0 top:0 기준 */
-          <ViewShot
-            ref={viewShotRef}
-            style={{
-              position: 'absolute',
-              left: offsetX,
-              top: offsetY,
-              width: vidW,
-              height: vidH,
-              overflow: 'hidden',
-            }}
-            options={{ format: 'jpg', quality: 0.95 }}
-          >
-            {/* VideoView: ViewShot 안에서 꽉 채움 */}
-            <View
-              style={{
-                width: vidW,
-                height: vidH,
-                overflow: 'hidden',
-                transform: isMirrored ? [{ scaleX: -1 }] : undefined,
-              }}
-            >
-              <VideoView
-                style={{ width: vidW, height: vidH }}
-                player={player}
-                nativeControls={false}
-                contentFit="cover"
-              />
-            </View>
+          /* 영상: offsetX/offsetY 위치에 vidW x vidH 크기 */
+          <View style={{
+            position: 'absolute',
+            left: offsetX, top: offsetY,
+            width: vidW, height: vidH,
+            overflow: 'hidden',
+            transform: isMirrored ? [{ scaleX: -1 }] : undefined,
+          }}>
+            <VideoView
+              style={{ width: vidW, height: vidH }}
+              player={player}
+              nativeControls={false}
+              contentFit="cover"
+            />
+          </View>
+        )}
 
-            {/* 오버레이: ViewShot 안 left:0, top:0 기준 */}
-            <View
-              pointerEvents="none"
-              style={{ position: 'absolute', left: 0, top: 0, width: vidW, height: vidH }}
-            >
-              <View style={styles.watermark}>
-                <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
-                <Text style={styles.watermarkText}>FocusTimelapse</Text>
-              </View>
-              {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
-                <View style={styles.topRightOverlay}>
-                  {overlayStyle === 'timer' && <Text style={styles.timerText}>{formatTime(elapsed)}</Text>}
-                  {overlayStyle === 'progress' && (
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
-                    </View>
-                  )}
-                  {overlayStyle === 'streak' && (
-                    <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
-                  )}
-                </View>
-              )}
+        {/* 오버레이: 영상과 동일한 위치/크기 (웹/네이티브 공통) */}
+        {vidW > 0 && (
+          <View pointerEvents="none" style={{
+            position: 'absolute',
+            left: offsetX, top: offsetY,
+            width: vidW, height: vidH,
+          }}>
+            <View style={styles.watermark}>
+              <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
+              <Text style={styles.watermarkText}>FocusTimelapse</Text>
             </View>
-          </ViewShot>
+            {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
+              <View style={styles.topRightOverlay}>
+                {overlayStyle === 'timer' && <Text style={styles.timerText}>{formatTime(elapsed)}</Text>}
+                {overlayStyle === 'progress' && (
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+                  </View>
+                )}
+                {overlayStyle === 'streak' && (
+                  <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
+                )}
+              </View>
+            )}
+          </View>
         )}
       </View>
 
