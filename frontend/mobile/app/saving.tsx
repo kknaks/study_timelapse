@@ -108,11 +108,17 @@ export default function SavingScreen() {
         setActive(idx);
         const filename = `timelapse_${Date.now()}.mp4`;
         const dest = `${FileSystem.documentDirectory}${filename}`;
-        const { uri } = await FileSystem.downloadAsync(downloadUrl, dest);
-        localUri = uri;
+        console.log('[saving] downloading from:', downloadUrl);
+        const result = await FileSystem.downloadAsync(downloadUrl, dest);
+        console.log('[saving] download result:', result.status, result.uri);
+        if (result.status !== 200) {
+          throw new Error(`Download failed: HTTP ${result.status}`);
+        }
+        localUri = result.uri;
         setDone(idx); idx++;
       }
 
+      console.log('[saving] saving to library:', localUri);
       setActive(idx);
       await MediaLibrary.saveToLibraryAsync(localUri);
       setDone(idx); idx++;
