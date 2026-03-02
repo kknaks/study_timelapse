@@ -13,7 +13,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import ViewShot from 'react-native-view-shot';
-import * as MediaLibrary from 'expo-media-library';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
@@ -125,33 +124,11 @@ export default function ResultScreen() {
       : ((goalSeconds - elapsed) / goalSeconds) * 100
     : 0;
 
-  const handleSave = async () => {
-    if (Platform.OS === 'web') {
-      router.push({ pathname: '/saving', params: { downloadUrl } });
-      return;
-    }
-    // 네이티브: ViewShot으로 영상+오버레이 캡처 → 갤러리 저장
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to save to your gallery.');
-        return;
-      }
-      if (!viewShotRef.current?.capture) {
-        // ViewShot 없으면 기존 방식으로
-        router.push({ pathname: '/saving', params: { downloadUrl } });
-        return;
-      }
-      Alert.alert('Saving...', 'Capturing your timelapse with overlay...');
-      const uri = await viewShotRef.current.capture();
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Alert.alert('Saved!', 'Your timelapse has been saved to your gallery.', [
-        { text: 'OK', onPress: () => router.replace('/stats') },
-      ]);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('Error', `Failed to save: ${msg}`);
-    }
+  const handleSave = () => {
+    router.push({
+      pathname: '/saving',
+      params: { downloadUrl, overlayStyle },
+    });
   };
 
   const handleUpgrade = () => Alert.alert('Coming Soon', 'Upgrade to remove watermark!');
@@ -179,6 +156,7 @@ export default function ResultScreen() {
         style={styles.previewArea}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout;
+          console.log(`[result] areaSize: ${width}x${height}, vidW: ${width > 0 ? Math.min(width, height * getRatio(aspectRatio)) : 0}, vidH: ${height}`);
           setAreaSize({ width, height });
         }}
       >
