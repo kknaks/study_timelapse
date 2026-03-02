@@ -193,7 +193,9 @@ export default function FocusScreen() {
     return (
       <View style={styles.permContainer}>
         <StatusBar barStyle="light-content" />
-        <Text style={styles.permEmoji}>📷</Text>
+        <View style={styles.permIconWrap}>
+          <Text style={styles.permIconText}>⊙</Text>
+        </View>
         <Text style={styles.permTitle}>Camera & Microphone Access</Text>
         <Text style={styles.permText}>
           We need camera and microphone permissions to record your focus session.
@@ -533,6 +535,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
+  },
+  permIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2.5,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  permIconText: {
+    fontSize: 32,
+    color: '#FFF',
   },
   permEmoji: {
     fontSize: 60,
