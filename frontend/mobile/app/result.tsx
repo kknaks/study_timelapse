@@ -5,16 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Platform,
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
-
-const SAMPLE_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
 
 type OverlayStyle = 'none' | 'timer' | 'progress' | 'streak';
 
@@ -40,7 +36,6 @@ export default function ResultScreen() {
   const [areaSize, setAreaSize] = useState({ width: 0, height: 0 });
 
   const params = useLocalSearchParams<{
-    downloadUrl: string;
     sessionId: string;
     studyMinutes: string;
     recordingSeconds: string;
@@ -51,7 +46,6 @@ export default function ResultScreen() {
     photoUris: string;
   }>();
 
-  const downloadUrl = params.downloadUrl || SAMPLE_VIDEO_URL;
   const outputSecs = Number(params.outputSeconds) || 30;
   const studyMinutes = Number(params.studyMinutes) || 0;
   const recordingSecs = Number(params.recordingSeconds) || studyMinutes * 60;
@@ -59,8 +53,17 @@ export default function ResultScreen() {
   const timerMode = params.timerMode ?? 'countdown';
   const cameraFacing = params.cameraFacing ?? 'front';
   const photoUris = params.photoUris ?? '';
+  const sessionId = params.sessionId ?? '';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
+
+  // 사진 배열에서 ~30% 지점 프레임을 프리뷰로 선택
+  const photoArr = photoUris ? photoUris.split(',').filter(Boolean) : [];
+  const previewIndex = Math.min(
+    Math.floor(photoArr.length * 0.3),
+    photoArr.length - 1,
+  );
+  const previewUri = photoArr.length > 0 ? photoArr[Math.max(0, previewIndex)] : '';
 
   // previewArea onLayout으로 실측한 크기 기반 계산
   const areaW = areaSize.width;
@@ -87,12 +90,6 @@ export default function ResultScreen() {
     queryFn: () => getMe().then((r) => r.data),
   });
   const streak = (userData as any)?.data?.streak ?? (userData as any)?.streak ?? 0;
-
-  const player = useVideoPlayer(downloadUrl, (p) => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
 
   useEffect(() => {
     if (overlayStyle === 'none') {
@@ -130,7 +127,6 @@ export default function ResultScreen() {
     router.push({
       pathname: '/saving',
       params: {
-        downloadUrl,
         overlayStyle,
         streak: String(streak),
         studyMinutes: String(studyMinutes),
@@ -141,6 +137,7 @@ export default function ResultScreen() {
         overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
         photoUris,
         cameraFacing,
+        sessionId,
       },
     });
   };
@@ -154,7 +151,7 @@ export default function ResultScreen() {
     { key: 'streak', label: 'Streak' },
   ];
 
-  // 영상 레이아웃이 아직 측정되지 않은 경우
+  // 레이아웃이 아직 측정되지 않은 경우
   const isReady = vidW > 0 && vidH > 0;
 
   return (
@@ -178,35 +175,26 @@ export default function ResultScreen() {
       >
         {isReady && (
           <>
-            {Platform.OS === 'web' ? (
-              <video
-                src={downloadUrl}
-                autoPlay loop muted playsInline
-                style={{
-                  position: 'absolute',
-                  left: offsetX, top: offsetY,
-                  width: vidW, height: vidH,
-                  objectFit: 'cover',
-                  transform: isMirrored ? 'scaleX(-1)' : undefined,
-                } as React.CSSProperties}
-              />
-            ) : (
-              /* 영상: offsetX/offsetY 위치에 vidW x vidH 크기 */
-              <View style={{
-                position: 'absolute',
-                left: offsetX, top: offsetY,
-                width: vidW, height: vidH,
-                overflow: 'hidden',
-                transform: isMirrored ? [{ scaleX: -1 }] : undefined,
-              }}>
-                <VideoView
+            {/* 사진 프리뷰: offsetX/offsetY 위치에 vidW x vidH 크기 */}
+            <View style={{
+              position: 'absolute',
+              left: offsetX, top: offsetY,
+              width: vidW, height: vidH,
+              overflow: 'hidden',
+              transform: isMirrored ? [{ scaleX: -1 }] : undefined,
+            }}>
+              {previewUri ? (
+                <Image
+                  source={{ uri: previewUri }}
                   style={{ width: vidW, height: vidH }}
-                  player={player}
-                  nativeControls={false}
-                  contentFit="cover"
+                  resizeMode="cover"
                 />
-              </View>
-            )}
+              ) : (
+                <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#999', fontSize: 14 }}>No preview available</Text>
+                </View>
+              )}
+            </View>
 
             {/* 오버레이: 영상과 정확히 동일한 위치/크기, overflow hidden으로 경계 밖 잘라냄 */}
             <View pointerEvents="none" style={{

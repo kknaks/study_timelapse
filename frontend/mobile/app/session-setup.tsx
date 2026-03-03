@@ -58,7 +58,6 @@ export default function SessionSetupScreen() {
           studyMinutes: String(focusMinutes),
           outputSeconds: String(outputSeconds),
           aspectRatio,
-          overlayStyle: 'none',
           timerMode,
         },
       });
@@ -78,7 +77,7 @@ export default function SessionSetupScreen() {
       start_time: new Date().toISOString(),
       output_seconds: outputSeconds,
       aspect_ratio: aspectRatio,
-      overlay_style: 'none',
+      overlay_style: 'none', // 오버레이는 result 화면에서 선택
     });
   };
 

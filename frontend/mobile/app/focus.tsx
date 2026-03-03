@@ -29,7 +29,6 @@ export default function FocusScreen() {
     studyMinutes: string;
     outputSeconds: string;
     aspectRatio: string;
-    overlayStyle: string;
     timerMode: string;
   }>();
 
@@ -38,7 +37,6 @@ export default function FocusScreen() {
   const sessionId = params.sessionId ?? '';
   const outputSeconds = Number(params.outputSeconds) || 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
-  const overlayStyle = params.overlayStyle ?? 'none';
   const timerMode = params.timerMode ?? 'countdown';
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -141,7 +139,7 @@ export default function FocusScreen() {
     const photoUris = photoUrisRef.current.join(',');
 
     router.replace({
-      pathname: '/processing',
+      pathname: '/result',
       params: {
         photoUris,
         sessionId,

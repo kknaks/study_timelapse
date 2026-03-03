@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["TimelapseCreatorModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.timelapsecreator.TimelapseCreatorModule"]
+  }
+}

@@ -14,8 +14,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Skia } from "@shopify/react-native-skia";
-import { exportVideoComposition } from "@azzapp/react-native-skia-video";
+import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
+import { updateSession } from '../src/api/sessions';
 
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
@@ -34,7 +34,14 @@ function formatTime(seconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-async function buildTimelapse(params: {
+const RESOLUTIONS: Record<string, [number, number]> = {
+  "9:16": [720, 1280],
+  "1:1":  [720, 720],
+  "16:9": [1280, 720],
+  "4:5":  [720, 900],
+};
+
+async function buildTimelapseNative(params: {
   photoUris: string[];
   outputSeconds: number;
   outputPath: string;
@@ -48,78 +55,34 @@ async function buildTimelapse(params: {
   const { photoUris, outputSeconds, outputPath, aspectRatio, cameraFacing,
           overlayStyle, overlayText, streak, onProgress } = params;
 
-  const resolutions: Record<string, [number, number]> = {
-    "9:16": [720, 1280],
-    "1:1":  [720, 720],
-    "16:9": [1280, 720],
-    "4:5":  [720, 900],
-  };
-  const [outW, outH] = resolutions[aspectRatio] ?? [720, 1280];
+  const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
 
-  const images = await Promise.all(photoUris.map(async (uri) => {
-    const b64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
+  const subscription = onProgress
+    ? addProgressListener((event) => onProgress(event.progress))
+    : null;
+
+  try {
+    await createTimelapse({
+      photoUris,
+      outputPath,
+      outputSeconds,
+      width,
+      height,
+      frameRate: 30,
+      bitRate: 3_500_000,
+      mirrorHorizontally: cameraFacing === 'front',
+      overlayStyle,
+      overlayText,
+      streak,
     });
-    const data = Skia.Data.fromBase64(b64);
-    return Skia.Image.MakeImageFromEncoded(data);
-  }));
-
-  const totalImages = images.length;
-
-  const drawFrame = ({ canvas, currentTime, width, height }: any) => {
-    "worklet";
-    const idx = Math.min(
-      Math.floor((currentTime / outputSeconds) * totalImages),
-      totalImages - 1
-    );
-    const img = images[idx];
-    if (!img) return;
-
-    const imgW = img.width();
-    const imgH = img.height();
-    const targetRatio = width / height;
-    const imgRatio = imgW / imgH;
-    let srcX = 0, srcY = 0, srcW = imgW, srcH = imgH;
-    if (imgRatio > targetRatio) {
-      srcW = imgH * targetRatio;
-      srcX = (imgW - srcW) / 2;
-    } else {
-      srcH = imgW / targetRatio;
-      srcY = (imgH - srcH) / 2;
-    }
-
-    if (cameraFacing === "front") {
-      canvas.save();
-      canvas.scale(-1, 1);
-      canvas.translate(-width, 0);
-    }
-    canvas.drawImageRect(img, { x: srcX, y: srcY, width: srcW, height: srcH }, { x: 0, y: 0, width, height }, Skia.Paint());
-    if (cameraFacing === "front") canvas.restore();
-
-    if (overlayStyle !== "none" && overlayText) {
-      const paint = Skia.Paint();
-      paint.setColor(Skia.Color("white"));
-      const font = Skia.Font(null, 32);
-      canvas.drawText(overlayText, width - 200, 50, font, paint);
-    }
-  };
-
-  await exportVideoComposition({
-    videoComposition: { duration: outputSeconds, items: [] },
-    drawFrame,
-    outPath: outputPath,
-    frameRate: 30,
-    bitRate: 3_500_000,
-    width: outW,
-    height: outH,
-    onProgress,
-  });
+  } finally {
+    subscription?.remove();
+  }
 }
 
 export default function SavingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    downloadUrl: string;
     overlayStyle: string;
     streak: string;
     studyMinutes: string;
@@ -130,6 +93,7 @@ export default function SavingScreen() {
     overlayText: string;
     photoUris: string;
     cameraFacing: string;
+    sessionId: string;
   }>();
 
   const overlayStyle = params.overlayStyle ?? 'none';
@@ -143,6 +107,7 @@ export default function SavingScreen() {
   const photoUrisRaw = params.photoUris ?? '';
   const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
   const cameraFacing = params.cameraFacing ?? 'front';
+  const sessionId = params.sessionId ?? '';
 
   const isWeb = Platform.OS === 'web';
   const hasRun = useRef(false);
@@ -214,7 +179,7 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 1: 온디바이스 Skia 타임랩스 생성 ──
+      // ── Step 1: 온디바이스 네이티브 타임랩스 생성 ──
       setActive(idx);
       if (photoUris.length === 0) {
         throw new Error("No photos captured. Please try again.");
@@ -222,7 +187,7 @@ export default function SavingScreen() {
       const cacheDir = FileSystem.cacheDirectory ?? "";
       const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
 
-      await buildTimelapse({
+      await buildTimelapseNative({
         photoUris,
         outputSeconds,
         outputPath,
@@ -239,6 +204,20 @@ export default function SavingScreen() {
       setActive(idx);
       await MediaLibrary.saveToLibraryAsync(outputPath);
       console.log('[saving] Saved to gallery.');
+
+      // 세션 업데이트
+      if (sessionId) {
+        try {
+          await updateSession(sessionId, {
+            end_time: new Date().toISOString(),
+            duration: recordingSeconds,
+            status: 'completed',
+          });
+        } catch (e) {
+          console.warn('[saving] session update failed:', e);
+        }
+      }
+
       setDone(idx); idx++;
 
       // ── Step 3: 완료 ──

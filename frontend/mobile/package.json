@@ -4,14 +4,12 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
-    "@azzapp/react-native-skia-video": "^0.9.0",
     "@react-native-community/slider": "5.1.2",
-    "@shopify/react-native-skia": "^2.5.0",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.6",
     "expo": "~55.0.4",
