@@ -321,14 +321,14 @@ export default function FocusScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 정지 버튼 — 시작 후에만 표시 */}
+            {/* 정지 버튼 — 프레임 1개 이상 캡처됐을 때만 활성화 */}
             {hasStarted && (
               <TouchableOpacity
-                style={styles.stopButton}
-                onPress={handleStop}
-                activeOpacity={0.7}
+                style={[styles.stopButton, frameCount < 1 && styles.stopButtonDisabled]}
+                onPress={frameCount >= 1 ? handleStop : undefined}
+                activeOpacity={frameCount >= 1 ? 0.7 : 1}
               >
-                <View style={styles.stopIcon} />
+                <View style={[styles.stopIcon, frameCount < 1 && styles.stopIconDisabled]} />
               </TouchableOpacity>
             )}
           </View>
@@ -524,11 +524,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stopButtonDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
   stopIcon: {
     width: 26,
     height: 26,
     borderRadius: 4,
     backgroundColor: '#1a1a1a',
+  },
+  stopIconDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   // Permission screen
   permContainer: {
