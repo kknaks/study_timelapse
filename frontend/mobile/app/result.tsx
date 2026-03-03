@@ -140,6 +140,7 @@ export default function ResultScreen() {
         timerMode,
         overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
         photoUris,
+        cameraFacing,
       },
     });
   };

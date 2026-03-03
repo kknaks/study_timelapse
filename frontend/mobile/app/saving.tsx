@@ -14,7 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { uploadPhotos, requestTimelapseFromPhotos, getTimelapseStatus } from '../src/api/timelapse';
+import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
 
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
@@ -25,8 +25,13 @@ type Step = { label: string; status: StepStatus };
 
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_COUNT = 150;
+function formatTime(seconds: number): string {
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
 
 export default function SavingScreen() {
   const router = useRouter();
@@ -41,9 +46,9 @@ export default function SavingScreen() {
     timerMode: string;
     overlayText: string;
     photoUris: string;
+    cameraFacing: string;
   }>();
 
-  const downloadUrl = params.downloadUrl ?? '';
   const overlayStyle = params.overlayStyle ?? 'none';
   const streak = Number(params.streak) || 0;
   const studyMinutes = Number(params.studyMinutes) || 0;
@@ -54,12 +59,9 @@ export default function SavingScreen() {
   const overlayText = params.overlayText ?? '';
   const photoUrisRaw = params.photoUris ?? '';
   const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
+  const cameraFacing = params.cameraFacing ?? 'front';
 
   const isWeb = Platform.OS === 'web';
-  const isRemoteUrl = downloadUrl.startsWith('http');
-  const hasOverlay = overlayStyle !== 'none';
-  // 오버레이가 있고 사진 URI가 있으면 서버 재합성, 없으면 기존 URL 다운로드
-  const needsRecomposite = hasOverlay && photoUris.length > 0;
   const hasRun = useRef(false);
 
   const buildSteps = (): Step[] => {
@@ -70,15 +72,12 @@ export default function SavingScreen() {
         { label: 'Done!', status: 'pending' },
       ];
     }
-    const s: Step[] = [{ label: 'Requesting permission...', status: 'pending' }];
-    if (needsRecomposite) {
-      s.push({ label: 'Compositing overlay...', status: 'pending' });
-    }
-    if (isRemoteUrl || needsRecomposite) {
-      s.push({ label: 'Downloading video...', status: 'pending' });
-    }
-    s.push({ label: 'Saving to gallery...', status: 'pending' }, { label: 'Done!', status: 'pending' });
-    return s;
+    return [
+      { label: 'Requesting permission...', status: 'pending' },
+      { label: 'Building timelapse...', status: 'pending' },
+      { label: 'Saving to gallery...', status: 'pending' },
+      { label: 'Done!', status: 'pending' },
+    ];
   };
 
   const [steps, setSteps] = useState<Step[]>(buildSteps);
@@ -94,19 +93,11 @@ export default function SavingScreen() {
     setSteps(prev => prev.map((s, i) => i <= idx ? { ...s, status: 'done' } : s));
 
   const navigateToStats = () => {
-    if (Platform.OS === 'web') {
-      window.location.assign('http://localhost:8081/stats');
-    } else {
-      router.replace('/stats');
-    }
+    router.replace('/stats');
   };
 
   const handleShareInstagram = () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('Instagram', 'Open Instagram app to share your timelapse!');
-    } else {
-      Linking.openURL('instagram://');
-    }
+    Linking.openURL('instagram://');
   };
 
   useEffect(() => {
@@ -126,8 +117,9 @@ export default function SavingScreen() {
         return;
       }
 
-      // Mobile
       let idx = 0;
+
+      // ── Step 0: 권한 요청 ──
       setActive(idx);
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -138,89 +130,130 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      let finalDownloadUrl = downloadUrl;
-
-      // ── 오버레이 서버 합성 (사진이 있을 때만) ──
-      if (needsRecomposite) {
-        setActive(idx);
-
-        try {
-          // 사진 업로드
-          const CHUNK_SIZE = 50;
-          const allFileIds: string[] = [];
-          const totalChunks = Math.ceil(photoUris.length / CHUNK_SIZE);
-          for (let ci = 0; ci < totalChunks; ci++) {
-            const chunk = photoUris.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
-            const res = await uploadPhotos(chunk);
-            allFileIds.push(...res.data.fileIds);
-          }
-
-          // 오버레이 포함 타임랩스 요청
-          const taskRes = await requestTimelapseFromPhotos({
-            fileIds: allFileIds,
-            outputSeconds,
-            aspectRatio,
-            overlayStyle,
-            overlayText,
-            streak,
-            studyMinutes,
-            recordingSeconds,
-            timerMode,
-          });
-          const taskId = taskRes.data.taskId;
-
-          // 폴링
-          let pollCount = 0;
-          while (pollCount < MAX_POLL_COUNT) {
-            await wait(POLL_INTERVAL_MS);
-            pollCount++;
-            const statusRes = await getTimelapseStatus(taskId);
-            const { status: taskStatus, downloadUrl: url } = statusRes.data as any;
-            if (taskStatus === 'completed' && url) {
-              const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:18001';
-              finalDownloadUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
-              break;
-            }
-            if (taskStatus === 'failed') {
-              throw new Error('Overlay compositing failed on server');
-            }
-          }
-        } catch (overlayErr) {
-          console.warn('[saving] overlay compositing failed, using original:', overlayErr);
-          // 오버레이 합성 실패 시 원본 URL 사용
-          finalDownloadUrl = downloadUrl;
-        }
-
-        setDone(idx); idx++;
-      }
-
-      // ── 다운로드 ──
-      let localUri = finalDownloadUrl;
-      if (finalDownloadUrl.startsWith('http')) {
-        setActive(idx);
-        const filename = `timelapse_${Date.now()}.mp4`;
-        const dest = `${FileSystem.documentDirectory}${filename}`;
-        console.log('[saving] downloading from:', finalDownloadUrl);
-        const result = await FileSystem.downloadAsync(finalDownloadUrl, dest);
-        console.log('[saving] download result:', result.status, result.uri);
-        if (result.status !== 200 && result.status !== 206) {
-          throw new Error(`Download failed: HTTP ${result.status}`);
-        }
-        localUri = result.uri;
-        setDone(idx); idx++;
-      }
-
-      // ── 갤러리 저장 ──
-      console.log('[saving] saving to library:', localUri);
+      // ── Step 1: 온디바이스 FFmpeg 타임랩스 생성 ──
       setActive(idx);
-      await MediaLibrary.saveToLibraryAsync(localUri);
+
+      if (photoUris.length === 0) {
+        throw new Error('No photos captured. Please try again.');
+      }
+
+      // 1. 각 사진 경로를 파일에 목록으로 기록 (concat demuxer용)
+      const cacheDir = FileSystem.cacheDirectory ?? '';
+      const listPath = `${cacheDir}frames_list.txt`;
+      const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
+
+      // 프레임당 표시 시간 계산 (outputSeconds / photoCount)
+      const frameDuration = outputSeconds / photoUris.length;
+
+      // concat demuxer용 파일 목록 생성
+      // file 'path'
+      // duration D
+      const listContent = photoUris
+        .map(uri => {
+          // file:// 제거 (FFmpeg은 파일 경로 직접 사용)
+          const path = uri.startsWith('file://') ? uri.slice(7) : uri;
+          return `file '${path}'\nduration ${frameDuration.toFixed(6)}`;
+        })
+        .join('\n');
+      // 마지막 프레임 한 번 더 추가 (concat demuxer 마지막 프레임 workaround)
+      const lastUri = photoUris[photoUris.length - 1];
+      const lastPath = lastUri.startsWith('file://') ? lastUri.slice(7) : lastUri;
+      const finalList = listContent + `\nfile '${lastPath}'`;
+
+      await FileSystem.writeAsStringAsync(listPath, finalList, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // 2. 해상도/크롭 설정 (aspectRatio에 따라)
+      // 입력이 세로 사진(iPhone 기준 3024x4032 or 4032x3024)이므로
+      // 9:16 → 세로 영상 (720x1280), 1:1 → 정방형 (720x720), 16:9 → 가로 영상 (1280x720), 4:5 → (720x900)
+      let scaleFilter: string;
+      if (aspectRatio === '9:16') {
+        scaleFilter = 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280';
+      } else if (aspectRatio === '1:1') {
+        scaleFilter = 'scale=720:720:force_original_aspect_ratio=increase,crop=720:720';
+      } else if (aspectRatio === '16:9') {
+        scaleFilter = 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720';
+      } else if (aspectRatio === '4:5') {
+        scaleFilter = 'scale=720:900:force_original_aspect_ratio=increase,crop=720:900';
+      } else {
+        scaleFilter = 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280';
+      }
+
+      // 3. 전면카메라 미러링
+      const mirrorFilter = cameraFacing === 'front' ? ',hflip' : '';
+
+      // 4. 오버레이 drawtext 필터 구성
+      let overlayFilter = '';
+      if (overlayStyle === 'timer' && overlayText) {
+        // 우상단 타이머 텍스트
+        const escaped = overlayText.replace(/'/g, "\\'").replace(/:/g, '\\:');
+        overlayFilter = `,drawtext=text='${escaped}':fontsize=36:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1:x=w-tw-20:y=20`;
+      } else if (overlayStyle === 'streak') {
+        const streakStr = `${streak} day${streak !== 1 ? 's' : ''} streak`;
+        const escaped = streakStr.replace(/'/g, "\\'");
+        overlayFilter = `,drawtext=text='${escaped}':fontsize=30:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1:x=w-tw-20:y=20`;
+      }
+      // progress bar는 drawtext 대신 생략 (복잡한 필터 필요, 일단 스킵)
+
+      // 5. 워터마크 텍스트 (좌하단)
+      const watermarkFilter = `,drawtext=text='FocusTimelapse':fontsize=22:fontcolor=white@0.9:shadowcolor=black:shadowx=1:shadowy=1:x=16:y=h-th-16`;
+
+      // 6. 최종 vf 필터 조합
+      const vf = `${scaleFilter}${mirrorFilter}${overlayFilter}${watermarkFilter}`;
+
+      // 7. FFmpeg 명령어 실행
+      // concat demuxer: -f concat -safe 0 -i list.txt
+      // fps 30, preset ultrafast, crf 23
+      const ffmpegCmd = [
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', listPath,
+        '-vf', vf,
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-r', '30',
+        '-an',
+        '-y',
+        outputPath,
+      ].join(' ');
+
+      console.log('[saving] FFmpeg command:', ffmpegCmd);
+
+      const session = await FFmpegKit.execute(ffmpegCmd);
+      const returnCode = await session.getReturnCode();
+      const logs = await session.getAllLogsAsString();
+
+      if (!ReturnCode.isSuccess(returnCode)) {
+        console.error('[saving] FFmpeg failed. Logs:', logs);
+        throw new Error(`FFmpeg failed (code ${returnCode}). Check logs.`);
+      }
+
+      console.log('[saving] FFmpeg success, output:', outputPath);
       setDone(idx); idx++;
 
+      // ── Step 2: 갤러리 저장 ──
+      setActive(idx);
+      await MediaLibrary.saveToLibraryAsync(outputPath);
+      console.log('[saving] Saved to gallery.');
+      setDone(idx); idx++;
+
+      // ── Step 3: 완료 ──
       setActive(idx);
       await wait(300);
       setDone(idx);
 
       setFinished(true);
+
+      // 임시 파일 정리
+      try {
+        await FileSystem.deleteAsync(listPath, { idempotent: true });
+        await FileSystem.deleteAsync(outputPath, { idempotent: true });
+      } catch (cleanupErr) {
+        console.warn('[saving] cleanup error:', cleanupErr);
+      }
     } catch (e) {
       console.error('Save error:', e);
       const msg = e instanceof Error ? e.message : String(e);
@@ -271,7 +304,7 @@ export default function SavingScreen() {
         {finished && (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.saveBtn} onPress={navigateToStats}>
-              <Text style={styles.saveBtnText}>Save Video →</Text>
+              <Text style={styles.saveBtnText}>View Stats →</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
               <Image source={require('../assets/instagram.png')} style={styles.instaIcon} resizeMode="contain" />
@@ -329,6 +362,5 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
   },
-  instaBtnText: { color: DARK, fontSize: 20, fontWeight: '600' },
   instaIcon: { width: 28, height: 28 },
 });
