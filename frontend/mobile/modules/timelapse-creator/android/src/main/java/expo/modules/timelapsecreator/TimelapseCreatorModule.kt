@@ -23,6 +23,7 @@ import java.io.File
 import java.io.FileInputStream
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.exifinterface.media.ExifInterface
 
 class TimelapseOptions : Record {
   @Field val photoUris: List<String> = emptyList()
@@ -36,6 +37,9 @@ class TimelapseOptions : Record {
   @Field val overlayStyle: String = "none"
   @Field val overlayText: String = ""
   @Field val streak: Int = 0
+  @Field val timerMode: String = "countdown"
+  @Field val recordingSeconds: Double = 0.0
+  @Field val goalSeconds: Double = 0.0
 }
 
 class TimelapseCreatorModule : Module() {
@@ -67,7 +71,8 @@ class TimelapseCreatorModule : Module() {
     }
 
     // Remove existing file
-    val outputFile = File(options.outputPath)
+    val cleanOutputPath = options.outputPath.removePrefix("file://")
+    val outputFile = File(cleanOutputPath)
     if (outputFile.exists()) outputFile.delete()
 
     // Setup MediaCodec encoder
@@ -85,7 +90,7 @@ class TimelapseCreatorModule : Module() {
     val inputSurface: Surface = encoder.createInputSurface()
     encoder.start()
 
-    val muxer = MediaMuxer(options.outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    val muxer = MediaMuxer(cleanOutputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
     var trackIndex = -1
     var muxerStarted = false
 
@@ -120,8 +125,9 @@ class TimelapseCreatorModule : Module() {
           cachedBitmap?.recycle()
           val uri = options.photoUris[imageIndex]
           val path = uri.removePrefix("file://")
-          cachedBitmap = BitmapFactory.decodeStream(FileInputStream(path))
+          val rawBitmap = BitmapFactory.decodeStream(FileInputStream(path))
             ?: throw Exception("Failed to load image at index $imageIndex: $uri")
+          cachedBitmap = applyExifRotation(rawBitmap, path)
           cachedImageIndex = imageIndex
         }
 
@@ -134,8 +140,14 @@ class TimelapseCreatorModule : Module() {
         drawCenterCrop(canvas, bitmap, width, height, options.mirrorHorizontally)
 
         // Draw overlay
-        if (options.overlayStyle != "none" && options.overlayText.isNotEmpty()) {
-          drawOverlay(canvas, width, height, options.overlayText, textPaint, shadowPaint)
+        if (options.overlayStyle != "none") {
+          drawOverlay(
+            canvas, width, height,
+            options.overlayStyle, options.streak,
+            frameIdx, totalFrames,
+            options.timerMode, options.recordingSeconds, options.goalSeconds,
+            textPaint, shadowPaint
+          )
         }
 
         inputSurface.unlockCanvasAndPost(canvas)
@@ -201,7 +213,24 @@ class TimelapseCreatorModule : Module() {
       muxer.release()
     }
 
-    return options.outputPath
+    return cleanOutputPath
+  }
+
+  private fun applyExifRotation(bitmap: Bitmap, path: String): Bitmap {
+    val exif = ExifInterface(path)
+    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    val matrix = Matrix()
+    when (orientation) {
+      ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+      ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+      ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+      ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+      ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+      else -> return bitmap
+    }
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    if (rotated !== bitmap) bitmap.recycle()
+    return rotated
   }
 
   private fun drawCenterCrop(canvas: Canvas, bitmap: Bitmap, outW: Int, outH: Int, mirror: Boolean) {
@@ -237,19 +266,100 @@ class TimelapseCreatorModule : Module() {
     canvas: Canvas,
     width: Int,
     height: Int,
-    text: String,
+    overlayStyle: String,
+    streak: Int,
+    frameIndex: Int,
+    totalFrames: Int,
+    timerMode: String,
+    recordingSeconds: Double,
+    goalSeconds: Double,
     textPaint: Paint,
     shadowPaint: Paint
   ) {
     val padding = 20f
+    val elapsed = if (totalFrames > 0) (frameIndex.toDouble() / totalFrames) * recordingSeconds else 0.0
+
+    when (overlayStyle) {
+      "timer" -> {
+        val displaySeconds = if (timerMode == "countdown") {
+          maxOf(0.0, recordingSeconds - elapsed)
+        } else {
+          elapsed
+        }
+        val text = formatTime(displaySeconds)
+        drawTextOverlay(canvas, width, text, padding, textPaint, shadowPaint)
+      }
+      "progress" -> {
+        val percent = if (recordingSeconds > 0) minOf(1.0, elapsed / recordingSeconds) else 0.0
+        drawProgressBar(canvas, width, percent, padding, textPaint)
+      }
+      "streak" -> {
+        val text = "▸ $streak days streak"
+        drawTextOverlay(canvas, width, text, padding, textPaint, shadowPaint)
+      }
+    }
+  }
+
+  private fun formatTime(totalSeconds: Double): String {
+    val s = totalSeconds.toInt()
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return String.format("%02d:%02d:%02d", h, m, sec)
+  }
+
+  private fun drawTextOverlay(
+    canvas: Canvas,
+    width: Int,
+    text: String,
+    padding: Float,
+    textPaint: Paint,
+    shadowPaint: Paint
+  ) {
     val textWidth = textPaint.measureText(text)
     val x = width - textWidth - padding
     val y = padding + textPaint.textSize
 
-    // Drop shadow
     canvas.drawText(text, x + 1.5f, y + 1.5f, shadowPaint)
-    // Main text
     canvas.drawText(text, x, y, textPaint)
+  }
+
+  private fun drawProgressBar(
+    canvas: Canvas,
+    width: Int,
+    percent: Double,
+    padding: Float,
+    textPaint: Paint
+  ) {
+    val barWidth = width * 0.25f
+    val barHeight = 8f
+    val x = width - barWidth - padding
+    val y = padding + textPaint.textSize * 0.5f
+
+    // Background bar (semi-transparent)
+    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.argb(102, 0, 0, 0)
+    }
+    canvas.drawRoundRect(RectF(x, y, x + barWidth, y + barHeight), barHeight / 2, barHeight / 2, bgPaint)
+
+    // Filled portion (white)
+    val fillWidth = barWidth * percent.toFloat()
+    if (fillWidth > 0) {
+      val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+      }
+      canvas.drawRoundRect(RectF(x, y, x + fillWidth, y + barHeight), barHeight / 2, barHeight / 2, fillPaint)
+    }
+
+    // Percentage text below bar
+    val pctText = "${(percent * 100).toInt()}%"
+    val smallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.WHITE
+      textSize = textPaint.textSize * 0.7f
+      isFakeBoldText = true
+    }
+    val pctWidth = smallPaint.measureText(pctText)
+    canvas.drawText(pctText, x + barWidth - pctWidth, y + barHeight + 4 + smallPaint.textSize, smallPaint)
   }
 
   private fun drainEncoder(

@@ -10,6 +10,9 @@ export interface TimelapseOptions {
   overlayStyle: string; // "none"|"timer"|"progress"|"streak"
   overlayText: string;
   streak: number;
+  timerMode: string; // "countdown"|"countup"
+  recordingSeconds: number;
+  goalSeconds: number;
 }
 
 export type TimelapseCreatorModuleEvents = {

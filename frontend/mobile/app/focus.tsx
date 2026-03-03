@@ -91,7 +91,7 @@ export default function FocusScreen() {
   }, [elapsed, totalSeconds, isRecording]);
 
   const startCapture = useCallback(() => {
-    const interval = Math.max(1, totalSeconds / (outputSeconds * 30));
+    const interval = 1;
     captureIntervalRef.current = setInterval(async () => {
       if (!cameraRef.current) return;
       try {

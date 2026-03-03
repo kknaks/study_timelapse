@@ -50,10 +50,13 @@ async function buildTimelapseNative(params: {
   overlayStyle: string;
   overlayText: string;
   streak: number;
+  timerMode: string;
+  recordingSeconds: number;
+  goalSeconds: number;
   onProgress?: (p: number) => void;
 }) {
   const { photoUris, outputSeconds, outputPath, aspectRatio, cameraFacing,
-          overlayStyle, overlayText, streak, onProgress } = params;
+          overlayStyle, overlayText, streak, timerMode, recordingSeconds, goalSeconds, onProgress } = params;
 
   const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
 
@@ -74,6 +77,9 @@ async function buildTimelapseNative(params: {
       overlayStyle,
       overlayText,
       streak,
+      timerMode,
+      recordingSeconds,
+      goalSeconds,
     });
   } finally {
     subscription?.remove();
@@ -196,6 +202,9 @@ export default function SavingScreen() {
         overlayStyle,
         overlayText,
         streak,
+        timerMode,
+        recordingSeconds,
+        goalSeconds: studyMinutes * 60,
         onProgress: (p) => setProgress(Math.round(p * 100)),
       });
       setDone(idx); idx++;

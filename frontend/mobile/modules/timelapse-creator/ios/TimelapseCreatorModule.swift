@@ -28,12 +28,15 @@ public class TimelapseCreatorModule: Module {
     @Field var overlayStyle: String = "none"
     @Field var overlayText: String = ""
     @Field var streak: Int = 0
+    @Field var timerMode: String = "countdown"
+    @Field var recordingSeconds: Double = 0
+    @Field var goalSeconds: Double = 0
   }
 
   // MARK: - Build Timelapse
 
   private func buildTimelapse(options: TimelapseOptions) async throws -> String {
-    let outputURL = URL(fileURLWithPath: options.outputPath)
+    let outputURL = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
 
     // Remove existing file if any
     try? FileManager.default.removeItem(at: outputURL)
@@ -123,12 +126,12 @@ public class TimelapseCreatorModule: Module {
         height: height,
         mirror: options.mirrorHorizontally,
         overlayStyle: options.overlayStyle,
-        overlayText: options.overlayText,
         streak: options.streak,
         frameIndex: frameIdx,
         totalFrames: Int(totalFrames),
-        outputSeconds: options.outputSeconds,
-        frameRate: options.frameRate
+        timerMode: options.timerMode,
+        recordingSeconds: options.recordingSeconds,
+        goalSeconds: options.goalSeconds
       ) else {
         continue
       }
@@ -164,12 +167,12 @@ public class TimelapseCreatorModule: Module {
     height: Int,
     mirror: Bool,
     overlayStyle: String,
-    overlayText: String,
     streak: Int,
     frameIndex: Int,
     totalFrames: Int,
-    outputSeconds: Double,
-    frameRate: Int
+    timerMode: String,
+    recordingSeconds: Double,
+    goalSeconds: Double
   ) -> CVPixelBuffer? {
     var pixelBuffer: CVPixelBuffer?
     let attrs: [String: Any] = [
@@ -198,7 +201,16 @@ public class TimelapseCreatorModule: Module {
       bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
     ) else { return nil }
 
-    guard let cgImage = image.cgImage else { return nil }
+    // Normalize orientation so cgImage pixels match the visual orientation
+    let normalizedImage: UIImage
+    if image.imageOrientation == .up {
+      normalizedImage = image
+    } else {
+      let renderer = UIGraphicsImageRenderer(size: image.size)
+      normalizedImage = renderer.image { _ in image.draw(at: .zero) }
+    }
+
+    guard let cgImage = normalizedImage.cgImage else { return nil }
 
     let imgW = CGFloat(cgImage.width)
     let imgH = CGFloat(cgImage.height)
@@ -235,18 +247,18 @@ public class TimelapseCreatorModule: Module {
     }
 
     // Draw overlay
-    if overlayStyle != "none" && !overlayText.isEmpty {
+    if overlayStyle != "none" {
       drawOverlay(
         context: context,
         width: outW,
         height: outH,
         style: overlayStyle,
-        text: overlayText,
         streak: streak,
         frameIndex: frameIndex,
         totalFrames: totalFrames,
-        outputSeconds: outputSeconds,
-        frameRate: frameRate
+        timerMode: timerMode,
+        recordingSeconds: recordingSeconds,
+        goalSeconds: goalSeconds
       )
     }
 
@@ -260,15 +272,13 @@ public class TimelapseCreatorModule: Module {
     width: CGFloat,
     height: CGFloat,
     style: String,
-    text: String,
     streak: Int,
     frameIndex: Int,
     totalFrames: Int,
-    outputSeconds: Double,
-    frameRate: Int
+    timerMode: String,
+    recordingSeconds: Double,
+    goalSeconds: Double
   ) {
-    // Use UIGraphicsPushContext to enable NSString drawing in our CGContext
-    // Reset transforms for overlay text (always drawn non-mirrored)
     context.saveGState()
     // Flip to UIKit coordinates for text drawing
     context.translateBy(x: 0, y: height)
@@ -278,10 +288,53 @@ public class TimelapseCreatorModule: Module {
 
     let fontSize: CGFloat = min(width, height) * 0.045
     let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+    let padding: CGFloat = 20
+
+    let elapsed = totalFrames > 0
+      ? (Double(frameIndex) / Double(totalFrames)) * recordingSeconds
+      : 0
+
+    switch style {
+    case "timer":
+      let displaySeconds: Double
+      if timerMode == "countdown" {
+        displaySeconds = max(0, recordingSeconds - elapsed)
+      } else {
+        displaySeconds = elapsed
+      }
+      let text = formatTime(displaySeconds)
+      drawText(text, font: font, padding: padding, width: width, context: context)
+
+    case "progress":
+      let percent = recordingSeconds > 0 ? min(1.0, elapsed / recordingSeconds) : 0
+      drawProgressBar(percent: percent, padding: padding, width: width, fontSize: fontSize, context: context)
+
+    case "streak":
+      let text = "▸ \(streak) days streak"
+      drawText(text, font: font, padding: padding, width: width, context: context)
+
+    default:
+      break
+    }
+
+    UIGraphicsPopContext()
+    context.restoreGState()
+  }
+
+  // MARK: - Overlay Helpers
+
+  private func formatTime(_ totalSeconds: Double) -> String {
+    let s = Int(totalSeconds)
+    let h = s / 3600
+    let m = (s % 3600) / 60
+    let sec = s % 60
+    return String(format: "%02d:%02d:%02d", h, m, sec)
+  }
+
+  private func drawText(_ text: String, font: UIFont, padding: CGFloat, width: CGFloat, context: CGContext) {
     let textColor = UIColor.white
     let shadowColor = UIColor.black.withAlphaComponent(0.6)
 
-    let padding: CGFloat = 20
     let attrs: [NSAttributedString.Key: Any] = [
       .font: font,
       .foregroundColor: textColor,
@@ -295,12 +348,41 @@ public class TimelapseCreatorModule: Module {
     let x = width - textSize.width - padding
     let y = padding
 
-    // Drop shadow
     (text as NSString).draw(at: CGPoint(x: x + 1.5, y: y + 1.5), withAttributes: shadowAttrs)
-    // Main text
     (text as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+  }
 
-    UIGraphicsPopContext()
-    context.restoreGState()
+  private func drawProgressBar(percent: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat, context: CGContext) {
+    let barWidth = width * 0.25
+    let barHeight: CGFloat = 8
+    let x = width - barWidth - padding
+    let y = padding + fontSize * 0.5
+
+    // Background (semi-transparent)
+    let bgRect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
+    context.setFillColor(UIColor.black.withAlphaComponent(0.4).cgColor)
+    // Need to flip rect for CGContext (already in UIKit coords via push)
+    UIColor.black.withAlphaComponent(0.4).setFill()
+    UIBezierPath(roundedRect: bgRect, cornerRadius: barHeight / 2).fill()
+
+    // Filled portion (white)
+    let fillWidth = barWidth * CGFloat(percent)
+    if fillWidth > 0 {
+      let fillRect = CGRect(x: x, y: y, width: fillWidth, height: barHeight)
+      UIColor.white.setFill()
+      UIBezierPath(roundedRect: fillRect, cornerRadius: barHeight / 2).fill()
+    }
+
+    // Percentage text below bar
+    let pctText = "\(Int(percent * 100))%"
+    let smallFont = UIFont.systemFont(ofSize: fontSize * 0.7, weight: .semibold)
+    let pctAttrs: [NSAttributedString.Key: Any] = [
+      .font: smallFont,
+      .foregroundColor: UIColor.white,
+    ]
+    let pctSize = (pctText as NSString).size(withAttributes: pctAttrs)
+    let pctX = x + barWidth - pctSize.width
+    let pctY = y + barHeight + 4
+    (pctText as NSString).draw(at: CGPoint(x: pctX, y: pctY), withAttributes: pctAttrs)
   }
 }
