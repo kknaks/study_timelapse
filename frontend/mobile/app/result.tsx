@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '../src/api/user';
@@ -184,10 +185,10 @@ export default function ResultScreen() {
               transform: isMirrored ? [{ scaleX: -1 }] : undefined,
             }}>
               {previewUri ? (
-                <Image
+                <ExpoImage
                   source={{ uri: previewUri }}
                   style={{ width: vidW, height: vidH }}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
               ) : (
                 <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
