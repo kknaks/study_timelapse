@@ -14,7 +14,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
+import { Skia } from "@shopify/react-native-skia";
+import { exportVideoComposition } from "@azzapp/react-native-skia-video";
 
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
@@ -31,6 +32,88 @@ function formatTime(seconds: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+async function buildTimelapse(params: {
+  photoUris: string[];
+  outputSeconds: number;
+  outputPath: string;
+  aspectRatio: string;
+  cameraFacing: string;
+  overlayStyle: string;
+  overlayText: string;
+  streak: number;
+  onProgress?: (p: number) => void;
+}) {
+  const { photoUris, outputSeconds, outputPath, aspectRatio, cameraFacing,
+          overlayStyle, overlayText, streak, onProgress } = params;
+
+  const resolutions: Record<string, [number, number]> = {
+    "9:16": [720, 1280],
+    "1:1":  [720, 720],
+    "16:9": [1280, 720],
+    "4:5":  [720, 900],
+  };
+  const [outW, outH] = resolutions[aspectRatio] ?? [720, 1280];
+
+  const images = await Promise.all(photoUris.map(async (uri) => {
+    const b64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const data = Skia.Data.fromBase64(b64);
+    return Skia.Image.MakeImageFromEncoded(data);
+  }));
+
+  const totalImages = images.length;
+
+  const drawFrame = ({ canvas, currentTime, width, height }: any) => {
+    "worklet";
+    const idx = Math.min(
+      Math.floor((currentTime / outputSeconds) * totalImages),
+      totalImages - 1
+    );
+    const img = images[idx];
+    if (!img) return;
+
+    const imgW = img.width();
+    const imgH = img.height();
+    const targetRatio = width / height;
+    const imgRatio = imgW / imgH;
+    let srcX = 0, srcY = 0, srcW = imgW, srcH = imgH;
+    if (imgRatio > targetRatio) {
+      srcW = imgH * targetRatio;
+      srcX = (imgW - srcW) / 2;
+    } else {
+      srcH = imgW / targetRatio;
+      srcY = (imgH - srcH) / 2;
+    }
+
+    if (cameraFacing === "front") {
+      canvas.save();
+      canvas.scale(-1, 1);
+      canvas.translate(-width, 0);
+    }
+    canvas.drawImageRect(img, { x: srcX, y: srcY, width: srcW, height: srcH }, { x: 0, y: 0, width, height }, Skia.Paint());
+    if (cameraFacing === "front") canvas.restore();
+
+    if (overlayStyle !== "none" && overlayText) {
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color("white"));
+      const font = Skia.Font(null, 32);
+      canvas.drawText(overlayText, width - 200, 50, font, paint);
+    }
+  };
+
+  await exportVideoComposition({
+    videoComposition: { duration: outputSeconds, items: [] },
+    drawFrame,
+    outPath: outputPath,
+    frameRate: 30,
+    bitRate: 3_500_000,
+    width: outW,
+    height: outH,
+    onProgress,
+  });
 }
 
 export default function SavingScreen() {
@@ -82,6 +165,7 @@ export default function SavingScreen() {
 
   const [steps, setSteps] = useState<Step[]>(buildSteps);
   const [finished, setFinished] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const setActive = (idx: number) =>
     setSteps(prev => prev.map((s, i) =>
@@ -130,108 +214,25 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 1: 온디바이스 FFmpeg 타임랩스 생성 ──
+      // ── Step 1: 온디바이스 Skia 타임랩스 생성 ──
       setActive(idx);
-
       if (photoUris.length === 0) {
-        throw new Error('No photos captured. Please try again.');
+        throw new Error("No photos captured. Please try again.");
       }
-
-      // 1. 각 사진 경로를 파일에 목록으로 기록 (concat demuxer용)
-      const cacheDir = FileSystem.cacheDirectory ?? '';
-      const listPath = `${cacheDir}frames_list.txt`;
+      const cacheDir = FileSystem.cacheDirectory ?? "";
       const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
 
-      // 프레임당 표시 시간 계산 (outputSeconds / photoCount)
-      const frameDuration = outputSeconds / photoUris.length;
-
-      // concat demuxer용 파일 목록 생성
-      // file 'path'
-      // duration D
-      const listContent = photoUris
-        .map(uri => {
-          // file:// 제거 (FFmpeg은 파일 경로 직접 사용)
-          const path = uri.startsWith('file://') ? uri.slice(7) : uri;
-          return `file '${path}'\nduration ${frameDuration.toFixed(6)}`;
-        })
-        .join('\n');
-      // 마지막 프레임 한 번 더 추가 (concat demuxer 마지막 프레임 workaround)
-      const lastUri = photoUris[photoUris.length - 1];
-      const lastPath = lastUri.startsWith('file://') ? lastUri.slice(7) : lastUri;
-      const finalList = listContent + `\nfile '${lastPath}'`;
-
-      await FileSystem.writeAsStringAsync(listPath, finalList, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      // 2. 해상도/크롭 설정 (aspectRatio에 따라)
-      // 입력이 세로 사진(iPhone 기준 3024x4032 or 4032x3024)이므로
-      // 9:16 → 세로 영상 (720x1280), 1:1 → 정방형 (720x720), 16:9 → 가로 영상 (1280x720), 4:5 → (720x900)
-      let scaleFilter: string;
-      if (aspectRatio === '9:16') {
-        scaleFilter = 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280';
-      } else if (aspectRatio === '1:1') {
-        scaleFilter = 'scale=720:720:force_original_aspect_ratio=increase,crop=720:720';
-      } else if (aspectRatio === '16:9') {
-        scaleFilter = 'scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720';
-      } else if (aspectRatio === '4:5') {
-        scaleFilter = 'scale=720:900:force_original_aspect_ratio=increase,crop=720:900';
-      } else {
-        scaleFilter = 'scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280';
-      }
-
-      // 3. 전면카메라 미러링
-      const mirrorFilter = cameraFacing === 'front' ? ',hflip' : '';
-
-      // 4. 오버레이 drawtext 필터 구성
-      let overlayFilter = '';
-      if (overlayStyle === 'timer' && overlayText) {
-        // 우상단 타이머 텍스트
-        const escaped = overlayText.replace(/'/g, "\\'").replace(/:/g, '\\:');
-        overlayFilter = `,drawtext=text='${escaped}':fontsize=36:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1:x=w-tw-20:y=20`;
-      } else if (overlayStyle === 'streak') {
-        const streakStr = `${streak} day${streak !== 1 ? 's' : ''} streak`;
-        const escaped = streakStr.replace(/'/g, "\\'");
-        overlayFilter = `,drawtext=text='${escaped}':fontsize=30:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1:x=w-tw-20:y=20`;
-      }
-      // progress bar는 drawtext 대신 생략 (복잡한 필터 필요, 일단 스킵)
-
-      // 5. 워터마크 텍스트 (좌하단)
-      const watermarkFilter = `,drawtext=text='FocusTimelapse':fontsize=22:fontcolor=white@0.9:shadowcolor=black:shadowx=1:shadowy=1:x=16:y=h-th-16`;
-
-      // 6. 최종 vf 필터 조합
-      const vf = `${scaleFilter}${mirrorFilter}${overlayFilter}${watermarkFilter}`;
-
-      // 7. FFmpeg 명령어 실행
-      // concat demuxer: -f concat -safe 0 -i list.txt
-      // fps 30, preset ultrafast, crf 23
-      const ffmpegCmd = [
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', listPath,
-        '-vf', vf,
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '23',
-        '-pix_fmt', 'yuv420p',
-        '-r', '30',
-        '-an',
-        '-y',
+      await buildTimelapse({
+        photoUris,
+        outputSeconds,
         outputPath,
-      ].join(' ');
-
-      console.log('[saving] FFmpeg command:', ffmpegCmd);
-
-      const session = await FFmpegKit.execute(ffmpegCmd);
-      const returnCode = await session.getReturnCode();
-      const logs = await session.getAllLogsAsString();
-
-      if (!ReturnCode.isSuccess(returnCode)) {
-        console.error('[saving] FFmpeg failed. Logs:', logs);
-        throw new Error(`FFmpeg failed (code ${returnCode}). Check logs.`);
-      }
-
-      console.log('[saving] FFmpeg success, output:', outputPath);
+        aspectRatio,
+        cameraFacing,
+        overlayStyle,
+        overlayText,
+        streak,
+        onProgress: (p) => setProgress(Math.round(p * 100)),
+      });
       setDone(idx); idx++;
 
       // ── Step 2: 갤러리 저장 ──
@@ -249,7 +250,6 @@ export default function SavingScreen() {
 
       // 임시 파일 정리
       try {
-        await FileSystem.deleteAsync(listPath, { idempotent: true });
         await FileSystem.deleteAsync(outputPath, { idempotent: true });
       } catch (cleanupErr) {
         console.warn('[saving] cleanup error:', cleanupErr);

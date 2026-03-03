@@ -33,6 +33,7 @@
       "expo-router",
       "expo-sharing",
       "expo-video",
+      "@shopify/react-native-skia",
       [
         "expo-media-library",
         {
