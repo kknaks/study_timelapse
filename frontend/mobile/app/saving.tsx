@@ -252,7 +252,11 @@ export default function SavingScreen() {
   };
 
   const doneCount = steps.filter(s => s.status === 'done').length;
-  const progressPercent = Math.round((doneCount / steps.length) * 100);
+  // Show actual frame progress during timelapse building, step-based otherwise
+  const isBuildingTimelapse = !isWeb && steps[1]?.status === 'active';
+  const progressPercent = finished ? 100
+    : isBuildingTimelapse ? Math.max(progress, 5)
+    : Math.round((doneCount / steps.length) * 100);
 
   return (
     <SafeAreaView style={styles.container}>

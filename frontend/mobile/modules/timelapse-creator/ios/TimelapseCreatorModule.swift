@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import AVFoundation
 import CoreGraphics
+import ImageIO
 import UIKit
 
 public class TimelapseCreatorModule: Module {
@@ -36,6 +37,12 @@ public class TimelapseCreatorModule: Module {
   // MARK: - Build Timelapse
 
   private func buildTimelapse(options: TimelapseOptions) async throws -> String {
+    // Prevent screen auto-lock during heavy processing
+    await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
+    defer {
+      DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
     let outputURL = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
 
     // Remove existing file if any
@@ -109,11 +116,21 @@ public class TimelapseCreatorModule: Module {
         let uri = options.photoUris[imageIndex]
         let url = URL(fileURLWithPath: uri.replacingOccurrences(of: "file://", with: ""))
         guard let data = try? Data(contentsOf: url),
-              let image = UIImage(data: data) else {
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
           throw NSError(domain: "TimelapseCreator", code: -3,
                         userInfo: [NSLocalizedDescriptionKey: "Failed to load image at index \(imageIndex): \(uri)"])
         }
-        cachedImage = image
+        // Use CGImageSource with transform to reliably apply EXIF orientation
+        let thumbOptions: [CFString: Any] = [
+          kCGImageSourceCreateThumbnailFromImageAlways: true,
+          kCGImageSourceCreateThumbnailWithTransform: true,
+          kCGImageSourceThumbnailMaxPixelSize: max(width, height) * 3,
+        ]
+        guard let orientedCG = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else {
+          throw NSError(domain: "TimelapseCreator", code: -3,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to decode image at index \(imageIndex): \(uri)"])
+        }
+        cachedImage = UIImage(cgImage: orientedCG)
         cachedImageIndex = imageIndex
       }
 
@@ -201,16 +218,8 @@ public class TimelapseCreatorModule: Module {
       bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
     ) else { return nil }
 
-    // Normalize orientation so cgImage pixels match the visual orientation
-    let normalizedImage: UIImage
-    if image.imageOrientation == .up {
-      normalizedImage = image
-    } else {
-      let renderer = UIGraphicsImageRenderer(size: image.size)
-      normalizedImage = renderer.image { _ in image.draw(at: .zero) }
-    }
-
-    guard let cgImage = normalizedImage.cgImage else { return nil }
+    // Image is already orientation-normalized during loading (CGImageSource with transform)
+    guard let cgImage = image.cgImage else { return nil }
 
     let imgW = CGFloat(cgImage.width)
     let imgH = CGFloat(cgImage.height)
