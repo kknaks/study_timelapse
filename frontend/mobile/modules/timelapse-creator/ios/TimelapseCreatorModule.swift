@@ -241,19 +241,17 @@ public class TimelapseCreatorModule: Module {
     // Crop the source image
     guard let croppedCG = cgImage.cropping(to: srcRect) else { return nil }
 
-    // Draw with optional mirror
+    // CGContext origin is bottom-left, so always flip Y first
+    context.translateBy(x: 0, y: outH)
+    context.scaleBy(x: 1, y: -1)
+
+    // Apply horizontal mirror for front camera (X flip only)
     if mirror {
-      context.saveGState()
-      context.translateBy(x: outW, y: outH)
-      context.scaleBy(x: -1, y: -1)
-      context.draw(croppedCG, in: CGRect(x: 0, y: 0, width: outW, height: outH))
-      context.restoreGState()
-    } else {
-      // CGContext has origin at bottom-left, flip Y
-      context.translateBy(x: 0, y: outH)
-      context.scaleBy(x: 1, y: -1)
-      context.draw(croppedCG, in: CGRect(x: 0, y: 0, width: outW, height: outH))
+      context.translateBy(x: outW, y: 0)
+      context.scaleBy(x: -1, y: 1)
     }
+
+    context.draw(croppedCG, in: CGRect(x: 0, y: 0, width: outW, height: outH))
 
     // Draw overlay
     if overlayStyle != "none" {
