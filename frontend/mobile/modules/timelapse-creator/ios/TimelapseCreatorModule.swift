@@ -385,23 +385,21 @@ public class TimelapseCreatorModule: Module {
       drawRect = CGRect(x: 0, y: -(scaledH - outH) / 2, width: scaledW, height: scaledH)
     }
 
-    // Flip Y for CGContext (bottom-left origin)
+    // ── 이미지 드로잉: CGContext Y-flip 적용 ──
+    context.saveGState()
     context.translateBy(x: 0, y: outH)
     context.scaleBy(x: 1.0, y: -1.0)
-
-    // UIImage의 orientation을 CGContext에 올바르게 그리기
-    context.clip(to: CGRect(x: 0, y: 0, width: Int(outW), height: Int(outH)))
-
-    // UIImage를 CGContext에 그리기 (orientation 자동 반영)
+    context.clip(to: CGRect(x: 0, y: 0, width: outW, height: outH))
     UIGraphicsPushContext(context)
-    // y축이 이미 flip됐으므로 drawRect를 그대로 사용
     orientedImage.draw(in: drawRect)
     UIGraphicsPopContext()
+    context.restoreGState()
 
-    // Draw overlay
+    // ── 오버레이: UIKit 좌표계(top-left origin)에서 드로잉 ──
+    // UIGraphicsPushContext로 UIKit 좌표계 그대로 사용 (flip 없음)
     if overlayStyle != "none" {
+      UIGraphicsPushContext(context)
       drawOverlay(
-        context: context,
         width: outW,
         height: outH,
         style: overlayStyle,
@@ -412,6 +410,7 @@ public class TimelapseCreatorModule: Module {
         recordingSeconds: recordingSeconds,
         goalSeconds: goalSeconds
       )
+      UIGraphicsPopContext()
     }
 
     return buffer
@@ -419,8 +418,9 @@ public class TimelapseCreatorModule: Module {
 
   // MARK: - Overlay Drawing
 
+  /// UIKit 좌표계(top-left origin)에서 오버레이를 그림
+  /// 호출 전에 UIGraphicsPushContext(context) 필요
   private func drawOverlay(
-    context: CGContext,
     width: CGFloat,
     height: CGFloat,
     style: String,
@@ -431,13 +431,6 @@ public class TimelapseCreatorModule: Module {
     recordingSeconds: Double,
     goalSeconds: Double
   ) {
-    context.saveGState()
-    // Flip to UIKit coordinates for text drawing
-    context.translateBy(x: 0, y: height)
-    context.scaleBy(x: 1, y: -1)
-
-    UIGraphicsPushContext(context)
-
     let fontSize: CGFloat = min(width, height) * 0.045
     let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
     let padding: CGFloat = 20
@@ -448,29 +441,29 @@ public class TimelapseCreatorModule: Module {
 
     switch style {
     case "timer":
-      let displaySeconds: Double
-      if timerMode == "countdown" {
-        displaySeconds = max(0, recordingSeconds - elapsed)
-      } else {
-        displaySeconds = elapsed
-      }
-      let text = formatTime(displaySeconds)
-      drawText(text, font: font, padding: padding, width: width, context: context)
+      let displaySeconds = timerMode == "countdown"
+        ? max(0, recordingSeconds - elapsed)
+        : elapsed
+      drawText(formatTime(displaySeconds), font: font, padding: padding, width: width)
 
     case "progress":
       let percent = recordingSeconds > 0 ? min(1.0, elapsed / recordingSeconds) : 0
-      drawProgressBar(percent: percent, padding: padding, width: width, fontSize: fontSize, context: context)
+      drawProgressBar(percent: percent, padding: padding, width: width, fontSize: fontSize)
 
     case "streak":
-      let text = "▸ \(streak) days streak"
-      drawText(text, font: font, padding: padding, width: width, context: context)
+      drawText("▸ \(streak) days streak", font: font, padding: padding, width: width)
 
     default:
       break
     }
 
-    UIGraphicsPopContext()
-    context.restoreGState()
+    // 워터마크
+    let wmFontSize = min(width, height) * 0.025
+    let wmAttrs: [NSAttributedString.Key: Any] = [
+      .font: UIFont.systemFont(ofSize: wmFontSize),
+      .foregroundColor: UIColor.white.withAlphaComponent(0.9),
+    ]
+    ("FocusTimelapse" as NSString).draw(at: CGPoint(x: 12, y: height - wmFontSize * 1.5 - 12), withAttributes: wmAttrs)
   }
 
   // MARK: - CGAffineTransform → UIImage.Orientation
@@ -511,57 +504,46 @@ public class TimelapseCreatorModule: Module {
     return String(format: "%02d:%02d:%02d", h, m, sec)
   }
 
-  private func drawText(_ text: String, font: UIFont, padding: CGFloat, width: CGFloat, context: CGContext) {
-    let textColor = UIColor.white
-    let shadowColor = UIColor.black.withAlphaComponent(0.6)
-
+  /// UIKit 좌표계 기준 텍스트 드로잉 (우상단, top-left origin)
+  private func drawText(_ text: String, font: UIFont, padding: CGFloat, width: CGFloat) {
     let attrs: [NSAttributedString.Key: Any] = [
       .font: font,
-      .foregroundColor: textColor,
+      .foregroundColor: UIColor.white,
     ]
     let shadowAttrs: [NSAttributedString.Key: Any] = [
       .font: font,
-      .foregroundColor: shadowColor,
+      .foregroundColor: UIColor.black.withAlphaComponent(0.6),
     ]
-
     let textSize = (text as NSString).size(withAttributes: attrs)
     let x = width - textSize.width - padding
-    let y = padding
-
+    let y = padding  // top-left origin → 위에서 padding
     (text as NSString).draw(at: CGPoint(x: x + 1.5, y: y + 1.5), withAttributes: shadowAttrs)
     (text as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
   }
 
-  private func drawProgressBar(percent: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat, context: CGContext) {
+  /// UIKit 좌표계 기준 프로그레스 바 드로잉 (우상단, top-left origin)
+  private func drawProgressBar(percent: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
     let barWidth = width * 0.25
     let barHeight: CGFloat = 8
     let x = width - barWidth - padding
-    let y = padding + fontSize * 0.5
+    let y = padding  // top-left origin → 위에서 padding
 
-    // Background (semi-transparent)
-    let bgRect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
-    context.setFillColor(UIColor.black.withAlphaComponent(0.4).cgColor)
+    // Background
     UIColor.black.withAlphaComponent(0.4).setFill()
-    UIBezierPath(roundedRect: bgRect, cornerRadius: barHeight / 2).fill()
+    UIBezierPath(roundedRect: CGRect(x: x, y: y, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
 
-    // Filled portion (white)
+    // Fill
     let fillWidth = barWidth * CGFloat(percent)
     if fillWidth > 0 {
-      let fillRect = CGRect(x: x, y: y, width: fillWidth, height: barHeight)
       UIColor.white.setFill()
-      UIBezierPath(roundedRect: fillRect, cornerRadius: barHeight / 2).fill()
+      UIBezierPath(roundedRect: CGRect(x: x, y: y, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
     }
 
-    // Percentage text below bar
+    // Percent text
     let pctText = "\(Int(percent * 100))%"
     let smallFont = UIFont.systemFont(ofSize: fontSize * 0.7, weight: .semibold)
-    let pctAttrs: [NSAttributedString.Key: Any] = [
-      .font: smallFont,
-      .foregroundColor: UIColor.white,
-    ]
+    let pctAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: UIColor.white]
     let pctSize = (pctText as NSString).size(withAttributes: pctAttrs)
-    let pctX = x + barWidth - pctSize.width
-    let pctY = y + barHeight + 4
-    (pctText as NSString).draw(at: CGPoint(x: pctX, y: pctY), withAttributes: pctAttrs)
+    (pctText as NSString).draw(at: CGPoint(x: x + barWidth - pctSize.width, y: y + barHeight + 4), withAttributes: pctAttrs)
   }
 }
