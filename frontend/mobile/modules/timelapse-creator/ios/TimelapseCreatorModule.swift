@@ -63,9 +63,9 @@ public class TimelapseCreatorModule: Module {
     // 2. Setup AVAssetImageGenerator
     let generator = AVAssetImageGenerator(asset: asset)
     generator.appliesPreferredTrackTransform = true
-    generator.maximumSize = CGSize(width: width * 2, height: height * 2)
-    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
-    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+    generator.maximumSize = CGSize(width: width, height: height)  // 출력 크기와 동일하게 제한
+    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
 
     // 3. AVAssetWriter setup
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
