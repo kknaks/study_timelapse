@@ -146,8 +146,6 @@ export default function SavingScreen() {
           width,
           height,
         });
-      } else {
-        await wait(300); // overlay 없으면 빠르게 통과
       }
       setDone(idx); idx++;
 
