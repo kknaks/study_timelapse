@@ -539,11 +539,5 @@ public class TimelapseCreatorModule: Module {
       UIBezierPath(roundedRect: CGRect(x: x, y: y, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
     }
 
-    // Percent text
-    let pctText = "\(Int(percent * 100))%"
-    let smallFont = UIFont.systemFont(ofSize: fontSize * 0.7, weight: .semibold)
-    let pctAttrs: [NSAttributedString.Key: Any] = [.font: smallFont, .foregroundColor: UIColor.white]
-    let pctSize = (pctText as NSString).size(withAttributes: pctAttrs)
-    (pctText as NSString).draw(at: CGPoint(x: x + barWidth - pctSize.width, y: y + barHeight + 4), withAttributes: pctAttrs)
   }
 }
