@@ -6,11 +6,15 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import * as MediaLibrary from 'expo-media-library';
 import { getMe } from '../src/api/user';
+import { updateSession } from '../src/api/sessions';
 import { COLORS } from '../src/constants';
 
 type OverlayStyle = 'none' | 'timer' | 'progress' | 'streak';
@@ -45,6 +49,7 @@ export default function ResultScreen() {
     timerMode: string;
     cameraFacing: string;
     videoUri: string;
+    timelapsePath: string;
   }>();
 
   const outputSecs = Number(params.outputSeconds) || 30;
@@ -54,11 +59,16 @@ export default function ResultScreen() {
   const timerMode = params.timerMode ?? 'countdown';
   const cameraFacing = params.cameraFacing ?? 'front';
   const videoUri = params.videoUri ?? '';
+  const timelapsePath = params.timelapsePath ?? '';
   const sessionId = params.sessionId ?? '';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
+  const [saving, setSaving] = useState(false);
 
-  const player = useVideoPlayer(videoUri || null, (p) => {
+  // timelapsePath가 있으면 타임랩스를, 없으면 원본 영상을 프리뷰
+  const previewSource = timelapsePath || videoUri;
+
+  const player = useVideoPlayer(previewSource || null, (p) => {
     p.loop = true;
     p.muted = true;
     p.play();
@@ -122,23 +132,53 @@ export default function ResultScreen() {
       : ((goalSeconds - elapsed) / goalSeconds) * 100
     : 0;
 
-  const handleSave = () => {
-    router.push({
-      pathname: '/saving',
-      params: {
-        overlayStyle,
-        streak: String(streak),
-        studyMinutes: String(studyMinutes),
-        recordingSeconds: String(recordingSecs),
-        outputSeconds: String(outputSecs),
-        aspectRatio,
-        timerMode,
-        overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
-        videoUri,
-        cameraFacing,
-        sessionId,
-      },
-    });
+  const handleSave = async () => {
+    if (Platform.OS === 'web') {
+      router.replace('/stats');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 권한 요청
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save to your gallery.');
+        setSaving(false);
+        return;
+      }
+
+      if (timelapsePath) {
+        // TODO: overlayStyle !== 'none'일 때 오버레이 합성 처리 (추후 구현)
+        await MediaLibrary.saveToLibraryAsync(timelapsePath);
+        console.log('[result] Saved timelapse to gallery.');
+      } else {
+        Alert.alert('Error', 'No timelapse file available.');
+        setSaving(false);
+        return;
+      }
+
+      // 세션 업데이트
+      if (sessionId) {
+        try {
+          await updateSession(sessionId, {
+            end_time: new Date().toISOString(),
+            duration: recordingSecs,
+            status: 'completed',
+          });
+        } catch (e) {
+          console.warn('[result] session update failed:', e);
+        }
+      }
+
+      router.replace('/stats');
+    } catch (e) {
+      console.error('[result] Save error:', e);
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('Error', `Failed to save: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleUpgrade = () => Alert.alert('Coming Soon', 'Upgrade to remove watermark!');
@@ -182,7 +222,7 @@ export default function ResultScreen() {
               overflow: 'hidden',
               transform: isMirrored ? [{ scaleX: -1 }] : undefined,
             }}>
-              {videoUri ? (
+              {previewSource ? (
                 <VideoView
                   player={player}
                   style={{ width: vidW, height: vidH }}
@@ -246,8 +286,12 @@ export default function ResultScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveText}>Create Video</Text>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
+          {saving ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.saveText}>Save to Gallery</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
           <Text style={styles.upgradeText}>Remove Watermark (Upgrade)</Text>
