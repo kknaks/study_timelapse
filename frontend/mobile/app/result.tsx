@@ -136,7 +136,11 @@ export default function ResultScreen() {
         outputSeconds: String(outputSecs),
         aspectRatio,
         timerMode,
-        overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
+        overlayText: overlayStyle === 'timer'
+          ? formatTime(elapsed)
+          : overlayStyle === 'progress'
+          ? String(progressPercent / 100)
+          : '',
         photoUris: timelapsePath,
         cameraFacing,
         sessionId,
