@@ -183,7 +183,7 @@ export default function ResultScreen() {
               left: offsetX, top: offsetY,
               width: vidW, height: vidH,
               overflow: 'hidden',
-              transform: isMirrored ? [{ scaleX: -1 }] : undefined,
+              // transform: isMirrored ? [{ scaleX: -1 }] : undefined, // vision-camera + AVAssetImageGenerator가 이미 처리
             }}>
               {previewSource ? (
                 <VideoView
