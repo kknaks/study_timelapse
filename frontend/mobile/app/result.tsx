@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 
@@ -56,6 +57,12 @@ export default function ResultScreen() {
   const sessionId = params.sessionId ?? '';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
+
+  const player = useVideoPlayer(videoUri || null, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
 
   // previewArea onLayout으로 실측한 크기 기반 계산
   const areaW = areaSize.width;
@@ -167,7 +174,7 @@ export default function ResultScreen() {
       >
         {isReady && (
           <>
-            {/* 영상 프리뷰 (Phase 4에서 expo-video로 교체 예정) */}
+            {/* 영상 프리뷰 */}
             <View style={{
               position: 'absolute',
               left: offsetX, top: offsetY,
@@ -175,9 +182,18 @@ export default function ResultScreen() {
               overflow: 'hidden',
               transform: isMirrored ? [{ scaleX: -1 }] : undefined,
             }}>
-              <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ color: '#999', fontSize: 14 }}>Video preview</Text>
-              </View>
+              {videoUri ? (
+                <VideoView
+                  player={player}
+                  style={{ width: vidW, height: vidH }}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+              ) : (
+                <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#999', fontSize: 14 }}>Video preview</Text>
+                </View>
+              )}
             </View>
 
             {/* 오버레이: 영상과 정확히 동일한 위치/크기, overflow hidden으로 경계 밖 잘라냄 */}
