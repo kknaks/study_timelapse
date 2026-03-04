@@ -217,16 +217,22 @@ export default function SavingScreen() {
           </View>
         )}
 
-        {finished && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.saveBtn} onPress={navigateToStats}>
-              <Text style={styles.saveBtnText}>View Stats →</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
-              <Image source={require('../assets/instagram.png')} style={styles.instaIcon} resizeMode="contain" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.saveBtn, !finished && styles.saveBtnDisabled]}
+            onPress={finished ? navigateToStats : undefined}
+            activeOpacity={finished ? 0.8 : 1}
+          >
+            <Text style={[styles.saveBtnText, !finished && styles.saveBtnTextDisabled]}>View Stats →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.instaBtn, !finished && styles.instaBtnDisabled]}
+            onPress={finished ? handleShareInstagram : undefined}
+            activeOpacity={finished ? 0.8 : 1}
+          >
+            <Image source={require('../assets/instagram.png')} style={[styles.instaIcon, !finished && styles.instaIconDisabled]} resizeMode="contain" />
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -262,7 +268,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  saveBtnDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
   saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  saveBtnTextDisabled: { color: '#9CA3AF' },
   instaBtn: {
     flex: 1.5,
     backgroundColor: '#FFF',
@@ -273,5 +283,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
   },
+  instaBtnDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
   instaIcon: { width: 28, height: 28 },
+  instaIconDisabled: { opacity: 0.3 },
 });
