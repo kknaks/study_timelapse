@@ -141,7 +141,7 @@ export default function FocusScreen() {
     const videoUri = videoUriRef.current ?? '';
 
     router.replace({
-      pathname: '/result',
+      pathname: '/saving',
       params: {
         videoUri,
         sessionId,
