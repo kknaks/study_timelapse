@@ -81,6 +81,7 @@ export default function GeneratingScreen() {
           timerMode,
           recordingSeconds,
           goalSeconds: studyMinutes * 60,
+          cameraFacing,
         });
       } finally {
         subscription.remove();

@@ -12,6 +12,7 @@ export interface TimelapseOptions {
   timerMode: string; // "countdown"|"countup"
   recordingSeconds: number;
   goalSeconds: number;
+  cameraFacing?: string; // "front"|"back"
 }
 
 export interface OverlayOptions {

@@ -48,6 +48,7 @@ public class TimelapseCreatorModule: Module {
     @Field var timerMode: String = "countdown"
     @Field var recordingSeconds: Double = 0
     @Field var goalSeconds: Double = 0
+    @Field var cameraFacing: String = "front"
   }
 
   // MARK: - Build Timelapse
@@ -232,10 +233,15 @@ public class TimelapseCreatorModule: Module {
                     userInfo: [NSLocalizedDescriptionKey: "Video has zero duration"])
     }
 
-    // 2. Setup AVAssetImageGenerator
+    // 2. preferredTransform 로드 (픽셀 버퍼 드로잉 시 직접 적용)
+    let videoTrackForXform = try await asset.loadTracks(withMediaType: .video).first
+    let preferredTransform = try await videoTrackForXform?.load(.preferredTransform) ?? .identity
+
+    // Setup AVAssetImageGenerator
+    // appliesPreferredTrackTransform=false → 원본 픽셀 그대로, createPixelBuffer에서 직접 회전 처리
     let generator = AVAssetImageGenerator(asset: asset)
-    generator.appliesPreferredTrackTransform = true
-    generator.maximumSize = CGSize(width: width, height: height)  // 출력 크기와 동일하게 제한
+    generator.appliesPreferredTrackTransform = false
+    generator.maximumSize = CGSize(width: width, height: height)
     generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
     generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
 
@@ -297,13 +303,14 @@ public class TimelapseCreatorModule: Module {
         continue
       }
 
+      // preferredTransform을 createPixelBuffer에 전달해 직접 회전 적용
       let image = UIImage(cgImage: cgImage)
 
-      // Create pixel buffer (mirror=false, generator handles orientation)
       guard let pixelBuffer = createPixelBuffer(
         from: image,
         width: width,
         height: height,
+        preferredTransform: preferredTransform,
         overlayStyle: options.overlayStyle,
         streak: options.streak,
         frameIndex: frameIdx,
@@ -344,6 +351,7 @@ public class TimelapseCreatorModule: Module {
     from image: UIImage,
     width: Int,
     height: Int,
+    preferredTransform: CGAffineTransform,
     overlayStyle: String,
     streak: Int,
     frameIndex: Int,
@@ -381,31 +389,47 @@ public class TimelapseCreatorModule: Module {
 
     guard let cgImage = image.cgImage else { return nil }
 
-    let imgW = CGFloat(cgImage.width)
-    let imgH = CGFloat(cgImage.height)
     let outW = CGFloat(width)
     let outH = CGFloat(height)
+
+    // UIImage를 올바른 orientation으로 렌더링하기 위해 UIGraphicsImageRenderer 사용
+    // preferredTransform → UIImage.Orientation 변환
+    let orientation = uiImageOrientation(from: preferredTransform)
+    let orientedImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: orientation)
+
+    // orientation이 반영된 size 계산
+    let imgW = orientedImage.size.width
+    let imgH = orientedImage.size.height
 
     // Center-crop (aspect fill)
     let targetRatio = outW / outH
     let imgRatio = imgW / imgH
-    var srcRect: CGRect
+
+    var drawRect: CGRect
     if imgRatio > targetRatio {
-      let cropW = imgH * targetRatio
-      srcRect = CGRect(x: (imgW - cropW) / 2, y: 0, width: cropW, height: imgH)
+      // 이미지가 더 넓음 → 좌우 crop
+      let scaledH = outH
+      let scaledW = outH * imgRatio
+      drawRect = CGRect(x: -(scaledW - outW) / 2, y: 0, width: scaledW, height: scaledH)
     } else {
-      let cropH = imgW / targetRatio
-      srcRect = CGRect(x: 0, y: (imgH - cropH) / 2, width: imgW, height: cropH)
+      // 이미지가 더 좁음 → 상하 crop
+      let scaledW = outW
+      let scaledH = outW / imgRatio
+      drawRect = CGRect(x: 0, y: -(scaledH - outH) / 2, width: scaledW, height: scaledH)
     }
 
-    // Crop the source image
-    guard let croppedCG = cgImage.cropping(to: srcRect) else { return nil }
-
-    // Flip Y for CGContext (bottom-left origin) vs UIImage (top-left origin)
+    // Flip Y for CGContext (bottom-left origin)
     context.translateBy(x: 0, y: outH)
     context.scaleBy(x: 1.0, y: -1.0)
 
-    context.draw(croppedCG, in: CGRect(x: 0, y: 0, width: outW, height: outH))
+    // UIImage의 orientation을 CGContext에 올바르게 그리기
+    context.clip(to: CGRect(x: 0, y: 0, width: Int(outW), height: Int(outH)))
+
+    // UIImage를 CGContext에 그리기 (orientation 자동 반영)
+    UIGraphicsPushContext(context)
+    // y축이 이미 flip됐으므로 drawRect를 그대로 사용
+    orientedImage.draw(in: drawRect)
+    UIGraphicsPopContext()
 
     // Draw overlay
     if overlayStyle != "none" {
@@ -480,6 +504,34 @@ public class TimelapseCreatorModule: Module {
 
     UIGraphicsPopContext()
     context.restoreGState()
+  }
+
+  // MARK: - CGAffineTransform → UIImage.Orientation
+
+  /// AVAsset의 preferredTransform을 UIImage.Orientation으로 변환
+  private func uiImageOrientation(from transform: CGAffineTransform) -> UIImage.Orientation {
+    // iOS 카메라 영상의 transform 패턴:
+    // Portrait (back):   (0, 1, -1, 0)  → .right  (90° CCW)
+    // Portrait (front):  (0, -1, 1, 0)  → .leftMirrored (90° CW + mirror) 또는 .left
+    // Landscape right:   (1, 0, 0, 1)   → .up
+    // Landscape left:    (-1, 0, 0, -1) → .down (180°)
+    // Upside down:       (0, -1, 1, 0)  → .left
+    let a = transform.a
+    let b = transform.b
+    let c = transform.c
+    let d = transform.d
+
+    if a == 0 && b == 1 && c == -1 && d == 0 {
+      return .right          // Portrait, 후면 카메라
+    } else if a == 0 && b == -1 && c == 1 && d == 0 {
+      return .left           // Portrait upside-down / 전면 카메라 일부
+    } else if a == 1 && b == 0 && c == 0 && d == 1 {
+      return .up             // Landscape right
+    } else if a == -1 && b == 0 && c == 0 && d == -1 {
+      return .down           // Landscape left
+    } else {
+      return .up             // 기본값
+    }
   }
 
   // MARK: - Overlay Helpers
