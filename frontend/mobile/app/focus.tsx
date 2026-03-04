@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { COLORS } from '../src/constants';
 
 function formatTime(totalSeconds: number): string {
@@ -39,8 +39,8 @@ export default function FocusScreen() {
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
 
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const { hasPermission: hasMicPermission, requestPermission: requestMicPermission } = useMicrophonePermission();
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -49,32 +49,37 @@ export default function FocusScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
 
-  const cameraRef = useRef<CameraView>(null);
+  const device = useCameraDevice(cameraFacing);
+  const cameraRef = useRef<Camera>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string | null>(null);
-  const recordingPromiseRef = useRef<Promise<{ uri: string }> | null>(null);
   const isStoppingRef = useRef(false);
+  const elapsedRef = useRef(0);
+  const shouldNavigateRef = useRef(false);
 
   const remaining = Math.max(0, totalSeconds - elapsed);
 
   // Request camera + microphone permissions on mount
   useEffect(() => {
     const requestPerms = async () => {
-      if (!cameraPermission?.granted) {
+      if (!hasCameraPermission) {
         await requestCameraPermission();
       }
-      if (!micPermission?.granted) {
+      if (!hasMicPermission) {
         await requestMicPermission();
       }
     };
     requestPerms();
-  }, [cameraPermission, micPermission, requestCameraPermission, requestMicPermission]);
+  }, [hasCameraPermission, hasMicPermission, requestCameraPermission, requestMicPermission]);
 
   // Timer interval
   useEffect(() => {
     if (isRecording) {
       intervalRef.current = setInterval(() => {
-        setElapsed((prev) => prev + 1);
+        setElapsed((prev) => {
+          elapsedRef.current = prev + 1;
+          return prev + 1;
+        });
       }, 1000);
     }
     return () => {
@@ -94,22 +99,33 @@ export default function FocusScreen() {
   }, [elapsed, totalSeconds, isRecording]);
 
   const startRecording = useCallback(() => {
-    if (isRecording || !cameraRef.current) return;
+    if (isRecording || !cameraRef.current || !device) return;
     setIsRecording(true);
     if (Platform.OS !== 'web') {
-      recordingPromiseRef.current = cameraRef.current.recordAsync({
-        maxDuration: totalSeconds,
-      }) as Promise<{ uri: string }>;
-
-      recordingPromiseRef.current.then((result) => {
-        if (result?.uri) {
-          videoUriRef.current = result.uri;
-        }
-      }).catch(e => {
-        console.warn('[focus] recordAsync error:', e);
+      cameraRef.current.startRecording({
+        onRecordingFinished: (video) => {
+          videoUriRef.current = video.path;
+          if (!shouldNavigateRef.current) return;
+          router.replace({
+            pathname: '/generating',
+            params: {
+              videoUri: video.path,
+              sessionId,
+              outputSeconds: String(outputSeconds),
+              recordingSeconds: String(elapsedRef.current),
+              aspectRatio,
+              studyMinutes: String(studyMinutes),
+              timerMode,
+              cameraFacing,
+            },
+          });
+        },
+        onRecordingError: (error) => {
+          console.warn('[focus] recording error:', error);
+        },
       });
     }
-  }, [isRecording, totalSeconds]);
+  }, [isRecording, device, router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
 
   const handleStop = useCallback(async () => {
     if (isStoppingRef.current) return;
@@ -123,37 +139,26 @@ export default function FocusScreen() {
 
     setIsRecording(false);
 
-    // Stop recording and wait for video URI
     if (Platform.OS !== 'web') {
-      cameraRef.current?.stopRecording();
-      if (recordingPromiseRef.current) {
-        try {
-          const result = await recordingPromiseRef.current;
-          if (result?.uri) {
-            videoUriRef.current = result.uri;
-          }
-        } catch (e) {
-          console.warn('[focus] stop recording error:', e);
-        }
-      }
+      shouldNavigateRef.current = true;
+      await cameraRef.current?.stopRecording();
+      // Navigation happens in onRecordingFinished callback
+    } else {
+      router.replace({
+        pathname: '/generating',
+        params: {
+          videoUri: '',
+          sessionId,
+          outputSeconds: String(outputSeconds),
+          recordingSeconds: String(elapsedRef.current),
+          aspectRatio,
+          studyMinutes: String(studyMinutes),
+          timerMode,
+          cameraFacing,
+        },
+      });
     }
-
-    const videoUri = videoUriRef.current ?? '';
-
-    router.replace({
-      pathname: '/generating',
-      params: {
-        videoUri,
-        sessionId,
-        outputSeconds: String(outputSeconds),
-        recordingSeconds: String(elapsed),
-        aspectRatio,
-        studyMinutes: String(studyMinutes),
-        timerMode,
-        cameraFacing,
-      },
-    });
-  }, [elapsed, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, router, cameraFacing]);
+  }, [router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
 
   const handleExit = () => {
     setShowExitModal(true);
@@ -164,7 +169,7 @@ export default function FocusScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    // Stop recording if active
+    // Stop recording if active (shouldNavigateRef stays false → no navigation from callback)
     if (Platform.OS !== 'web' && hasStarted) {
       cameraRef.current?.stopRecording();
     }
@@ -173,7 +178,7 @@ export default function FocusScreen() {
   };
 
   // Permissions not yet granted
-  if (!cameraPermission?.granted || !micPermission?.granted) {
+  if (!hasCameraPermission || !hasMicPermission) {
     return (
       <View style={styles.permContainer}>
         <StatusBar barStyle="light-content" />
@@ -193,6 +198,19 @@ export default function FocusScreen() {
         >
           <Text style={styles.permButtonText}>Grant Permission</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.permBackButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <Text style={styles.permBackText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // No camera device found
+  if (!device) {
+    return (
+      <View style={styles.permContainer}>
+        <StatusBar barStyle="light-content" />
+        <Text style={styles.permTitle}>No Camera Device Found</Text>
         <TouchableOpacity style={styles.permBackButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <Text style={styles.permBackText}>Go Back</Text>
         </TouchableOpacity>
@@ -224,23 +242,27 @@ export default function FocusScreen() {
         styles.cameraWrapper,
         aspectRatio === '16:9' && styles.cameraWrapper16x9,
       ]}>
-        <CameraView
-          ref={cameraRef}
-          style={[
+        {Platform.OS !== 'web' ? (
+          <Camera
+            ref={cameraRef}
+            style={[
+              styles.camera,
+              aspectRatio === '1:1' && { aspectRatio: 1, width: '100%', height: undefined },
+              aspectRatio === '16:9' && { aspectRatio: 16/9, width: '100%', height: undefined },
+            ]}
+            device={device}
+            isActive={!showExitModal}
+            video={true}
+            audio={true}
+            onInitialized={() => setCameraReady(true)}
+          />
+        ) : (
+          <View style={[
             styles.camera,
-            // 1:1: 너비 = 높이로 정사각형 crop
-            aspectRatio === '1:1' && (Platform.OS === 'web'
-              ? ({ width: '100vh', height: '100vh', maxWidth: '100%', maxHeight: '100%' } as any)
-              : { aspectRatio: 1, width: '100%', height: undefined }),
-            // 16:9: 위아래 레터박스
-            aspectRatio === '16:9' && (Platform.OS === 'web'
-              ? ({ width: '100%', aspectRatio: '16/9' } as any)
-              : { aspectRatio: 16/9, width: '100%', height: undefined }),
-          ]}
-          facing={cameraFacing}
-          mode="video"
-          onCameraReady={() => setCameraReady(true)}
-        />
+            aspectRatio === '1:1' && ({ width: '100vh', height: '100vh', maxWidth: '100%', maxHeight: '100%' } as any),
+            aspectRatio === '16:9' && ({ width: '100%', aspectRatio: '16/9' } as any),
+          ]} />
+        )}
       </View>
 
       {/* Overlay */}
@@ -267,7 +289,7 @@ export default function FocusScreen() {
         </View>
 
         {/* Camera Unavailable 표시 (웹) */}
-        {!cameraPermission?.granted && (
+        {!hasCameraPermission && (
           <View style={styles.cameraUnavailable}>
             <Text style={styles.cameraUnavailableText}>⊘  Camera Unavailable</Text>
           </View>
@@ -293,15 +315,19 @@ export default function FocusScreen() {
             {/* 시작/일시정지 버튼 */}
             <TouchableOpacity
               style={styles.pauseButton}
-              onPress={() => {
+              onPress={async () => {
                 if (!hasStarted) {
                   setHasStarted(true);
                   startRecording();
                 } else if (isRecording) {
-                  // 일시정지 (타이머만 정지, 녹화는 계속)
+                  if (Platform.OS !== 'web') {
+                    await cameraRef.current?.pauseRecording();
+                  }
                   setIsRecording(false);
                 } else {
-                  // 재개 (타이머 재개)
+                  if (Platform.OS !== 'web') {
+                    await cameraRef.current?.resumeRecording();
+                  }
                   setIsRecording(true);
                 }
               }}

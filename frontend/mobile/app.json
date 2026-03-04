@@ -41,7 +41,8 @@
         }
       ],
       "expo-image",
-      "expo-video"
+      "expo-video",
+      "react-native-vision-camera"
     ],
     "extra": {
       "eas": {
