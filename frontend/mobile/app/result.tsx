@@ -6,15 +6,11 @@ import {
   TouchableOpacity,
   Alert,
   Image,
-  ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import * as MediaLibrary from 'expo-media-library';
 import { getMe } from '../src/api/user';
-import { updateSession } from '../src/api/sessions';
 import { COLORS } from '../src/constants';
 
 type OverlayStyle = 'none' | 'timer' | 'progress' | 'streak';
@@ -63,8 +59,6 @@ export default function ResultScreen() {
   const sessionId = params.sessionId ?? '';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
-  const [saving, setSaving] = useState(false);
-
   // timelapsePath가 있으면 타임랩스를, 없으면 원본 영상을 프리뷰
   const previewSource = timelapsePath || videoUri;
 
@@ -108,10 +102,9 @@ export default function ResultScreen() {
     const speedMultiplier = outputSecs > 0 ? Math.max(1, recordingSecs / outputSecs) : 1;
     const tickMs = 100;
     const tickAmount = (speedMultiplier * tickMs) / 1000;
-    setElapsed(timerMode === 'countdown' ? goalSeconds : 0);
-    const endValue = timerMode === 'countdown'
-      ? Math.max(0, goalSeconds - recordingSecs)
-      : recordingSecs;
+    // 실제 촬영 시간 기준으로 오버레이 진행
+    setElapsed(timerMode === 'countdown' ? recordingSecs : 0);
+    const endValue = timerMode === 'countdown' ? 0 : recordingSecs;
     intervalRef.current = setInterval(() => {
       setElapsed((prev) => {
         if (timerMode === 'countdown') {
@@ -126,10 +119,10 @@ export default function ResultScreen() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [overlayStyle, timerMode, goalSeconds, recordingSecs, outputSecs]);
 
-  const progressPercent = goalSeconds > 0
+  const progressPercent = recordingSecs > 0
     ? timerMode === 'countup'
-      ? (elapsed / goalSeconds) * 100
-      : ((goalSeconds - elapsed) / goalSeconds) * 100
+      ? (elapsed / recordingSecs) * 100
+      : ((recordingSecs - elapsed) / recordingSecs) * 100
     : 0;
 
   const handleSave = () => {
@@ -256,12 +249,8 @@ export default function ResultScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
-          {saving ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.saveText}>Save to Gallery</Text>
-          )}
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <Text style={styles.saveText}>Save to Gallery</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
           <Text style={styles.upgradeText}>Remove Watermark (Upgrade)</Text>
