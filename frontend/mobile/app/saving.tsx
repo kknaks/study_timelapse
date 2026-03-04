@@ -97,7 +97,7 @@ export default function SavingScreen() {
     aspectRatio: string;
     timerMode: string;
     overlayText: string;
-    photoUris: string;
+    videoUri: string;
     cameraFacing: string;
     sessionId: string;
   }>();
@@ -110,8 +110,7 @@ export default function SavingScreen() {
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
   const overlayText = params.overlayText ?? '';
-  const photoUrisRaw = params.photoUris ?? '';
-  const photoUris = photoUrisRaw ? photoUrisRaw.split(',').filter(Boolean) : [];
+  const videoUri = params.videoUri ?? '';
   const cameraFacing = params.cameraFacing ?? 'front';
   const sessionId = params.sessionId ?? '';
 
@@ -187,14 +186,14 @@ export default function SavingScreen() {
 
       // ── Step 1: 온디바이스 네이티브 타임랩스 생성 ──
       setActive(idx);
-      if (photoUris.length === 0) {
-        throw new Error("No photos captured. Please try again.");
+      if (!videoUri) {
+        throw new Error("No video recorded. Please try again.");
       }
       const cacheDir = FileSystem.cacheDirectory ?? "";
       const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
 
       await buildTimelapseNative({
-        photoUris,
+        photoUris: [videoUri], // Phase 2: 네이티브 모듈이 videoUri를 직접 받도록 변경 예정
         outputSeconds,
         outputPath,
         aspectRatio,

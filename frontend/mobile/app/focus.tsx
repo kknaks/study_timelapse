@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { COLORS } from '../src/constants';
 
 function formatTime(totalSeconds: number): string {
@@ -40,6 +40,7 @@ export default function FocusScreen() {
   const timerMode = params.timerMode ?? 'countdown';
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -47,25 +48,27 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
-  const [frameCount, setFrameCount] = useState(0);
 
   const cameraRef = useRef<CameraView>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const photoUrisRef = useRef<string[]>([]);
-  const captureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoUriRef = useRef<string | null>(null);
+  const recordingPromiseRef = useRef<Promise<{ uri: string }> | null>(null);
   const isStoppingRef = useRef(false);
 
   const remaining = Math.max(0, totalSeconds - elapsed);
 
-  // Request camera permission on mount
+  // Request camera + microphone permissions on mount
   useEffect(() => {
     const requestPerms = async () => {
       if (!cameraPermission?.granted) {
         await requestCameraPermission();
       }
+      if (!micPermission?.granted) {
+        await requestMicPermission();
+      }
     };
     requestPerms();
-  }, [cameraPermission, requestCameraPermission]);
+  }, [cameraPermission, micPermission, requestCameraPermission, requestMicPermission]);
 
   // Timer interval
   useEffect(() => {
@@ -90,35 +93,25 @@ export default function FocusScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, totalSeconds, isRecording]);
 
-  const startCapture = useCallback(() => {
-    const interval = 1;
-    captureIntervalRef.current = setInterval(async () => {
-      if (!cameraRef.current) return;
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.85,
-          skipProcessing: false, // iOS 색 보정 적용
-          shutterSound: false,
-        });
-        if (photo?.uri) {
-          photoUrisRef.current.push(photo.uri);
-          setFrameCount(photoUrisRef.current.length);
-        }
-      } catch (e) {
-        console.warn('[focus] capture error:', e);
-      }
-    }, interval * 1000);
-  }, [totalSeconds, outputSeconds]);
-
   const startRecording = useCallback(() => {
-    if (isRecording) return;
+    if (isRecording || !cameraRef.current) return;
     setIsRecording(true);
     if (Platform.OS !== 'web') {
-      startCapture();
-    }
-  }, [isRecording, startCapture]);
+      recordingPromiseRef.current = cameraRef.current.recordAsync({
+        maxDuration: totalSeconds,
+      }) as Promise<{ uri: string }>;
 
-  const handleStop = useCallback(() => {
+      recordingPromiseRef.current.then((result) => {
+        if (result?.uri) {
+          videoUriRef.current = result.uri;
+        }
+      }).catch(e => {
+        console.warn('[focus] recordAsync error:', e);
+      });
+    }
+  }, [isRecording, totalSeconds]);
+
+  const handleStop = useCallback(async () => {
     if (isStoppingRef.current) return;
     isStoppingRef.current = true;
 
@@ -128,20 +121,29 @@ export default function FocusScreen() {
       intervalRef.current = null;
     }
 
-    // Clear capture interval
-    if (captureIntervalRef.current) {
-      clearInterval(captureIntervalRef.current);
-      captureIntervalRef.current = null;
-    }
-
     setIsRecording(false);
 
-    const photoUris = photoUrisRef.current.join(',');
+    // Stop recording and wait for video URI
+    if (Platform.OS !== 'web') {
+      cameraRef.current?.stopRecording();
+      if (recordingPromiseRef.current) {
+        try {
+          const result = await recordingPromiseRef.current;
+          if (result?.uri) {
+            videoUriRef.current = result.uri;
+          }
+        } catch (e) {
+          console.warn('[focus] stop recording error:', e);
+        }
+      }
+    }
+
+    const videoUri = videoUriRef.current ?? '';
 
     router.replace({
       pathname: '/result',
       params: {
-        photoUris,
+        videoUri,
         sessionId,
         outputSeconds: String(outputSeconds),
         recordingSeconds: String(elapsed),
@@ -151,7 +153,7 @@ export default function FocusScreen() {
         cameraFacing,
       },
     });
-  }, [elapsed, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, router]);
+  }, [elapsed, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, router, cameraFacing]);
 
   const handleExit = () => {
     setShowExitModal(true);
@@ -162,30 +164,31 @@ export default function FocusScreen() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (captureIntervalRef.current) {
-      clearInterval(captureIntervalRef.current);
-      captureIntervalRef.current = null;
+    // Stop recording if active
+    if (Platform.OS !== 'web' && hasStarted) {
+      cameraRef.current?.stopRecording();
     }
     setShowExitModal(false);
     router.canGoBack() ? router.back() : router.replace('/');
   };
 
   // Permissions not yet granted
-  if (!cameraPermission?.granted) {
+  if (!cameraPermission?.granted || !micPermission?.granted) {
     return (
       <View style={styles.permContainer}>
         <StatusBar barStyle="light-content" />
         <View style={styles.permIconWrap}>
           <Text style={styles.permIconText}>⊙</Text>
         </View>
-        <Text style={styles.permTitle}>Camera Access</Text>
+        <Text style={styles.permTitle}>Camera & Microphone Access</Text>
         <Text style={styles.permText}>
-          We need camera permission to capture your focus session.
+          We need camera and microphone permission to record your focus session.
         </Text>
         <TouchableOpacity
           style={styles.permButton}
           onPress={async () => {
             await requestCameraPermission();
+            await requestMicPermission();
           }}
         >
           <Text style={styles.permButtonText}>Grant Permission</Text>
@@ -235,6 +238,7 @@ export default function FocusScreen() {
               : { aspectRatio: 16/9, width: '100%', height: undefined }),
           ]}
           facing={cameraFacing}
+          mode="video"
           onCameraReady={() => setCameraReady(true)}
         />
       </View>
@@ -247,8 +251,11 @@ export default function FocusScreen() {
             <Text style={styles.exitButtonText}>←</Text>
           </TouchableOpacity>
           <View style={styles.timerContainer}>
-            {hasStarted && (
-              <Text style={styles.frameCounter}>{frameCount} frames captured</Text>
+            {hasStarted && isRecording && (
+              <View style={styles.recIndicator}>
+                <View style={styles.recDot} />
+                <Text style={styles.recText}>REC</Text>
+              </View>
             )}
             <Text style={styles.timerLabel}>
               {timerMode === 'countdown' ? 'REMAINING' : 'ELAPSED'}
@@ -292,17 +299,16 @@ export default function FocusScreen() {
                   startRecording();
                 } else if (isRecording) {
                   // 일시정지
-                  if (captureIntervalRef.current) {
-                    clearInterval(captureIntervalRef.current);
-                    captureIntervalRef.current = null;
+                  if (Platform.OS !== 'web') {
+                    cameraRef.current?.pauseRecording();
                   }
                   setIsRecording(false);
                 } else {
                   // 재개
-                  setIsRecording(true);
                   if (Platform.OS !== 'web') {
-                    startCapture();
+                    cameraRef.current?.resumeRecording();
                   }
+                  setIsRecording(true);
                 }
               }}
               activeOpacity={0.7}
@@ -319,14 +325,14 @@ export default function FocusScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 정지 버튼 — 프레임 1개 이상 캡처됐을 때만 활성화 */}
+            {/* 정지 버튼 */}
             {hasStarted && (
               <TouchableOpacity
-                style={[styles.stopButton, frameCount < 1 && styles.stopButtonDisabled]}
-                onPress={frameCount >= 1 ? handleStop : undefined}
-                activeOpacity={frameCount >= 1 ? 0.7 : 1}
+                style={styles.stopButton}
+                onPress={handleStop}
+                activeOpacity={0.7}
               >
-                <View style={[styles.stopIcon, frameCount < 1 && styles.stopIconDisabled]} />
+                <View style={styles.stopIcon} />
               </TouchableOpacity>
             )}
           </View>
@@ -406,12 +412,23 @@ const styles = StyleSheet.create({
   timerContainer: {
     alignItems: 'flex-start',
   },
-  frameCounter: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.5,
+  recIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 4,
+  },
+  recDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+  },
+  recText: {
+    color: '#FF3B30',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   timerLabel: {
     color: 'rgba(255,255,255,0.6)',
@@ -522,17 +539,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stopButtonDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
   stopIcon: {
     width: 26,
     height: 26,
     borderRadius: 4,
     backgroundColor: '#1a1a1a',
-  },
-  stopIconDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   // Permission screen
   permContainer: {

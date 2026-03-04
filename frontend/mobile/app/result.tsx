@@ -7,7 +7,6 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '../src/api/user';
@@ -44,7 +43,7 @@ export default function ResultScreen() {
     aspectRatio: string;
     timerMode: string;
     cameraFacing: string;
-    photoUris: string;
+    videoUri: string;
   }>();
 
   const outputSecs = Number(params.outputSeconds) || 30;
@@ -53,18 +52,10 @@ export default function ResultScreen() {
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
   const cameraFacing = params.cameraFacing ?? 'front';
-  const photoUris = params.photoUris ?? '';
+  const videoUri = params.videoUri ?? '';
   const sessionId = params.sessionId ?? '';
   const goalSeconds = studyMinutes * 60;
   const isMirrored = cameraFacing === 'front';
-
-  // 사진 배열에서 ~30% 지점 프레임을 프리뷰로 선택
-  const photoArr = photoUris ? photoUris.split(',').filter(Boolean) : [];
-  const previewIndex = Math.min(
-    Math.floor(photoArr.length * 0.3),
-    photoArr.length - 1,
-  );
-  const previewUri = photoArr.length > 0 ? photoArr[Math.max(0, previewIndex)] : '';
 
   // previewArea onLayout으로 실측한 크기 기반 계산
   const areaW = areaSize.width;
@@ -136,7 +127,7 @@ export default function ResultScreen() {
         aspectRatio,
         timerMode,
         overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
-        photoUris,
+        videoUri,
         cameraFacing,
         sessionId,
       },
@@ -176,7 +167,7 @@ export default function ResultScreen() {
       >
         {isReady && (
           <>
-            {/* 사진 프리뷰: offsetX/offsetY 위치에 vidW x vidH 크기 */}
+            {/* 영상 프리뷰 (Phase 4에서 expo-video로 교체 예정) */}
             <View style={{
               position: 'absolute',
               left: offsetX, top: offsetY,
@@ -184,17 +175,9 @@ export default function ResultScreen() {
               overflow: 'hidden',
               transform: isMirrored ? [{ scaleX: -1 }] : undefined,
             }}>
-              {previewUri ? (
-                <ExpoImage
-                  source={{ uri: previewUri }}
-                  style={{ width: vidW, height: vidH }}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: '#999', fontSize: 14 }}>No preview available</Text>
-                </View>
-              )}
+              <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: '#999', fontSize: 14 }}>Video preview</Text>
+              </View>
             </View>
 
             {/* 오버레이: 영상과 정확히 동일한 위치/크기, overflow hidden으로 경계 밖 잘라냄 */}
