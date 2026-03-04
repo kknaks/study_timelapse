@@ -72,6 +72,7 @@ export default function SavingScreen() {
     }
     return [
       { label: 'Requesting permission...', status: 'pending' },
+      { label: 'Building timelapse...', status: 'pending' },
       { label: 'Saving to gallery...', status: 'pending' },
       { label: 'Done!', status: 'pending' },
     ];
@@ -122,7 +123,7 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 1: 오버레이 합성 + 갤러리 저장 ──
+      // ── Step 1: 오버레이 합성 ──
       setActive(idx);
       if (!timelapsePath) {
         throw new Error('No timelapse file found. Please try again.');
@@ -145,8 +146,13 @@ export default function SavingScreen() {
           width,
           height,
         });
+      } else {
+        await wait(300); // overlay 없으면 빠르게 통과
       }
+      setDone(idx); idx++;
 
+      // ── Step 2: 갤러리 저장 ──
+      setActive(idx);
       await MediaLibrary.saveToLibraryAsync(finalPath);
       console.log('[saving] Saved to gallery.');
 
@@ -164,7 +170,7 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 2: 완료 ──
+      // ── Step 3: 완료 ──
       setActive(idx);
       await wait(300);
       setDone(idx);
