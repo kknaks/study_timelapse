@@ -6,86 +6,76 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  TouchableOpacity,
+  Linking,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as FileSystem from 'expo-file-system/legacy';
-import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
+import * as MediaLibrary from 'expo-media-library';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { updateSession } from '../src/api/sessions';
 
-const RESOLUTIONS: Record<string, [number, number]> = {
-  "9:16": [720, 1280],
-  "1:1":  [720, 720],
-  "16:9": [1280, 720],
-  "4:5":  [720, 900],
-};
+const GREEN = '#22C55E';
+const GRAY = '#BBBBBB';
+const DARK = '#1a1a1a';
 
-async function buildTimelapseNative(params: {
-  videoUri: string;
-  outputSeconds: number;
-  outputPath: string;
-  aspectRatio: string;
-  overlayStyle: string;
-  overlayText: string;
-  streak: number;
-  timerMode: string;
-  recordingSeconds: number;
-  goalSeconds: number;
-  onProgress?: (p: number) => void;
-}) {
-  const { videoUri, outputSeconds, outputPath, aspectRatio,
-          overlayStyle, overlayText, streak, timerMode, recordingSeconds, goalSeconds, onProgress } = params;
+type StepStatus = 'pending' | 'active' | 'done';
+type Step = { label: string; status: StepStatus };
 
-  const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
-
-  const subscription = onProgress
-    ? addProgressListener((event) => onProgress(event.progress))
-    : null;
-
-  try {
-    await createTimelapse({
-      videoUri,
-      outputPath,
-      outputSeconds,
-      width,
-      height,
-      frameRate: 30,
-      bitRate: 3_500_000,
-      overlayStyle,
-      overlayText,
-      streak,
-      timerMode,
-      recordingSeconds,
-      goalSeconds,
-    });
-  } finally {
-    subscription?.remove();
-  }
-}
+const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 export default function SavingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
+    overlayStyle: string;
+    streak: string;
     studyMinutes: string;
     recordingSeconds: string;
     outputSeconds: string;
     aspectRatio: string;
     timerMode: string;
-    videoUri: string;
-    sessionId: string;
+    overlayText: string;
+    photoUris: string;  // timelapsePath (완성된 mp4 경로)
     cameraFacing: string;
+    sessionId: string;
   }>();
 
-  const studyMinutes = Number(params.studyMinutes) || 0;
   const recordingSeconds = Number(params.recordingSeconds) || 0;
-  const outputSeconds = Number(params.outputSeconds) || 30;
-  const aspectRatio = params.aspectRatio ?? '9:16';
-  const timerMode = params.timerMode ?? 'countdown';
-  const videoUri = params.videoUri ?? '';
+  const timelapsePath = params.photoUris ?? '';  // result.tsx에서 photoUris로 전달됨
   const sessionId = params.sessionId ?? '';
-  const cameraFacing = params.cameraFacing ?? 'front';
 
+  const isWeb = Platform.OS === 'web';
   const hasRun = useRef(false);
-  const [progress, setProgress] = useState(0);
+
+  const buildSteps = (): Step[] => {
+    if (isWeb) {
+      return [
+        { label: 'Preparing...', status: 'pending' },
+        { label: 'Processing video...', status: 'pending' },
+        { label: 'Done!', status: 'pending' },
+      ];
+    }
+    return [
+      { label: 'Requesting permission...', status: 'pending' },
+      { label: 'Saving to gallery...', status: 'pending' },
+      { label: 'Done!', status: 'pending' },
+    ];
+  };
+
+  const [steps, setSteps] = useState<Step[]>(buildSteps);
+  const [finished, setFinished] = useState(false);
+
+  const setActive = (idx: number) =>
+    setSteps(prev => prev.map((s, i) =>
+      i < idx ? { ...s, status: 'done' } :
+      i === idx ? { ...s, status: 'active' } : s
+    ));
+
+  const setDone = (idx: number) =>
+    setSteps(prev => prev.map((s, i) => i <= idx ? { ...s, status: 'done' } : s));
+
+  const navigateToStats = () => router.replace('/stats');
+  const handleShareInstagram = () => Linking.openURL('instagram://');
 
   useEffect(() => {
     if (hasRun.current) return;
@@ -96,31 +86,34 @@ export default function SavingScreen() {
 
   const runSave = async () => {
     try {
-      if (Platform.OS === 'web') {
-        router.replace('/result');
+      if (isWeb) {
+        setActive(0); await wait(600); setDone(0);
+        setActive(1); await wait(700); setDone(1);
+        setActive(2); await wait(400); setDone(2);
+        setFinished(true);
         return;
       }
 
-      // ── 온디바이스 네이티브 타임랩스 생성 (오버레이 없는 순수 타임랩스) ──
-      if (!videoUri) {
-        throw new Error("No video recorded. Please try again.");
-      }
-      const cacheDir = FileSystem.cacheDirectory ?? "";
-      const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
+      let idx = 0;
 
-      await buildTimelapseNative({
-        videoUri,
-        outputSeconds,
-        outputPath,
-        aspectRatio,
-        overlayStyle: 'none',
-        overlayText: '',
-        streak: 0,
-        timerMode,
-        recordingSeconds,
-        goalSeconds: studyMinutes * 60,
-        onProgress: (p) => setProgress(Math.round(p * 100)),
-      });
+      // ── Step 0: 권한 요청 ──
+      setActive(idx);
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save to your gallery.', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        return;
+      }
+      setDone(idx); idx++;
+
+      // ── Step 1: 갤러리 저장 ──
+      setActive(idx);
+      if (!timelapsePath) {
+        throw new Error('No timelapse file found. Please try again.');
+      }
+      await MediaLibrary.saveToLibraryAsync(timelapsePath);
+      console.log('[saving] Saved to gallery.');
 
       // 세션 업데이트
       if (sessionId) {
@@ -134,22 +127,14 @@ export default function SavingScreen() {
           console.warn('[saving] session update failed:', e);
         }
       }
+      setDone(idx); idx++;
 
-      // ── 완료 → result 화면으로 이동 ──
-      router.replace({
-        pathname: '/result',
-        params: {
-          timelapsePath: outputPath,
-          videoUri,
-          sessionId,
-          outputSeconds: String(outputSeconds),
-          recordingSeconds: String(recordingSeconds),
-          aspectRatio,
-          studyMinutes: String(studyMinutes),
-          timerMode,
-          cameraFacing,
-        },
-      });
+      // ── Step 2: 완료 ──
+      setActive(idx);
+      await wait(300);
+      setDone(idx);
+      setFinished(true);
+
     } catch (e) {
       console.error('Save error:', e);
       const msg = e instanceof Error ? e.message : String(e);
@@ -159,32 +144,99 @@ export default function SavingScreen() {
     }
   };
 
+  const progressPercent = finished ? 100
+    : Math.round((steps.filter(s => s.status === 'done').length / steps.length) * 100);
+
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#FFF" />
-      <Text style={styles.label}>타임랩스 생성 중...</Text>
-      <Text style={styles.percent}>{progress}%</Text>
-    </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.inner}>
+        <Text style={styles.title}>Saving your timelapse</Text>
+        <Text style={styles.subtitle}>Just a moment...</Text>
+
+        <View style={styles.stepsContainer}>
+          {steps.map((step, i) => (
+            <View key={i} style={styles.stepRow}>
+              <View style={styles.stepIconBox}>
+                {step.status === 'active' ? (
+                  <ActivityIndicator size="small" color={DARK} />
+                ) : step.status === 'done' ? (
+                  <Text style={styles.stepCheck}>✓</Text>
+                ) : (
+                  <Text style={styles.stepDot}>·</Text>
+                )}
+              </View>
+              <Text style={[
+                styles.stepLabel,
+                step.status === 'done' && styles.stepLabelDone,
+                step.status === 'pending' && styles.stepLabelPending,
+              ]}>
+                {step.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {!finished && (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+          </View>
+        )}
+
+        {finished && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.saveBtn} onPress={navigateToStats}>
+              <Text style={styles.saveBtnText}>View Stats →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.instaBtn} onPress={handleShareInstagram}>
+              <Image source={require('../assets/instagram.png')} style={styles.instaIcon} resizeMode="contain" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  inner: {
     flex: 1,
-    backgroundColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    paddingHorizontal: 40,
+    gap: 12,
   },
-  label: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFF',
-    marginTop: 8,
+  title: { fontSize: 22, fontWeight: '800', color: DARK, marginBottom: 4 },
+  subtitle: { fontSize: 15, color: '#888', marginBottom: 32 },
+  stepsContainer: { width: '100%', gap: 20, marginBottom: 36 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stepIconBox: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  stepCheck: { fontSize: 18, color: GREEN, fontWeight: '800' },
+  stepDot: { fontSize: 22, color: GRAY, lineHeight: 24 },
+  stepLabel: { fontSize: 16, color: DARK, fontWeight: '500', flex: 1 },
+  stepLabelDone: { color: GREEN },
+  stepLabelPending: { color: GRAY },
+  progressTrack: { width: '100%', height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: DARK, borderRadius: 3 },
+  actionButtons: { width: '100%', flexDirection: 'row', gap: 10, marginTop: 24 },
+  saveBtn: {
+    flex: 4,
+    backgroundColor: DARK,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  percent: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFF',
+  saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  instaBtn: {
+    flex: 1.5,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
   },
+  instaIcon: { width: 28, height: 28 },
 });

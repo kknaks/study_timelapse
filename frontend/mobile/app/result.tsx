@@ -132,53 +132,23 @@ export default function ResultScreen() {
       : ((goalSeconds - elapsed) / goalSeconds) * 100
     : 0;
 
-  const handleSave = async () => {
-    if (Platform.OS === 'web') {
-      router.replace('/stats');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // 권한 요청
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to save to your gallery.');
-        setSaving(false);
-        return;
-      }
-
-      if (timelapsePath) {
-        // TODO: overlayStyle !== 'none'일 때 오버레이 합성 처리 (추후 구현)
-        await MediaLibrary.saveToLibraryAsync(timelapsePath);
-        console.log('[result] Saved timelapse to gallery.');
-      } else {
-        Alert.alert('Error', 'No timelapse file available.');
-        setSaving(false);
-        return;
-      }
-
-      // 세션 업데이트
-      if (sessionId) {
-        try {
-          await updateSession(sessionId, {
-            end_time: new Date().toISOString(),
-            duration: recordingSecs,
-            status: 'completed',
-          });
-        } catch (e) {
-          console.warn('[result] session update failed:', e);
-        }
-      }
-
-      router.replace('/stats');
-    } catch (e) {
-      console.error('[result] Save error:', e);
-      const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('Error', `Failed to save: ${msg}`);
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    router.push({
+      pathname: '/saving',
+      params: {
+        overlayStyle,
+        streak: String(streak),
+        studyMinutes: String(studyMinutes),
+        recordingSeconds: String(recordingSecs),
+        outputSeconds: String(outputSecs),
+        aspectRatio,
+        timerMode,
+        overlayText: overlayStyle === 'timer' ? formatTime(elapsed) : '',
+        photoUris: timelapsePath,
+        cameraFacing,
+        sessionId,
+      },
+    });
   };
 
   const handleUpgrade = () => Alert.alert('Coming Soon', 'Upgrade to remove watermark!');

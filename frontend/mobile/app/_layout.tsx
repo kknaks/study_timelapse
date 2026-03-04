@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack.Screen name="session-setup" options={{ headerShown: false }} />
         <Stack.Screen name="focus" options={{ headerShown: false }} />
         <Stack.Screen name="result" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="generating" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="saving" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="stats" options={{ headerShown: false }} />
       </Stack>
