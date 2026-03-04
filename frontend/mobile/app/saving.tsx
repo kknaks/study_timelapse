@@ -8,7 +8,6 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
 import { updateSession } from '../src/api/sessions';
@@ -66,28 +65,24 @@ async function buildTimelapseNative(params: {
 export default function SavingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    overlayStyle: string;
-    streak: string;
     studyMinutes: string;
     recordingSeconds: string;
     outputSeconds: string;
     aspectRatio: string;
     timerMode: string;
-    overlayText: string;
     videoUri: string;
     sessionId: string;
+    cameraFacing: string;
   }>();
 
-  const overlayStyle = params.overlayStyle ?? 'none';
-  const streak = Number(params.streak) || 0;
   const studyMinutes = Number(params.studyMinutes) || 0;
   const recordingSeconds = Number(params.recordingSeconds) || 0;
   const outputSeconds = Number(params.outputSeconds) || 30;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
-  const overlayText = params.overlayText ?? '';
   const videoUri = params.videoUri ?? '';
   const sessionId = params.sessionId ?? '';
+  const cameraFacing = params.cameraFacing ?? 'front';
 
   const hasRun = useRef(false);
   const [progress, setProgress] = useState(0);
@@ -102,20 +97,11 @@ export default function SavingScreen() {
   const runSave = async () => {
     try {
       if (Platform.OS === 'web') {
-        router.replace('/stats');
+        router.replace('/result');
         return;
       }
 
-      // ── 권한 요청 ──
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to save to your gallery.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-        return;
-      }
-
-      // ── 온디바이스 네이티브 타임랩스 생성 ──
+      // ── 온디바이스 네이티브 타임랩스 생성 (오버레이 없는 순수 타임랩스) ──
       if (!videoUri) {
         throw new Error("No video recorded. Please try again.");
       }
@@ -127,18 +113,14 @@ export default function SavingScreen() {
         outputSeconds,
         outputPath,
         aspectRatio,
-        overlayStyle,
-        overlayText,
-        streak,
+        overlayStyle: 'none',
+        overlayText: '',
+        streak: 0,
         timerMode,
         recordingSeconds,
         goalSeconds: studyMinutes * 60,
         onProgress: (p) => setProgress(Math.round(p * 100)),
       });
-
-      // ── 갤러리 저장 ──
-      await MediaLibrary.saveToLibraryAsync(outputPath);
-      console.log('[saving] Saved to gallery.');
 
       // 세션 업데이트
       if (sessionId) {
@@ -153,15 +135,21 @@ export default function SavingScreen() {
         }
       }
 
-      // 임시 파일 정리
-      try {
-        await FileSystem.deleteAsync(outputPath, { idempotent: true });
-      } catch (cleanupErr) {
-        console.warn('[saving] cleanup error:', cleanupErr);
-      }
-
-      // ── 완료 → stats 화면으로 이동 ──
-      router.replace('/stats');
+      // ── 완료 → result 화면으로 이동 ──
+      router.replace({
+        pathname: '/result',
+        params: {
+          timelapsePath: outputPath,
+          videoUri,
+          sessionId,
+          outputSeconds: String(outputSeconds),
+          recordingSeconds: String(recordingSeconds),
+          aspectRatio,
+          studyMinutes: String(studyMinutes),
+          timerMode,
+          cameraFacing,
+        },
+      });
     } catch (e) {
       console.error('Save error:', e);
       const msg = e instanceof Error ? e.message : String(e);
