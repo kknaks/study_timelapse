@@ -298,16 +298,10 @@ export default function FocusScreen() {
                   setHasStarted(true);
                   startRecording();
                 } else if (isRecording) {
-                  // 일시정지
-                  if (Platform.OS !== 'web') {
-                    cameraRef.current?.pauseRecording();
-                  }
+                  // 일시정지 (타이머만 정지, 녹화는 계속)
                   setIsRecording(false);
                 } else {
-                  // 재개
-                  if (Platform.OS !== 'web') {
-                    cameraRef.current?.resumeRecording();
-                  }
+                  // 재개 (타이머 재개)
                   setIsRecording(true);
                 }
               }}
