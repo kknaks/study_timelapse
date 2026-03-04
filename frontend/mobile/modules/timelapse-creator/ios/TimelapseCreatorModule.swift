@@ -53,153 +53,120 @@ public class TimelapseCreatorModule: Module {
 
   // MARK: - Build Timelapse
 
-  // MARK: - Apply Overlay (lossless composition)
+  // MARK: - Apply Overlay (frame-by-frame, animated overlay)
 
   private func buildOverlay(options: OverlayOptions) async throws -> String {
+    // overlay가 none이면 원본 그대로 복사
+    if options.overlayStyle == "none" {
+      let src = URL(fileURLWithPath: options.videoUri.replacingOccurrences(of: "file://", with: ""))
+      let dst = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
+      try? FileManager.default.removeItem(at: dst)
+      try FileManager.default.copyItem(at: src, to: dst)
+      return options.outputPath
+    }
+
+    await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
+    defer { DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false } }
+
     let inputURL = URL(fileURLWithPath: options.videoUri.replacingOccurrences(of: "file://", with: ""))
     let outputURL = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
     try? FileManager.default.removeItem(at: outputURL)
 
+    let width = options.width
+    let height = options.height
+    let frameRate = 30
+
     let asset = AVAsset(url: inputURL)
     let duration = try await asset.load(.duration)
-    let size = CGSize(width: options.width, height: options.height)
+    let durationSeconds = CMTimeGetSeconds(duration)
+    guard durationSeconds > 0 else {
+      throw NSError(domain: "TimelapseCreator", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Video has zero duration"])
+    }
 
-    // 1. Composition - 원본 트랙 그대로 사용
-    let composition = AVMutableComposition()
-    guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-      throw NSError(domain: "TimelapseCreator", code: -10,
-                    userInfo: [NSLocalizedDescriptionKey: "No video track found"])
-    }
-    guard let compVideoTrack = composition.addMutableTrack(
-      withMediaType: .video,
-      preferredTrackID: kCMPersistentTrackID_Invalid
-    ) else {
-      throw NSError(domain: "TimelapseCreator", code: -11,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to add composition track"])
-    }
-    try compVideoTrack.insertTimeRange(
-      CMTimeRange(start: .zero, duration: duration),
-      of: videoTrack, at: .zero
+    // preferredTransform 로드
+    let videoTrackForXform = try await asset.loadTracks(withMediaType: .video).first
+    let preferredTransform = try await videoTrackForXform?.load(.preferredTransform) ?? .identity
+
+    // frame generator
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = false
+    generator.maximumSize = CGSize(width: width, height: height)
+    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+
+    // encoder
+    let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+    let videoSettings: [String: Any] = [
+      AVVideoCodecKey: AVVideoCodecType.h264,
+      AVVideoWidthKey: width,
+      AVVideoHeightKey: height,
+      AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: 4_000_000,
+        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+      ],
+    ]
+    let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+    writerInput.expectsMediaDataInRealTime = false
+    let sourcePixelBufferAttributes: [String: Any] = [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
+      kCVPixelBufferWidthKey as String: width,
+      kCVPixelBufferHeightKey as String: height,
+    ]
+    let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+      assetWriterInput: writerInput,
+      sourcePixelBufferAttributes: sourcePixelBufferAttributes
     )
-
-    // 오디오 트랙도 있으면 포함
-    if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first,
-       let compAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-      try? compAudioTrack.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: audioTrack, at: .zero)
+    writer.add(writerInput)
+    guard writer.startWriting() else {
+      throw NSError(domain: "TimelapseCreator", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to start writing"])
     }
+    writer.startSession(atSourceTime: .zero)
 
-    // 2. 오버레이 CALayer 구성
-    let videoLayer = CALayer()
-    videoLayer.frame = CGRect(origin: .zero, size: size)
+    let totalFrames = Int(durationSeconds * Double(frameRate))
+    let frameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
 
-    let overlayLayer = CALayer()
-    overlayLayer.frame = CGRect(origin: .zero, size: size)
-
-    // 오버레이 텍스트/그래픽 추가
-    if options.overlayStyle != "none" {
-      let fontSize = min(size.width, size.height) * 0.05
-      let padding: CGFloat = 20
-
-      switch options.overlayStyle {
-      case "timer", "streak":
-        let text = options.overlayStyle == "timer"
-          ? options.overlayText
-          : "▸ \(options.streak) days streak"
-
-        let textLayer = CATextLayer()
-        textLayer.string = text
-        textLayer.fontSize = fontSize
-        textLayer.font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
-        textLayer.foregroundColor = UIColor.white.cgColor
-        textLayer.alignmentMode = .right
-        textLayer.shadowColor = UIColor.black.cgColor
-        textLayer.shadowOffset = CGSize(width: 0, height: -1)
-        textLayer.shadowRadius = 4
-        textLayer.shadowOpacity = 0.6
-        let textW = size.width * 0.45
-        let textH = fontSize * 1.5
-        // CALayer는 bottom-left origin
-        textLayer.frame = CGRect(x: size.width - textW - padding, y: size.height - padding - textH,
-                                  width: textW, height: textH)
-        overlayLayer.addSublayer(textLayer)
-
-      case "progress":
-        let barW: CGFloat = size.width * 0.25
-        let barH: CGFloat = 8
-        let barX = size.width - barW - padding
-        let barY = size.height - padding - barH - fontSize * 1.5
-
-        // 배경
-        let bgLayer = CALayer()
-        bgLayer.frame = CGRect(x: barX, y: barY, width: barW, height: barH)
-        bgLayer.backgroundColor = UIColor.white.withAlphaComponent(0.35).cgColor
-        bgLayer.cornerRadius = barH / 2
-        overlayLayer.addSublayer(bgLayer)
-
-        // 채움 (overlayText에 percent 값 저장)
-        let percent = Double(options.overlayText) ?? 1.0
-        let fillW = barW * CGFloat(percent)
-        let fillLayer = CALayer()
-        fillLayer.frame = CGRect(x: barX, y: barY, width: fillW, height: barH)
-        fillLayer.backgroundColor = UIColor.white.cgColor
-        fillLayer.cornerRadius = barH / 2
-        overlayLayer.addSublayer(fillLayer)
-
-      default:
-        break
+    for frameIdx in 0..<totalFrames {
+      while !writerInput.isReadyForMoreMediaData {
+        try await Task.sleep(nanoseconds: 10_000_000)
       }
+
+      let videoTime = (Double(frameIdx) / Double(totalFrames)) * durationSeconds
+      let cmTime = CMTime(seconds: videoTime, preferredTimescale: 600)
+
+      var actualTime = CMTime.zero
+      let cgImage: CGImage
+      do {
+        cgImage = try generator.copyCGImage(at: cmTime, actualTime: &actualTime)
+      } catch { continue }
+
+      let image = UIImage(cgImage: cgImage)
+
+      guard let pixelBuffer = createPixelBuffer(
+        from: image,
+        width: width,
+        height: height,
+        preferredTransform: preferredTransform,
+        overlayStyle: options.overlayStyle,
+        streak: options.streak,
+        frameIndex: frameIdx,
+        totalFrames: totalFrames,
+        timerMode: options.timerMode,
+        recordingSeconds: options.recordingSeconds,
+        goalSeconds: options.goalSeconds
+      ) else { continue }
+
+      let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIdx))
+      adaptor.append(pixelBuffer, withPresentationTime: presentationTime)
     }
 
-    // 워터마크 (좌하단)
-    let wmText = CATextLayer()
-    let wmFontSize = min(size.width, size.height) * 0.025
-    wmText.string = "FocusTimelapse"
-    wmText.fontSize = wmFontSize
-    wmText.foregroundColor = UIColor.white.withAlphaComponent(0.9).cgColor
-    wmText.frame = CGRect(x: 12, y: 12, width: size.width * 0.4, height: wmFontSize * 1.5)
-    overlayLayer.addSublayer(wmText)
+    writerInput.markAsFinished()
+    await writer.finishWriting()
 
-    // 3. 합성 레이어
-    let parentLayer = CALayer()
-    parentLayer.frame = CGRect(origin: .zero, size: size)
-    parentLayer.addSublayer(videoLayer)
-    parentLayer.addSublayer(overlayLayer)
-
-    // 4. VideoComposition
-    let videoComposition = AVMutableVideoComposition()
-    videoComposition.renderSize = size
-    videoComposition.frameDuration = CMTimeMake(value: 1, timescale: 30)
-    videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
-      postProcessingAsVideoLayer: videoLayer,
-      in: parentLayer
-    )
-
-    let instruction = AVMutableVideoCompositionInstruction()
-    instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-    let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
-    // 원본 transform 적용
-    let preferredTransform = try await videoTrack.load(.preferredTransform)
-    layerInstruction.setTransform(preferredTransform, at: .zero)
-    instruction.layerInstructions = [layerInstruction]
-    videoComposition.instructions = [instruction]
-
-    // 5. Export
-    guard let exportSession = AVAssetExportSession(
-      asset: composition,
-      presetName: AVAssetExportPresetHighestQuality
-    ) else {
-      throw NSError(domain: "TimelapseCreator", code: -12,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
-    }
-    exportSession.outputURL = outputURL
-    exportSession.outputFileType = .mp4
-    exportSession.videoComposition = videoComposition
-
-    await exportSession.export()
-
-    guard exportSession.status == .completed else {
-      throw NSError(domain: "TimelapseCreator", code: -13,
-                    userInfo: [NSLocalizedDescriptionKey: exportSession.error?.localizedDescription ?? "Export failed"])
+    guard writer.status == .completed else {
+      throw NSError(domain: "TimelapseCreator", code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: writer.error?.localizedDescription ?? "Export failed"])
     }
 
     return options.outputPath
