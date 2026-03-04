@@ -1,7 +1,6 @@
 import ExpoModulesCore
 import AVFoundation
 import CoreGraphics
-import ImageIO
 import UIKit
 
 public class TimelapseCreatorModule: Module {
@@ -18,14 +17,13 @@ public class TimelapseCreatorModule: Module {
   // MARK: - Options Record
 
   struct TimelapseOptions: Record {
-    @Field var photoUris: [String] = []
+    @Field var videoUri: String = ""
     @Field var outputPath: String = ""
     @Field var outputSeconds: Double = 30
     @Field var width: Int = 720
     @Field var height: Int = 1280
     @Field var frameRate: Int = 30
     @Field var bitRate: Int = 3_500_000
-    @Field var mirrorHorizontally: Bool = false
     @Field var overlayStyle: String = "none"
     @Field var overlayText: String = ""
     @Field var streak: Int = 0
@@ -51,7 +49,25 @@ public class TimelapseCreatorModule: Module {
     let width = options.width
     let height = options.height
 
-    // AVAssetWriter setup
+    // 1. Load source video
+    let videoURL = URL(fileURLWithPath: options.videoUri.replacingOccurrences(of: "file://", with: ""))
+    let asset = AVAsset(url: videoURL)
+    let duration = try await asset.load(.duration)
+    let durationSeconds = CMTimeGetSeconds(duration)
+
+    guard durationSeconds > 0 else {
+      throw NSError(domain: "TimelapseCreator", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Video has zero duration"])
+    }
+
+    // 2. Setup AVAssetImageGenerator
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    generator.maximumSize = CGSize(width: width * 2, height: height * 2)
+    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
+    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+
+    // 3. AVAssetWriter setup
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
     let videoSettings: [String: Any] = [
@@ -85,67 +101,41 @@ public class TimelapseCreatorModule: Module {
     }
     writer.startSession(atSourceTime: .zero)
 
-    let totalFrames = options.outputSeconds * Double(options.frameRate)
-    let totalImages = options.photoUris.count
-
-    guard totalImages > 0 else {
-      throw NSError(domain: "TimelapseCreator", code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: "No photos provided"])
-    }
-
-    // Image cache: keep last loaded image to avoid reloading same index
-    var cachedImageIndex = -1
-    var cachedImage: UIImage?
-
+    let totalFrames = Int(options.outputSeconds * Double(options.frameRate))
     let frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
 
-    for frameIdx in 0..<Int(totalFrames) {
+    // 4. Extract frames and encode
+    for frameIdx in 0..<totalFrames {
       // Wait until the writer input is ready
       while !writerInput.isReadyForMoreMediaData {
         try await Task.sleep(nanoseconds: 10_000_000) // 10ms
       }
 
-      // Map frame index to image index (linear)
-      let imageIndex = min(
-        Int(Double(frameIdx) / totalFrames * Double(totalImages)),
-        totalImages - 1
-      )
+      // Map frame index to source video time
+      let videoTime = (Double(frameIdx) / Double(totalFrames)) * durationSeconds
+      let cmTime = CMTime(seconds: videoTime, preferredTimescale: 600)
 
-      // Load image if needed
-      if imageIndex != cachedImageIndex {
-        let uri = options.photoUris[imageIndex]
-        let url = URL(fileURLWithPath: uri.replacingOccurrences(of: "file://", with: ""))
-        guard let data = try? Data(contentsOf: url),
-              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-          throw NSError(domain: "TimelapseCreator", code: -3,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to load image at index \(imageIndex): \(uri)"])
-        }
-        // Use CGImageSource with transform to reliably apply EXIF orientation
-        let thumbOptions: [CFString: Any] = [
-          kCGImageSourceCreateThumbnailFromImageAlways: true,
-          kCGImageSourceCreateThumbnailWithTransform: true,
-          kCGImageSourceThumbnailMaxPixelSize: max(width, height) * 3,
-        ]
-        guard let orientedCG = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else {
-          throw NSError(domain: "TimelapseCreator", code: -3,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to decode image at index \(imageIndex): \(uri)"])
-        }
-        cachedImage = UIImage(cgImage: orientedCG)
-        cachedImageIndex = imageIndex
+      // Extract frame
+      var actualTime = CMTime.zero
+      let cgImage: CGImage
+      do {
+        cgImage = try generator.copyCGImage(at: cmTime, actualTime: &actualTime)
+      } catch {
+        // Skip frames that fail to extract
+        continue
       }
 
-      guard let image = cachedImage else { continue }
+      let image = UIImage(cgImage: cgImage)
 
-      // Create pixel buffer
+      // Create pixel buffer (mirror=false, generator handles orientation)
       guard let pixelBuffer = createPixelBuffer(
         from: image,
         width: width,
         height: height,
-        mirror: options.mirrorHorizontally,
         overlayStyle: options.overlayStyle,
         streak: options.streak,
         frameIndex: frameIdx,
-        totalFrames: Int(totalFrames),
+        totalFrames: totalFrames,
         timerMode: options.timerMode,
         recordingSeconds: options.recordingSeconds,
         goalSeconds: options.goalSeconds
@@ -158,7 +148,7 @@ public class TimelapseCreatorModule: Module {
 
       // Report progress every 10 frames
       if frameIdx % 10 == 0 {
-        let progress = Double(frameIdx) / totalFrames
+        let progress = Double(frameIdx) / Double(totalFrames)
         self.sendEvent("onProgress", ["progress": progress])
       }
     }
@@ -182,7 +172,6 @@ public class TimelapseCreatorModule: Module {
     from image: UIImage,
     width: Int,
     height: Int,
-    mirror: Bool,
     overlayStyle: String,
     streak: Int,
     frameIndex: Int,
@@ -218,7 +207,6 @@ public class TimelapseCreatorModule: Module {
       bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
     ) else { return nil }
 
-    // Image is already orientation-normalized during loading (CGImageSource with transform)
     guard let cgImage = image.cgImage else { return nil }
 
     let imgW = CGFloat(cgImage.width)
@@ -241,15 +229,9 @@ public class TimelapseCreatorModule: Module {
     // Crop the source image
     guard let croppedCG = cgImage.cropping(to: srcRect) else { return nil }
 
-    // CGContext origin is bottom-left, so always flip Y first
+    // Flip Y for CGContext (bottom-left origin) vs UIImage (top-left origin)
     context.translateBy(x: 0, y: outH)
-    context.scaleBy(x: 1, y: -1)
-
-    // Apply horizontal mirror for front camera (X flip only)
-    if mirror {
-      context.translateBy(x: outW, y: 0)
-      context.scaleBy(x: -1, y: 1)
-    }
+    context.scaleBy(x: 1.0, y: -1.0)
 
     context.draw(croppedCG, in: CGRect(x: 0, y: 0, width: outW, height: outH))
 
@@ -368,7 +350,6 @@ public class TimelapseCreatorModule: Module {
     // Background (semi-transparent)
     let bgRect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
     context.setFillColor(UIColor.black.withAlphaComponent(0.4).cgColor)
-    // Need to flip rect for CGContext (already in UIKit coords via push)
     UIColor.black.withAlphaComponent(0.4).setFill()
     UIBezierPath(roundedRect: bgRect, cornerRadius: barHeight / 2).fill()
 

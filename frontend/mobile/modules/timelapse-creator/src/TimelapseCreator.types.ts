@@ -1,12 +1,11 @@
 export interface TimelapseOptions {
-  photoUris: string[];
+  videoUri: string;
   outputPath: string;
   outputSeconds: number;
   width: number;
   height: number;
   frameRate: number;
   bitRate: number;
-  mirrorHorizontally: boolean;
   overlayStyle: string; // "none"|"timer"|"progress"|"streak"
   overlayText: string;
   streak: number;

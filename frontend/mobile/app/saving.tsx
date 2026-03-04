@@ -42,11 +42,10 @@ const RESOLUTIONS: Record<string, [number, number]> = {
 };
 
 async function buildTimelapseNative(params: {
-  photoUris: string[];
+  videoUri: string;
   outputSeconds: number;
   outputPath: string;
   aspectRatio: string;
-  cameraFacing: string;
   overlayStyle: string;
   overlayText: string;
   streak: number;
@@ -55,7 +54,7 @@ async function buildTimelapseNative(params: {
   goalSeconds: number;
   onProgress?: (p: number) => void;
 }) {
-  const { photoUris, outputSeconds, outputPath, aspectRatio, cameraFacing,
+  const { videoUri, outputSeconds, outputPath, aspectRatio,
           overlayStyle, overlayText, streak, timerMode, recordingSeconds, goalSeconds, onProgress } = params;
 
   const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
@@ -66,14 +65,13 @@ async function buildTimelapseNative(params: {
 
   try {
     await createTimelapse({
-      photoUris,
+      videoUri,
       outputPath,
       outputSeconds,
       width,
       height,
       frameRate: 30,
       bitRate: 3_500_000,
-      mirrorHorizontally: cameraFacing === 'front',
       overlayStyle,
       overlayText,
       streak,
@@ -98,7 +96,6 @@ export default function SavingScreen() {
     timerMode: string;
     overlayText: string;
     videoUri: string;
-    cameraFacing: string;
     sessionId: string;
   }>();
 
@@ -111,7 +108,6 @@ export default function SavingScreen() {
   const timerMode = params.timerMode ?? 'countdown';
   const overlayText = params.overlayText ?? '';
   const videoUri = params.videoUri ?? '';
-  const cameraFacing = params.cameraFacing ?? 'front';
   const sessionId = params.sessionId ?? '';
 
   const isWeb = Platform.OS === 'web';
@@ -193,11 +189,10 @@ export default function SavingScreen() {
       const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
 
       await buildTimelapseNative({
-        photoUris: [videoUri], // Phase 2: 네이티브 모듈이 videoUri를 직접 받도록 변경 예정
+        videoUri,
         outputSeconds,
         outputPath,
         aspectRatio,
-        cameraFacing,
         overlayStyle,
         overlayText,
         streak,

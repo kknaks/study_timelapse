@@ -4,17 +4,19 @@ import { TimelapseCreatorModuleEvents } from './TimelapseCreator.types';
 
 declare class TimelapseCreatorModule extends NativeModule<TimelapseCreatorModuleEvents> {
   createTimelapse(options: {
-    photoUris: string[];
+    videoUri: string;
     outputPath: string;
     outputSeconds: number;
     width: number;
     height: number;
     frameRate: number;
     bitRate: number;
-    mirrorHorizontally: boolean;
     overlayStyle: string;
     overlayText: string;
     streak: number;
+    timerMode: string;
+    recordingSeconds: number;
+    goalSeconds: number;
   }): Promise<string>;
 }
 
