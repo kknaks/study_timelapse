@@ -18,6 +18,18 @@ declare class TimelapseCreatorModule extends NativeModule<TimelapseCreatorModule
     recordingSeconds: number;
     goalSeconds: number;
   }): Promise<string>;
+  applyOverlay(options: {
+    videoUri: string;
+    outputPath: string;
+    overlayStyle: string;
+    overlayText: string;
+    streak: number;
+    recordingSeconds: number;
+    goalSeconds: number;
+    timerMode: string;
+    width: number;
+    height: number;
+  }): Promise<string>;
 }
 
 export default requireNativeModule<TimelapseCreatorModule>('TimelapseCreator');

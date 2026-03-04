@@ -14,6 +14,19 @@ export interface TimelapseOptions {
   goalSeconds: number;
 }
 
+export interface OverlayOptions {
+  videoUri: string;
+  outputPath: string;
+  overlayStyle: string; // "none"|"timer"|"progress"|"streak"
+  overlayText: string;
+  streak: number;
+  recordingSeconds: number;
+  goalSeconds: number;
+  timerMode: string; // "countdown"|"countup"
+  width: number;
+  height: number;
+}
+
 export type TimelapseCreatorModuleEvents = {
   onProgress: (params: { progress: number }) => void;
 };

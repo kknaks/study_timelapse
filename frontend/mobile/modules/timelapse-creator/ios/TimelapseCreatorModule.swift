@@ -2,6 +2,7 @@ import ExpoModulesCore
 import AVFoundation
 import CoreGraphics
 import UIKit
+import QuartzCore
 
 public class TimelapseCreatorModule: Module {
   public func definition() -> ModuleDefinition {
@@ -12,9 +13,26 @@ public class TimelapseCreatorModule: Module {
     AsyncFunction("createTimelapse") { (options: TimelapseOptions) -> String in
       return try await self.buildTimelapse(options: options)
     }
+
+    AsyncFunction("applyOverlay") { (options: OverlayOptions) -> String in
+      return try await self.buildOverlay(options: options)
+    }
   }
 
-  // MARK: - Options Record
+  // MARK: - Options Records
+
+  struct OverlayOptions: Record {
+    @Field var videoUri: String = ""
+    @Field var outputPath: String = ""
+    @Field var overlayStyle: String = "none"
+    @Field var overlayText: String = ""
+    @Field var streak: Int = 0
+    @Field var recordingSeconds: Double = 0
+    @Field var goalSeconds: Double = 0
+    @Field var timerMode: String = "countdown"
+    @Field var width: Int = 720
+    @Field var height: Int = 1280
+  }
 
   struct TimelapseOptions: Record {
     @Field var videoUri: String = ""
@@ -30,6 +48,160 @@ public class TimelapseCreatorModule: Module {
     @Field var timerMode: String = "countdown"
     @Field var recordingSeconds: Double = 0
     @Field var goalSeconds: Double = 0
+  }
+
+  // MARK: - Build Timelapse
+
+  // MARK: - Apply Overlay (lossless composition)
+
+  private func buildOverlay(options: OverlayOptions) async throws -> String {
+    let inputURL = URL(fileURLWithPath: options.videoUri.replacingOccurrences(of: "file://", with: ""))
+    let outputURL = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
+    try? FileManager.default.removeItem(at: outputURL)
+
+    let asset = AVAsset(url: inputURL)
+    let duration = try await asset.load(.duration)
+    let size = CGSize(width: options.width, height: options.height)
+
+    // 1. Composition - 원본 트랙 그대로 사용
+    let composition = AVMutableComposition()
+    guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+      throw NSError(domain: "TimelapseCreator", code: -10,
+                    userInfo: [NSLocalizedDescriptionKey: "No video track found"])
+    }
+    guard let compVideoTrack = composition.addMutableTrack(
+      withMediaType: .video,
+      preferredTrackID: kCMPersistentTrackID_Invalid
+    ) else {
+      throw NSError(domain: "TimelapseCreator", code: -11,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to add composition track"])
+    }
+    try compVideoTrack.insertTimeRange(
+      CMTimeRange(start: .zero, duration: duration),
+      of: videoTrack, at: .zero
+    )
+
+    // 오디오 트랙도 있으면 포함
+    if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first,
+       let compAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+      try? compAudioTrack.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: audioTrack, at: .zero)
+    }
+
+    // 2. 오버레이 CALayer 구성
+    let videoLayer = CALayer()
+    videoLayer.frame = CGRect(origin: .zero, size: size)
+
+    let overlayLayer = CALayer()
+    overlayLayer.frame = CGRect(origin: .zero, size: size)
+
+    // 오버레이 텍스트/그래픽 추가
+    if options.overlayStyle != "none" {
+      let fontSize = min(size.width, size.height) * 0.05
+      let padding: CGFloat = 20
+
+      switch options.overlayStyle {
+      case "timer", "streak":
+        let text = options.overlayStyle == "timer"
+          ? options.overlayText
+          : "▸ \(options.streak) days streak"
+
+        let textLayer = CATextLayer()
+        textLayer.string = text
+        textLayer.fontSize = fontSize
+        textLayer.font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+        textLayer.foregroundColor = UIColor.white.cgColor
+        textLayer.alignmentMode = .right
+        textLayer.shadowColor = UIColor.black.cgColor
+        textLayer.shadowOffset = CGSize(width: 0, height: -1)
+        textLayer.shadowRadius = 4
+        textLayer.shadowOpacity = 0.6
+        let textW = size.width * 0.45
+        let textH = fontSize * 1.5
+        // CALayer는 bottom-left origin
+        textLayer.frame = CGRect(x: size.width - textW - padding, y: size.height - padding - textH,
+                                  width: textW, height: textH)
+        overlayLayer.addSublayer(textLayer)
+
+      case "progress":
+        let barW: CGFloat = size.width * 0.25
+        let barH: CGFloat = 8
+        let barX = size.width - barW - padding
+        let barY = size.height - padding - barH - fontSize * 1.5
+
+        // 배경
+        let bgLayer = CALayer()
+        bgLayer.frame = CGRect(x: barX, y: barY, width: barW, height: barH)
+        bgLayer.backgroundColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        bgLayer.cornerRadius = barH / 2
+        overlayLayer.addSublayer(bgLayer)
+
+        // 채움 (overlayText에 percent 값 저장)
+        let percent = Double(options.overlayText) ?? 1.0
+        let fillW = barW * CGFloat(percent)
+        let fillLayer = CALayer()
+        fillLayer.frame = CGRect(x: barX, y: barY, width: fillW, height: barH)
+        fillLayer.backgroundColor = UIColor.white.cgColor
+        fillLayer.cornerRadius = barH / 2
+        overlayLayer.addSublayer(fillLayer)
+
+      default:
+        break
+      }
+    }
+
+    // 워터마크 (좌하단)
+    let wmText = CATextLayer()
+    let wmFontSize = min(size.width, size.height) * 0.025
+    wmText.string = "FocusTimelapse"
+    wmText.fontSize = wmFontSize
+    wmText.foregroundColor = UIColor.white.withAlphaComponent(0.9).cgColor
+    wmText.frame = CGRect(x: 12, y: 12, width: size.width * 0.4, height: wmFontSize * 1.5)
+    overlayLayer.addSublayer(wmText)
+
+    // 3. 합성 레이어
+    let parentLayer = CALayer()
+    parentLayer.frame = CGRect(origin: .zero, size: size)
+    parentLayer.addSublayer(videoLayer)
+    parentLayer.addSublayer(overlayLayer)
+
+    // 4. VideoComposition
+    let videoComposition = AVMutableVideoComposition()
+    videoComposition.renderSize = size
+    videoComposition.frameDuration = CMTimeMake(value: 1, timescale: 30)
+    videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+      postProcessingAsVideoLayer: videoLayer,
+      in: parentLayer
+    )
+
+    let instruction = AVMutableVideoCompositionInstruction()
+    instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+    let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
+    // 원본 transform 적용
+    let preferredTransform = try await videoTrack.load(.preferredTransform)
+    layerInstruction.setTransform(preferredTransform, at: .zero)
+    instruction.layerInstructions = [layerInstruction]
+    videoComposition.instructions = [instruction]
+
+    // 5. Export
+    guard let exportSession = AVAssetExportSession(
+      asset: composition,
+      presetName: AVAssetExportPresetHighestQuality
+    ) else {
+      throw NSError(domain: "TimelapseCreator", code: -12,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+    }
+    exportSession.outputURL = outputURL
+    exportSession.outputFileType = .mp4
+    exportSession.videoComposition = videoComposition
+
+    await exportSession.export()
+
+    guard exportSession.status == .completed else {
+      throw NSError(domain: "TimelapseCreator", code: -13,
+                    userInfo: [NSLocalizedDescriptionKey: exportSession.error?.localizedDescription ?? "Export failed"])
+    }
+
+    return options.outputPath
   }
 
   // MARK: - Build Timelapse

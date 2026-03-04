@@ -12,8 +12,17 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { applyOverlay } from '../modules/timelapse-creator';
 import { updateSession } from '../src/api/sessions';
+
+const RESOLUTIONS: Record<string, [number, number]> = {
+  '9:16': [720, 1280],
+  '1:1':  [720, 720],
+  '16:9': [1280, 720],
+  '4:5':  [720, 900],
+};
 
 const GREEN = '#22C55E';
 const GRAY = '#BBBBBB';
@@ -40,8 +49,14 @@ export default function SavingScreen() {
     sessionId: string;
   }>();
 
+  const overlayStyle = params.overlayStyle ?? 'none';
+  const overlayText = params.overlayText ?? '';
+  const streak = Number(params.streak) || 0;
+  const studyMinutes = Number(params.studyMinutes) || 0;
   const recordingSeconds = Number(params.recordingSeconds) || 0;
-  const timelapsePath = params.photoUris ?? '';  // result.tsx에서 photoUris로 전달됨
+  const aspectRatio = params.aspectRatio ?? '9:16';
+  const timerMode = params.timerMode ?? 'countdown';
+  const timelapsePath = params.photoUris ?? '';
   const sessionId = params.sessionId ?? '';
 
   const isWeb = Platform.OS === 'web';
@@ -107,12 +122,32 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 1: 갤러리 저장 ──
+      // ── Step 1: 오버레이 합성 + 갤러리 저장 ──
       setActive(idx);
       if (!timelapsePath) {
         throw new Error('No timelapse file found. Please try again.');
       }
-      await MediaLibrary.saveToLibraryAsync(timelapsePath);
+
+      let finalPath = timelapsePath;
+      if (overlayStyle !== 'none') {
+        const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
+        const cacheDir = FileSystem.cacheDirectory ?? '';
+        const overlayOutputPath = `${cacheDir}timelapse_overlay_${Date.now()}.mp4`;
+        finalPath = await applyOverlay({
+          videoUri: timelapsePath,
+          outputPath: overlayOutputPath,
+          overlayStyle,
+          overlayText,
+          streak,
+          recordingSeconds,
+          goalSeconds: studyMinutes * 60,
+          timerMode,
+          width,
+          height,
+        });
+      }
+
+      await MediaLibrary.saveToLibraryAsync(finalPath);
       console.log('[saving] Saved to gallery.');
 
       // 세션 업데이트
