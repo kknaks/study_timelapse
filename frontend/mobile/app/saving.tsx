@@ -102,7 +102,7 @@ export default function SavingScreen() {
   const runSave = async () => {
     try {
       if (Platform.OS === 'web') {
-        router.replace({ pathname: '/result', params });
+        router.replace('/stats');
         return;
       }
 
@@ -160,8 +160,8 @@ export default function SavingScreen() {
         console.warn('[saving] cleanup error:', cleanupErr);
       }
 
-      // ── 완료 → result 화면으로 이동 ──
-      router.replace({ pathname: '/result', params });
+      // ── 완료 → stats 화면으로 이동 ──
+      router.replace('/stats');
     } catch (e) {
       console.error('Save error:', e);
       const msg = e instanceof Error ? e.message : String(e);
