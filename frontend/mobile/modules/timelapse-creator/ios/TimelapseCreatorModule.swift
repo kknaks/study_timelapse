@@ -395,23 +395,25 @@ public class TimelapseCreatorModule: Module {
     UIGraphicsPopContext()
     context.restoreGState()
 
-    // ── 오버레이: UIKit 좌표계(top-left origin)에서 드로잉 ──
-    // UIGraphicsPushContext로 UIKit 좌표계 그대로 사용 (flip 없음)
-    if overlayStyle != "none" {
-      UIGraphicsPushContext(context)
-      drawOverlay(
-        width: outW,
-        height: outH,
-        style: overlayStyle,
-        streak: streak,
-        frameIndex: frameIndex,
-        totalFrames: totalFrames,
-        timerMode: timerMode,
-        recordingSeconds: recordingSeconds,
-        goalSeconds: goalSeconds
-      )
-      UIGraphicsPopContext()
-    }
+    // ── 오버레이: CGContext를 UIKit 좌표계(top-left origin)로 변환 후 드로잉 ──
+    // CGContext는 bottom-left origin → Y-flip 적용해야 UIKit 텍스트가 바로 나옴
+    context.saveGState()
+    context.translateBy(x: 0, y: outH)
+    context.scaleBy(x: 1.0, y: -1.0)
+    UIGraphicsPushContext(context)
+    drawOverlay(
+      width: outW,
+      height: outH,
+      style: overlayStyle,
+      streak: streak,
+      frameIndex: frameIndex,
+      totalFrames: totalFrames,
+      timerMode: timerMode,
+      recordingSeconds: recordingSeconds,
+      goalSeconds: goalSeconds
+    )
+    UIGraphicsPopContext()
+    context.restoreGState()
 
     return buffer
   }
