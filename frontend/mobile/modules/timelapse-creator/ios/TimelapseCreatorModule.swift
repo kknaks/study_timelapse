@@ -395,25 +395,27 @@ public class TimelapseCreatorModule: Module {
     UIGraphicsPopContext()
     context.restoreGState()
 
-    // ── 오버레이: CGContext를 UIKit 좌표계(top-left origin)로 변환 후 드로잉 ──
+    // ── 오버레이: overlayStyle이 'none'이면 완전히 스킵 (워터마크 포함) ──
     // CGContext는 bottom-left origin → Y-flip 적용해야 UIKit 텍스트가 바로 나옴
-    context.saveGState()
-    context.translateBy(x: 0, y: outH)
-    context.scaleBy(x: 1.0, y: -1.0)
-    UIGraphicsPushContext(context)
-    drawOverlay(
-      width: outW,
-      height: outH,
-      style: overlayStyle,
-      streak: streak,
-      frameIndex: frameIndex,
-      totalFrames: totalFrames,
-      timerMode: timerMode,
-      recordingSeconds: recordingSeconds,
-      goalSeconds: goalSeconds
-    )
-    UIGraphicsPopContext()
-    context.restoreGState()
+    if overlayStyle != "none" {
+      context.saveGState()
+      context.translateBy(x: 0, y: outH)
+      context.scaleBy(x: 1.0, y: -1.0)
+      UIGraphicsPushContext(context)
+      drawOverlay(
+        width: outW,
+        height: outH,
+        style: overlayStyle,
+        streak: streak,
+        frameIndex: frameIndex,
+        totalFrames: totalFrames,
+        timerMode: timerMode,
+        recordingSeconds: recordingSeconds,
+        goalSeconds: goalSeconds
+      )
+      UIGraphicsPopContext()
+      context.restoreGState()
+    }
 
     return buffer
   }
@@ -459,13 +461,28 @@ public class TimelapseCreatorModule: Module {
       break
     }
 
-    // 워터마크
+    // 워터마크: 로고 이미지 + "FocusTimelapse" 텍스트 (좌하단)
     let wmFontSize = min(width, height) * 0.025
+    let wmPadding: CGFloat = 12
+    let logoSize = wmFontSize * 1.4
     let wmAttrs: [NSAttributedString.Key: Any] = [
-      .font: UIFont.systemFont(ofSize: wmFontSize),
+      .font: UIFont.systemFont(ofSize: wmFontSize, weight: .bold),
       .foregroundColor: UIColor.white.withAlphaComponent(0.9),
     ]
-    ("FocusTimelapse" as NSString).draw(at: CGPoint(x: 12, y: height - wmFontSize * 1.5 - 12), withAttributes: wmAttrs)
+    let textSize = ("FocusTimelapse" as NSString).size(withAttributes: wmAttrs)
+    let totalWidth = logoSize + 5 + textSize.width
+    let wmY = height - logoSize - wmPadding
+
+    // 로고 이미지 그리기
+    if let logoImage = UIImage(named: "logo") ?? UIImage(named: "logo.png") {
+      let logoRect = CGRect(x: wmPadding, y: wmY, width: logoSize, height: logoSize)
+      logoImage.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
+    }
+
+    // 텍스트 그리기 (로고 오른쪽)
+    let textX = wmPadding + logoSize + 5
+    let textY = wmY + (logoSize - textSize.height) / 2
+    ("FocusTimelapse" as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: wmAttrs)
   }
 
   // MARK: - CGAffineTransform → UIImage.Orientation
