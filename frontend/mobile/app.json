@@ -14,7 +14,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.kknaks.studytimelapse",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "This app does not use your location."
       }
     },
     "android": {
