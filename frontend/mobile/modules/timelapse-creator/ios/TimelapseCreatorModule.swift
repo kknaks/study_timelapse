@@ -395,27 +395,25 @@ public class TimelapseCreatorModule: Module {
     UIGraphicsPopContext()
     context.restoreGState()
 
-    // ── 오버레이: overlayStyle이 'none'이면 완전히 스킵 (워터마크 포함) ──
+    // ── 오버레이: 항상 drawOverlay 호출 (워터마크는 항상, 선택 오버레이는 style에 따라) ──
     // CGContext는 bottom-left origin → Y-flip 적용해야 UIKit 텍스트가 바로 나옴
-    if overlayStyle != "none" {
-      context.saveGState()
-      context.translateBy(x: 0, y: outH)
-      context.scaleBy(x: 1.0, y: -1.0)
-      UIGraphicsPushContext(context)
-      drawOverlay(
-        width: outW,
-        height: outH,
-        style: overlayStyle,
-        streak: streak,
-        frameIndex: frameIndex,
-        totalFrames: totalFrames,
-        timerMode: timerMode,
-        recordingSeconds: recordingSeconds,
-        goalSeconds: goalSeconds
-      )
-      UIGraphicsPopContext()
-      context.restoreGState()
-    }
+    context.saveGState()
+    context.translateBy(x: 0, y: outH)
+    context.scaleBy(x: 1.0, y: -1.0)
+    UIGraphicsPushContext(context)
+    drawOverlay(
+      width: outW,
+      height: outH,
+      style: overlayStyle,
+      streak: streak,
+      frameIndex: frameIndex,
+      totalFrames: totalFrames,
+      timerMode: timerMode,
+      recordingSeconds: recordingSeconds,
+      goalSeconds: goalSeconds
+    )
+    UIGraphicsPopContext()
+    context.restoreGState()
 
     return buffer
   }
@@ -442,6 +440,9 @@ public class TimelapseCreatorModule: Module {
     let elapsed = totalFrames > 0
       ? (Double(frameIndex) / Double(totalFrames)) * recordingSeconds
       : 0
+
+    // "pure" = generating 단계에서 워터마크 없는 순수 영상 생성용
+    if style == "pure" { return }
 
     switch style {
     case "timer":

@@ -75,7 +75,7 @@ export default function GeneratingScreen() {
           height,
           frameRate: 30,
           bitRate: 3_500_000,
-          overlayStyle: 'none',
+          overlayStyle: 'pure', // 워터마크 없는 순수 영상
           overlayText: '',
           streak: 0,
           timerMode,
