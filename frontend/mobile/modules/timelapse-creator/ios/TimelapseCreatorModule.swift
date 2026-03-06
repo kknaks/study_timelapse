@@ -470,7 +470,7 @@ public class TimelapseCreatorModule: Module {
     }
 
     // 워터마크: 로고 이미지 + "FocusTimelapse" 텍스트 (좌하단)
-    let wmFontSize = min(width, height) * 0.025
+    let wmFontSize = min(width, height) * 0.045
     let wmPadding: CGFloat = 12
     let logoSize = wmFontSize * 1.4
     let wmAttrs: [NSAttributedString.Key: Any] = [
@@ -566,7 +566,11 @@ public class TimelapseCreatorModule: Module {
     if totalMins >= 60 {
       let h = totalMins / 60
       let m = totalMins % 60
-      goalText = m > 0 ? "\(h)h \(m)m" : "\(h) hr\(h > 1 ? "s" : "")"
+      if m > 0 {
+        goalText = "\(h)h \(m)m"
+      } else {
+        goalText = h == 1 ? "1 hr" : "\(h) hrs"
+      }
     } else {
       goalText = "\(totalMins) min"
     }

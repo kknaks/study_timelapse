@@ -7,6 +7,7 @@ import {
   Modal,
   StatusBar,
   Platform,
+  PanResponder,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
@@ -48,9 +49,39 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
+  const [zoom, setZoom] = useState(1);
+  const lastZoomRef = useRef(1);
 
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
+
+  // 핀치 줌 제스처
+  const pinchRef = useRef({ initialDistance: 0, initialZoom: 1 });
+  const pinchResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (_, gs) => gs.numberActiveTouches === 2,
+      onMoveShouldSetPanResponder: (_, gs) => gs.numberActiveTouches === 2,
+      onPanResponderGrant: (e) => {
+        const touches = e.nativeEvent.touches;
+        if (touches.length < 2) return;
+        const dx = touches[0].pageX - touches[1].pageX;
+        const dy = touches[0].pageY - touches[1].pageY;
+        pinchRef.current.initialDistance = Math.sqrt(dx * dx + dy * dy);
+        pinchRef.current.initialZoom = lastZoomRef.current;
+      },
+      onPanResponderMove: (e) => {
+        const touches = e.nativeEvent.touches;
+        if (touches.length < 2) return;
+        const dx = touches[0].pageX - touches[1].pageX;
+        const dy = touches[0].pageY - touches[1].pageY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const scale = distance / pinchRef.current.initialDistance;
+        const newZoom = Math.min(Math.max(pinchRef.current.initialZoom * scale, 1), 8);
+        lastZoomRef.current = newZoom;
+        setZoom(newZoom);
+      },
+    })
+  ).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string | null>(null);
   const isStoppingRef = useRef(false);
@@ -238,10 +269,13 @@ export default function FocusScreen() {
       <StatusBar barStyle="light-content" />
 
       {/* Camera Preview — aspect ratio 맞게 중앙 배치, 나머지 검정 */}
-      <View style={webCameraStyle ?? [
-        styles.cameraWrapper,
-        aspectRatio === '16:9' && styles.cameraWrapper16x9,
-      ]}>
+      <View
+        style={webCameraStyle ?? [
+          styles.cameraWrapper,
+          aspectRatio === '16:9' && styles.cameraWrapper16x9,
+        ]}
+        {...pinchResponder.panHandlers}
+      >
         {Platform.OS !== 'web' ? (
           <Camera
             ref={cameraRef}
@@ -254,6 +288,7 @@ export default function FocusScreen() {
             isActive={!showExitModal}
             video={true}
             audio={true}
+            zoom={zoom}
             onInitialized={() => setCameraReady(true)}
           />
         ) : (
@@ -305,7 +340,7 @@ export default function FocusScreen() {
             {!hasStarted && Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={styles.flipButton}
-                onPress={() => setCameraFacing(f => f === 'front' ? 'back' : 'front')}
+                onPress={() => { setCameraFacing(f => f === 'front' ? 'back' : 'front'); setZoom(1); lastZoomRef.current = 1; }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.flipIcon}>⇄</Text>
