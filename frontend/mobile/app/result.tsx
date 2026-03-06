@@ -230,7 +230,7 @@ export default function ResultScreen() {
                           : `${Math.floor(goalSeconds / 60)} min`}
                       </Text>
                       <View style={styles.progressTrack}>
-                        <View style={[styles.progressFill, { width: `${Math.min(100, (recordingSecs / goalSeconds) * 100)}%` as any }]} />
+                        <View style={[styles.progressFill, { width: `${Math.min(100, progressPercent * (recordingSecs / goalSeconds))}%` as any }]} />
                       </View>
                     </View>
                   )}

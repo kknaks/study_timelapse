@@ -471,8 +471,10 @@ public class TimelapseCreatorModule: Module {
       drawText(formatTime(displaySeconds), font: font, padding: padding, width: width)
 
     case "progress":
-      // 목표 시간 대비 실제 진행 비율 (고정값 — 프레임마다 변하지 않음)
-      let percent = goalSeconds > 0 ? min(1.0, recordingSeconds / goalSeconds) : 1.0
+      // 영상 재생 진행에 따라 0 → (recordingSeconds/goalSeconds) 로 채워짐
+      let finalPercent = goalSeconds > 0 ? min(1.0, recordingSeconds / goalSeconds) : 1.0
+      let playbackProgress = totalFrames > 0 ? Double(frameIndex) / Double(totalFrames) : 0
+      let percent = finalPercent * playbackProgress
       drawProgressBar(percent: percent, goalSeconds: goalSeconds, padding: padding, width: width, fontSize: fontSize)
 
     case "streak":
