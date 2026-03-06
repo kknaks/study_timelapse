@@ -203,15 +203,21 @@ export default function ResultScreen() {
               )}
             </View>
 
-            {/* 오버레이 미리보기: 선택한 스타일만 표시 (워터마크는 저장 시 합성, 미리보기엔 생략) */}
-            {(overlayStyle !== 'none') && (
-              <View pointerEvents="none" style={{
-                position: 'absolute',
-                left: offsetX, top: offsetY,
-                width: vidW, height: vidH,
-                overflow: 'hidden',
-              }}>
-                {/* 타이머/진행바/스트릭: 우상단 */}
+            {/* 오버레이 미리보기: 워터마크 항상 + 선택 스타일 */}
+            <View pointerEvents="none" style={{
+              position: 'absolute',
+              left: offsetX, top: offsetY,
+              width: vidW, height: vidH,
+              overflow: 'hidden',
+            }}>
+              {/* 워터마크: 좌하단 — 항상 표시 */}
+              <View style={styles.watermark}>
+                <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
+                <Text style={styles.watermarkText}>FocusTimelapse</Text>
+              </View>
+
+              {/* 타이머/진행바/스트릭: 우상단 */}
+              {(overlayStyle === 'timer' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
                 <View style={styles.topRightOverlay}>
                   {overlayStyle === 'timer' && (
                     <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
@@ -225,8 +231,8 @@ export default function ResultScreen() {
                     <Text style={styles.timerText}>▸ {streak} day{streak !== 1 ? 's' : ''} streak</Text>
                   )}
                 </View>
-              </View>
-            )}
+              )}
+            </View>
           </>
         )}
       </View>
