@@ -129,24 +129,22 @@ export default function SavingScreen() {
         throw new Error('No timelapse file found. Please try again.');
       }
 
-      let finalPath = timelapsePath;
-      if (overlayStyle !== 'none') {
-        const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
-        const cacheDir = FileSystem.cacheDirectory ?? '';
-        const overlayOutputPath = `${cacheDir}timelapse_overlay_${Date.now()}.mp4`;
-        finalPath = await applyOverlay({
-          videoUri: timelapsePath,
-          outputPath: overlayOutputPath,
-          overlayStyle,
-          overlayText,
-          streak,
-          recordingSeconds,
-          goalSeconds: studyMinutes * 60,
-          timerMode,
-          width,
-          height,
-        });
-      }
+      // overlayStyle에 상관없이 항상 applyOverlay 호출 (워터마크는 항상 합성)
+      const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
+      const cacheDir = FileSystem.cacheDirectory ?? '';
+      const overlayOutputPath = `${cacheDir}timelapse_overlay_${Date.now()}.mp4`;
+      const finalPath = await applyOverlay({
+        videoUri: timelapsePath,
+        outputPath: overlayOutputPath,
+        overlayStyle,
+        overlayText,
+        streak,
+        recordingSeconds,
+        goalSeconds: studyMinutes * 60,
+        timerMode,
+        width,
+        height,
+      });
       setDone(idx); idx++;
 
       // ── Step 2: 갤러리 저장 ──
