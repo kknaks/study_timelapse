@@ -26,6 +26,7 @@ export interface OverlayOptions {
   timerMode: string; // "countdown"|"countup"
   width: number;
   height: number;
+  logoPath?: string; // 로고 이미지 로컬 파일 경로
 }
 
 export type TimelapseCreatorModuleEvents = {

@@ -223,8 +223,15 @@ export default function ResultScreen() {
                     <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
                   )}
                   {overlayStyle === 'progress' && (
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressFill, { width: `${progressPercent}%` as any }]} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={styles.goalLabel}>
+                        {goalSeconds >= 3600
+                          ? `${Math.floor(goalSeconds / 3600)}${goalSeconds % 3600 > 0 ? `h ${Math.floor((goalSeconds % 3600) / 60)}m` : ' hr'}`
+                          : `${Math.floor(goalSeconds / 60)} min`}
+                      </Text>
+                      <View style={styles.progressTrack}>
+                        <View style={[styles.progressFill, { width: `${Math.min(100, (recordingSecs / goalSeconds) * 100)}%` as any }]} />
+                      </View>
                     </View>
                   )}
                   {overlayStyle === 'streak' && (
@@ -315,6 +322,11 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  goalLabel: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '700',
   },
   progressTrack: {
     width: 90,

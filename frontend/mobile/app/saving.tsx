@@ -15,6 +15,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { applyOverlay } from '../modules/timelapse-creator';
+import { Asset } from 'expo-asset';
 import { updateSession } from '../src/api/sessions';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
@@ -133,6 +134,12 @@ export default function SavingScreen() {
       const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
       const cacheDir = FileSystem.cacheDirectory ?? '';
       const overlayOutputPath = `${cacheDir}timelapse_overlay_${Date.now()}.mp4`;
+
+      // 로고 이미지 로컬 경로 가져오기
+      const logoAsset = Asset.fromModule(require('../assets/logo.png'));
+      await logoAsset.downloadAsync();
+      const logoPath = logoAsset.localUri ?? '';
+
       const finalPath = await applyOverlay({
         videoUri: timelapsePath,
         outputPath: overlayOutputPath,
@@ -144,6 +151,7 @@ export default function SavingScreen() {
         timerMode,
         width,
         height,
+        logoPath,
       });
       setDone(idx); idx++;
 

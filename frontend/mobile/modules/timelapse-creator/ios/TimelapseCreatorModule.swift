@@ -32,6 +32,7 @@ public class TimelapseCreatorModule: Module {
     @Field var timerMode: String = "countdown"
     @Field var width: Int = 720
     @Field var height: Int = 1280
+    @Field var logoPath: String = ""
   }
 
   struct TimelapseOptions: Record {
@@ -154,7 +155,8 @@ public class TimelapseCreatorModule: Module {
         totalFrames: totalFrames,
         timerMode: options.timerMode,
         recordingSeconds: options.recordingSeconds,
-        goalSeconds: options.goalSeconds
+        goalSeconds: options.goalSeconds,
+        logoPath: options.logoPath
       ) else { continue }
 
       let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIdx))
@@ -284,7 +286,8 @@ public class TimelapseCreatorModule: Module {
         totalFrames: totalFrames,
         timerMode: options.timerMode,
         recordingSeconds: options.recordingSeconds,
-        goalSeconds: options.goalSeconds
+        goalSeconds: options.goalSeconds,
+        logoPath: ""
       ) else {
         continue
       }
@@ -325,7 +328,8 @@ public class TimelapseCreatorModule: Module {
     totalFrames: Int,
     timerMode: String,
     recordingSeconds: Double,
-    goalSeconds: Double
+    goalSeconds: Double,
+    logoPath: String = ""
   ) -> CVPixelBuffer? {
     var pixelBuffer: CVPixelBuffer?
     let attrs: [String: Any] = [
@@ -410,7 +414,8 @@ public class TimelapseCreatorModule: Module {
       totalFrames: totalFrames,
       timerMode: timerMode,
       recordingSeconds: recordingSeconds,
-      goalSeconds: goalSeconds
+      goalSeconds: goalSeconds,
+      logoPath: logoPath
     )
     UIGraphicsPopContext()
     context.restoreGState()
@@ -431,7 +436,8 @@ public class TimelapseCreatorModule: Module {
     totalFrames: Int,
     timerMode: String,
     recordingSeconds: Double,
-    goalSeconds: Double
+    goalSeconds: Double,
+    logoPath: String = ""
   ) {
     let fontSize: CGFloat = min(width, height) * 0.045
     let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
@@ -452,8 +458,9 @@ public class TimelapseCreatorModule: Module {
       drawText(formatTime(displaySeconds), font: font, padding: padding, width: width)
 
     case "progress":
-      let percent = recordingSeconds > 0 ? min(1.0, elapsed / recordingSeconds) : 0
-      drawProgressBar(percent: percent, padding: padding, width: width, fontSize: fontSize)
+      // 목표 시간 대비 실제 진행 비율 (고정값 — 프레임마다 변하지 않음)
+      let percent = goalSeconds > 0 ? min(1.0, recordingSeconds / goalSeconds) : 1.0
+      drawProgressBar(percent: percent, goalSeconds: goalSeconds, padding: padding, width: width, fontSize: fontSize)
 
     case "streak":
       drawText("▸ \(streak) days streak", font: font, padding: padding, width: width)
@@ -473,15 +480,14 @@ public class TimelapseCreatorModule: Module {
     let textSize = ("FocusTimelapse" as NSString).size(withAttributes: wmAttrs)
     let wmY = height - logoSize - wmPadding
 
-    // 로고 이미지 그리기 (Bundle에서 직접 로드)
-    let logoImage = UIImage(named: "logo")
-      ?? UIImage(named: "logo.png")
-      ?? {
-        if let path = Bundle.main.path(forResource: "logo", ofType: "png") {
-          return UIImage(contentsOfFile: path)
-        }
-        return nil
-      }()
+    // 로고 이미지 그리기 (JS에서 전달받은 로컬 파일 경로로 로드)
+    let logoImage: UIImage? = {
+      if !logoPath.isEmpty {
+        let path = logoPath.replacingOccurrences(of: "file://", with: "")
+        return UIImage(contentsOfFile: path)
+      }
+      return nil
+    }()
 
     if let logo = logoImage {
       let logoRect = CGRect(x: wmPadding, y: wmY, width: logoSize, height: logoSize)
@@ -550,22 +556,51 @@ public class TimelapseCreatorModule: Module {
   }
 
   /// UIKit 좌표계 기준 프로그레스 바 드로잉 (우상단, top-left origin)
-  private func drawProgressBar(percent: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
-    let barWidth = width * 0.25
+  /// 좌측에 목표 시간 텍스트 표시 (예: "2 hrs", "30 min")
+  private func drawProgressBar(percent: Double, goalSeconds: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
     let barHeight: CGFloat = 8
-    let x = width - barWidth - padding
-    let y = padding  // top-left origin → 위에서 padding
+
+    // 목표 시간 텍스트 (예: "2 hrs", "30 min")
+    let goalText: String
+    let totalMins = Int(goalSeconds / 60)
+    if totalMins >= 60 {
+      let h = totalMins / 60
+      let m = totalMins % 60
+      goalText = m > 0 ? "\(h)h \(m)m" : "\(h) hr\(h > 1 ? "s" : "")"
+    } else {
+      goalText = "\(totalMins) min"
+    }
+
+    let labelFontSize = fontSize * 0.7
+    let labelAttrs: [NSAttributedString.Key: Any] = [
+      .font: UIFont.boldSystemFont(ofSize: labelFontSize),
+      .foregroundColor: UIColor.white.withAlphaComponent(0.9),
+    ]
+    let labelSize = (goalText as NSString).size(withAttributes: labelAttrs)
+
+    // 바 너비: 전체에서 라벨 + 여백 제외
+    let labelGap: CGFloat = 8
+    let barWidth = width * 0.25
+    let totalBlockWidth = labelSize.width + labelGap + barWidth
+    let startX = width - totalBlockWidth - padding
+    let y = padding
+
+    // 라벨 그리기
+    let labelY = y + (barHeight - labelSize.height) / 2
+    (goalText as NSString).draw(at: CGPoint(x: startX, y: labelY), withAttributes: labelAttrs)
+
+    // 바 시작 X
+    let barX = startX + labelSize.width + labelGap
 
     // Background
     UIColor.black.withAlphaComponent(0.4).setFill()
-    UIBezierPath(roundedRect: CGRect(x: x, y: y, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
+    UIBezierPath(roundedRect: CGRect(x: barX, y: y, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
 
     // Fill
     let fillWidth = barWidth * CGFloat(percent)
     if fillWidth > 0 {
       UIColor.white.setFill()
-      UIBezierPath(roundedRect: CGRect(x: x, y: y, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
+      UIBezierPath(roundedRect: CGRect(x: barX, y: y, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
     }
-
   }
 }
