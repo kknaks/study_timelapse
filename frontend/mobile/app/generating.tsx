@@ -62,6 +62,13 @@ export default function GeneratingScreen() {
       const cacheDir = FileSystem.cacheDirectory ?? '';
       const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
 
+      // 실제 촬영 시간에 비례해서 영상 길이 계산
+      // 예: 목표 2시간, 설정 15초, 실제 1시간 → 7.5초
+      const goalSeconds = studyMinutes * 60;
+      const actualOutputSeconds = goalSeconds > 0
+        ? Math.max(1, Math.round(outputSeconds * (recordingSeconds / goalSeconds) * 10) / 10)
+        : outputSeconds;
+
       const subscription = addProgressListener((event) => {
         setProgress(Math.round(event.progress * 100));
       });
@@ -70,7 +77,7 @@ export default function GeneratingScreen() {
         await createTimelapse({
           videoUri,
           outputPath,
-          outputSeconds,
+          outputSeconds: actualOutputSeconds,
           width,
           height,
           frameRate: 30,
@@ -107,7 +114,7 @@ export default function GeneratingScreen() {
           timelapsePath: outputPath,
           videoUri,
           sessionId,
-          outputSeconds: String(outputSeconds),
+          outputSeconds: String(actualOutputSeconds),
           recordingSeconds: String(recordingSeconds),
           aspectRatio,
           studyMinutes: String(studyMinutes),

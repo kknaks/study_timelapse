@@ -173,7 +173,7 @@ export default function SessionSetupScreen() {
           {showInfoTooltip && (
             <View style={styles.infoTooltip}>
               <Text style={styles.infoTooltipText}>
-                Even if you don't reach your goal, you'll still get a full {outputSeconds}s timelapse!
+                If you finish early, the timelapse will be shortened based on your actual focus time.
               </Text>
             </View>
           )}

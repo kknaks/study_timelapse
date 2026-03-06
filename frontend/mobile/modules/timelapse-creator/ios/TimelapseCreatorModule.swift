@@ -467,21 +467,29 @@ public class TimelapseCreatorModule: Module {
     let wmPadding: CGFloat = 12
     let logoSize = wmFontSize * 1.4
     let wmAttrs: [NSAttributedString.Key: Any] = [
-      .font: UIFont.systemFont(ofSize: wmFontSize, weight: .bold),
+      .font: UIFont.boldSystemFont(ofSize: wmFontSize),
       .foregroundColor: UIColor.white.withAlphaComponent(0.9),
     ]
     let textSize = ("FocusTimelapse" as NSString).size(withAttributes: wmAttrs)
-    let totalWidth = logoSize + 5 + textSize.width
     let wmY = height - logoSize - wmPadding
 
-    // 로고 이미지 그리기
-    if let logoImage = UIImage(named: "logo") ?? UIImage(named: "logo.png") {
+    // 로고 이미지 그리기 (Bundle에서 직접 로드)
+    let logoImage = UIImage(named: "logo")
+      ?? UIImage(named: "logo.png")
+      ?? {
+        if let path = Bundle.main.path(forResource: "logo", ofType: "png") {
+          return UIImage(contentsOfFile: path)
+        }
+        return nil
+      }()
+
+    if let logo = logoImage {
       let logoRect = CGRect(x: wmPadding, y: wmY, width: logoSize, height: logoSize)
-      logoImage.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
+      logo.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
     }
 
-    // 텍스트 그리기 (로고 오른쪽)
-    let textX = wmPadding + logoSize + 5
+    // 텍스트 그리기 (로고 오른쪽, 로고 없으면 왼쪽 패딩부터)
+    let textX = (logoImage != nil) ? (wmPadding + logoSize + 5) : wmPadding
     let textY = wmY + (logoSize - textSize.height) / 2
     ("FocusTimelapse" as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: wmAttrs)
   }
