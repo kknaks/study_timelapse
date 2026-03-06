@@ -571,7 +571,7 @@ public class TimelapseCreatorModule: Module {
   /// UIKit 좌표계 기준 프로그레스 바 드로잉 (우상단, top-left origin)
   /// 좌측에 목표 시간 텍스트 표시 (예: "2 hrs", "30 min")
   private func drawProgressBar(percent: Double, goalSeconds: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
-    let barHeight: CGFloat = 8
+    let barHeight: CGFloat = 10  // 타이머 폰트 크기에 맞게 두껍게
 
     // 목표 시간 텍스트 (예: "2 hrs", "30 min")
     let goalText: String
@@ -588,36 +588,37 @@ public class TimelapseCreatorModule: Module {
       goalText = "\(totalMins) min"
     }
 
-    let labelFontSize = fontSize * 0.7
+    // 타이머/스트릭과 동일한 폰트 크기
+    let labelFontSize = fontSize  // 기존 fontSize * 0.7 → fontSize로 변경
     let labelAttrs: [NSAttributedString.Key: Any] = [
       .font: UIFont.boldSystemFont(ofSize: labelFontSize),
       .foregroundColor: UIColor.white.withAlphaComponent(0.9),
     ]
     let labelSize = (goalText as NSString).size(withAttributes: labelAttrs)
 
-    // 바 너비: 전체에서 라벨 + 여백 제외
-    let labelGap: CGFloat = 8
-    let barWidth = width * 0.25
+    // 바 너비: 라벨 크기에 맞게 조정
+    let labelGap: CGFloat = 10
+    let barWidth = width * 0.28
     let totalBlockWidth = labelSize.width + labelGap + barWidth
     let startX = width - totalBlockWidth - padding
     let y = padding
 
-    // 라벨 그리기
-    let labelY = y + (barHeight - labelSize.height) / 2
-    (goalText as NSString).draw(at: CGPoint(x: startX, y: labelY), withAttributes: labelAttrs)
+    // 라벨 그리기 (라벨 높이 기준 y)
+    (goalText as NSString).draw(at: CGPoint(x: startX, y: y), withAttributes: labelAttrs)
 
-    // 바 시작 X
+    // 바: 라벨 세로 중앙 정렬
     let barX = startX + labelSize.width + labelGap
+    let barY = y + (labelSize.height - barHeight) / 2
 
     // Background
     UIColor.black.withAlphaComponent(0.4).setFill()
-    UIBezierPath(roundedRect: CGRect(x: barX, y: y, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
+    UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
 
     // Fill
     let fillWidth = barWidth * CGFloat(percent)
     if fillWidth > 0 {
       UIColor.white.setFill()
-      UIBezierPath(roundedRect: CGRect(x: barX, y: y, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
+      UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: fillWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
     }
   }
 }

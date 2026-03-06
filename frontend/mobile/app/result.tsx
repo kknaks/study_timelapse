@@ -325,14 +325,17 @@ const styles = StyleSheet.create({
   },
   goalLabel: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   progressTrack: {
-    width: 90,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 2,
+    width: 100,
+    height: 10,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 5,
   },
   progressFill: {
     height: '100%',
