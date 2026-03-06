@@ -54,7 +54,7 @@ public class TimelapseCreatorModule: Module {
 
   // MARK: - Build Timelapse
 
-  // MARK: - Apply Overlay (frame-by-frame, animated overlay)
+  // MARK: - Apply Overlay (AVAssetReader pipeline — frame-accurate, no re-sampling jitter)
 
   private func buildOverlay(options: OverlayOptions) async throws -> String {
     // overlay가 none이면 원본 그대로 복사
@@ -75,8 +75,8 @@ public class TimelapseCreatorModule: Module {
 
     let width = options.width
     let height = options.height
-    let frameRate = 30
 
+    // ── AVAssetReader 설정 ──
     let asset = AVAsset(url: inputURL)
     let duration = try await asset.load(.duration)
     let durationSeconds = CMTimeGetSeconds(duration)
@@ -85,18 +85,21 @@ public class TimelapseCreatorModule: Module {
                     userInfo: [NSLocalizedDescriptionKey: "Video has zero duration"])
     }
 
-    // preferredTransform 로드
-    let videoTrackForXform = try await asset.loadTracks(withMediaType: .video).first
-    let preferredTransform = try await videoTrackForXform?.load(.preferredTransform) ?? .identity
+    let videoTracks = try await asset.loadTracks(withMediaType: .video)
+    guard let videoTrack = videoTracks.first else {
+      throw NSError(domain: "TimelapseCreator", code: -3,
+                    userInfo: [NSLocalizedDescriptionKey: "No video track found"])
+    }
 
-    // frame generator
-    let generator = AVAssetImageGenerator(asset: asset)
-    generator.appliesPreferredTrackTransform = false
-    generator.maximumSize = CGSize(width: width, height: height)
-    generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
-    generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+    let reader = try AVAssetReader(asset: asset)
+    let readerOutputSettings: [String: Any] = [
+      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+    ]
+    let readerOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: readerOutputSettings)
+    readerOutput.alwaysCopiesSampleData = false
+    reader.add(readerOutput)
 
-    // encoder
+    // ── AVAssetWriter 설정 ──
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
     let videoSettings: [String: Any] = [
       AVVideoCodecKey: AVVideoCodecType.h264,
@@ -109,49 +112,59 @@ public class TimelapseCreatorModule: Module {
     ]
     let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
     writerInput.expectsMediaDataInRealTime = false
-    let sourcePixelBufferAttributes: [String: Any] = [
-      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
-      kCVPixelBufferWidthKey as String: width,
-      kCVPixelBufferHeightKey as String: height,
-    ]
     let adaptor = AVAssetWriterInputPixelBufferAdaptor(
       assetWriterInput: writerInput,
-      sourcePixelBufferAttributes: sourcePixelBufferAttributes
+      sourcePixelBufferAttributes: [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
+        kCVPixelBufferWidthKey as String: width,
+        kCVPixelBufferHeightKey as String: height,
+      ]
     )
     writer.add(writerInput)
+
+    guard reader.startReading() else {
+      throw NSError(domain: "TimelapseCreator", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to start reading: \(reader.error?.localizedDescription ?? "unknown")"])
+    }
     guard writer.startWriting() else {
       throw NSError(domain: "TimelapseCreator", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to start writing"])
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to start writing: \(writer.error?.localizedDescription ?? "unknown")"])
     }
     writer.startSession(atSourceTime: .zero)
 
-    let totalFrames = Int(durationSeconds * Double(frameRate))
-    let frameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
+    var frameIndex = 0
+    var totalFrames = 0
 
-    for frameIdx in 0..<totalFrames {
+    // 총 프레임 수 추정 (오버레이 진행 계산용)
+    let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+    totalFrames = max(1, Int(durationSeconds * Double(nominalFrameRate)))
+
+    // ── 프레임 파이프라인 ──
+    while reader.status == .reading {
+      guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else { break }
+
       while !writerInput.isReadyForMoreMediaData {
-        try await Task.sleep(nanoseconds: 10_000_000)
+        try await Task.sleep(nanoseconds: 5_000_000) // 5ms
       }
 
-      let videoTime = (Double(frameIdx) / Double(totalFrames)) * durationSeconds
-      let cmTime = CMTime(seconds: videoTime, preferredTimescale: 600)
+      guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { continue }
+      let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
 
-      var actualTime = CMTime.zero
-      let cgImage: CGImage
-      do {
-        cgImage = try generator.copyCGImage(at: cmTime, actualTime: &actualTime)
-      } catch { continue }
+      // BGRA 픽셀 버퍼 → UIImage
+      let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+      let context = CIContext(options: [.useSoftwareRenderer: false])
+      guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { continue }
 
-      let image = UIImage(cgImage: cgImage)
-
-      guard let pixelBuffer = createPixelBuffer(
-        from: image,
+      // 타임랩스 mp4는 이미 올바른 방향 — transform .identity 전달
+      let uiImage = UIImage(cgImage: cgImage)
+      guard let outBuffer = createPixelBuffer(
+        from: uiImage,
         width: width,
         height: height,
-        preferredTransform: preferredTransform,
+        preferredTransform: .identity,
         overlayStyle: options.overlayStyle,
         streak: options.streak,
-        frameIndex: frameIdx,
+        frameIndex: frameIndex,
         totalFrames: totalFrames,
         timerMode: options.timerMode,
         recordingSeconds: options.recordingSeconds,
@@ -159,8 +172,8 @@ public class TimelapseCreatorModule: Module {
         logoPath: options.logoPath
       ) else { continue }
 
-      let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIdx))
-      adaptor.append(pixelBuffer, withPresentationTime: presentationTime)
+      adaptor.append(outBuffer, withPresentationTime: presentationTime)
+      frameIndex += 1
     }
 
     writerInput.markAsFinished()
