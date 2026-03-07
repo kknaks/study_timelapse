@@ -35,6 +35,12 @@
       "expo-router",
       "expo-sharing",
       [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.804697996965-2nen6lpvc0pgt2vas6vbai5hl9i4ufjk"
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "Allow FocusTimelapse to save your timelapse videos.",
