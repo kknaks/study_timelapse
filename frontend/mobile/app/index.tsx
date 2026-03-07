@@ -1,21 +1,14 @@
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { getMe } from '../src/api/user';
 import { getWeeklyStats } from '../src/api/stats';
-import { loginWithGoogle } from '../src/api/auth';
 import { tokenStore } from '../src/auth/tokenStore';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
 import { useEffect, useState } from 'react';
-
-GoogleSignin.configure({
-  iosClientId: '804697996965-2nen6lpvc0pgt2vas6vbai5hl9i4ufjk.apps.googleusercontent.com',
-  webClientId: '804697996965-uiu9k5epfpbkgigmcmdpbgofmi9si3ak.apps.googleusercontent.com',
-  scopes: ['profile', 'email'],
-});
 
 function formatTodayTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -31,56 +24,35 @@ function formatWeeklyTime(seconds: number): string {
 export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
-  // 앱 시작 시 토큰 확인
   useEffect(() => {
     tokenStore.getAccessToken().then((token) => {
-      setIsLoggedIn(!!token);
+      if (!token) {
+        router.replace('/login');
+      } else {
+        setIsReady(true);
+      }
     });
   }, []);
-
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsSigningIn(true);
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      const idToken = userInfo.data?.idToken;
-      if (!idToken) throw new Error('No ID token received');
-
-      const res = await loginWithGoogle(idToken);
-      const { access_token, refresh_token } = res.data.data.tokens;
-      await tokenStore.saveTokens(access_token, refresh_token);
-
-      setIsLoggedIn(true);
-      queryClient.invalidateQueries();
-    } catch (error: any) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) return;
-      if (error.code === statusCodes.IN_PROGRESS) return;
-      Alert.alert('Sign In Failed', error.message || 'Please try again.');
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
 
   const handleSignOut = async () => {
     await GoogleSignin.signOut();
     await tokenStore.clearTokens();
-    setIsLoggedIn(false);
     queryClient.invalidateQueries();
+    router.replace('/login');
   };
 
   const { data: userData } = useQuery<{ success: boolean; data: User }>({
     queryKey: ['me'],
     queryFn: () => getMe().then((r) => r.data),
-    enabled: isLoggedIn,
+    enabled: isReady,
   });
 
   const { data: statsData } = useQuery<{ success: boolean; data: WeeklyStats }>({
     queryKey: ['weekly-stats'],
     queryFn: () => getWeeklyStats().then((r) => r.data),
-    enabled: isLoggedIn,
+    enabled: isReady,
   });
 
   const user = userData?.data;
@@ -93,8 +65,17 @@ export default function HomeScreen() {
 
   const weeklySeconds = stats?.total_seconds ?? 0;
 
+  if (!isReady) return null;
+
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign out</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
@@ -107,6 +88,9 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.appName}>FocusTimelapse</Text>
           <Text style={styles.tagline}>Turn your focus into content.</Text>
+          {user?.name ? (
+            <Text style={styles.greeting}>Hello, {user.name}</Text>
+          ) : null}
         </View>
 
         {/* Start Button */}
@@ -139,29 +123,6 @@ export default function HomeScreen() {
           <Text style={styles.statsLinkIcon}>↗</Text>
           <Text style={styles.statsLinkText}>Focus Stats</Text>
         </TouchableOpacity>
-
-        {/* Google 로그인 / 로그아웃 */}
-        {!isLoggedIn ? (
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleSignIn}
-            disabled={isSigningIn}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.googleButtonText}>
-              {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.accountRow}>
-            {user?.name ? (
-              <Text style={styles.accountName}>{user.name}</Text>
-            ) : null}
-            <TouchableOpacity onPress={handleSignOut}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -171,6 +132,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  signOutText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
   content: {
     flex: 1,
@@ -206,6 +182,12 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 15,
     color: COLORS.textSecondary,
+  },
+  greeting: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+    marginTop: 4,
   },
   startButton: {
     backgroundColor: '#1a1a1a',
@@ -264,35 +246,6 @@ const styles = StyleSheet.create({
   statsLinkText: {
     fontSize: 15,
     color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  googleButton: {
-    width: '100%',
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-  },
-  googleButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1a1a1a',
-  },
-  accountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  accountName: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  signOutText: {
-    fontSize: 14,
-    color: '#E55',
     fontWeight: '500',
   },
 });
