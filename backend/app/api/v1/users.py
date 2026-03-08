@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.user import StreakUpdateRequest, UserResponse
+from app.schemas.user import ProfileUpdateRequest, StreakUpdateRequest, UserResponse
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -35,6 +35,29 @@ async def get_me(
             created_at=current_user.created_at,
             updated_at=current_user.updated_at,
         ).model_dump(mode="json"),
+    }
+
+
+@router.put(
+    "/me/profile",
+    summary="프로필 업데이트 (닉네임)",
+    response_model=dict,
+)
+async def update_profile(
+    request: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """유저의 닉네임을 업데이트한다."""
+    name = request.name.strip()
+    if not name:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Name cannot be empty")
+    current_user.name = name
+    await db.flush()
+    return {
+        "success": True,
+        "data": {"name": current_user.name},
     }
 
 

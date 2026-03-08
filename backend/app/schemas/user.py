@@ -28,3 +28,9 @@ class StreakUpdateRequest(BaseModel):
 
     streak: int
     longest_streak: int | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    """프로필 업데이트 요청."""
+
+    name: str
