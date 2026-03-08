@@ -1,8 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { useQuery } from '@tanstack/react-query';
 import { getMe } from '../src/api/user';
 import { getWeeklyStats } from '../src/api/stats';
 import { tokenStore } from '../src/auth/tokenStore';
@@ -23,7 +22,6 @@ function formatWeeklyTime(seconds: number): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -35,13 +33,6 @@ export default function HomeScreen() {
       }
     });
   }, []);
-
-  const handleSignOut = async () => {
-    await GoogleSignin.signOut();
-    await tokenStore.clearTokens();
-    queryClient.invalidateQueries();
-    router.replace('/login');
-  };
 
   const { data: userData } = useQuery<{ success: boolean; data: User }>({
     queryKey: ['me'],
@@ -71,8 +62,8 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerSpacer} />
-        <TouchableOpacity onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
+        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsButton}>
+          <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
       </View>
 
@@ -143,10 +134,15 @@ const styles = StyleSheet.create({
   headerSpacer: {
     flex: 1,
   },
-  signOutText: {
-    fontSize: 14,
+  settingsButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIcon: {
+    fontSize: 20,
     color: COLORS.textSecondary,
-    fontWeight: '500',
   },
   content: {
     flex: 1,
