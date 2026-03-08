@@ -7,11 +7,15 @@ import {
   ScrollView,
   Platform,
   Modal,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getWeeklyStats, getDailyStats } from '../src/api/stats';
-import { getMe } from '../src/api/user';
+import { getMe, updateProfile } from '../src/api/user';
+import { tokenStore } from '../src/auth/tokenStore';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { COLORS } from '../src/constants';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -55,7 +59,35 @@ export default function StatsScreen() {
   const [barBubble, setBarBubble] = useState<{ label: string; seconds: number } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [timerAlert, setTimerAlert] = useState(true);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
   const cellRefs = useRef<Map<string, View>>(new Map());
+  const queryClient = useQueryClient();
+
+  const { mutate: saveName, isPending: isSaving } = useMutation({
+    mutationFn: (name: string) => updateProfile(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      setEditingName(false);
+    },
+    onError: () => Alert.alert('Error', 'Failed to update name.'),
+  });
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out', style: 'destructive',
+        onPress: async () => {
+          setShowSettings(false);
+          await GoogleSignin.signOut();
+          await tokenStore.clearTokens();
+          queryClient.clear();
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
 
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
@@ -390,6 +422,43 @@ export default function StatsScreen() {
                 <Text style={styles.upgradeBtnText}>Upgrade Now →</Text>
               </TouchableOpacity>
             </View>
+
+            <View style={styles.settingsDivider} />
+
+            {/* 계정 섹션 */}
+            <View style={styles.settingsRow}>
+              <Text style={styles.settingsRowLabel}>Name</Text>
+              {editingName ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    style={styles.nameInput}
+                    value={nameInput}
+                    onChangeText={setNameInput}
+                    autoFocus
+                    returnKeyType="done"
+                    onSubmitEditing={() => { const t = nameInput.trim(); if (t) saveName(t); }}
+                    maxLength={30}
+                  />
+                  <TouchableOpacity onPress={() => { const t = nameInput.trim(); if (t) saveName(t); }} disabled={isSaving}>
+                    <Text style={styles.settingsSaveText}>{isSaving ? '...' : 'Save'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setEditingName(false)}>
+                    <Text style={styles.settingsCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => { setNameInput(user?.name ?? ''); setEditingName(true); }}>
+                  <Text style={styles.settingsRowDesc}>{user?.name ?? '—'}</Text>
+                  <Text style={styles.settingsEditText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.settingsDivider} />
+
+            <TouchableOpacity style={styles.signOutRow} onPress={handleSignOut}>
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </TouchableOpacity>
 
             <View style={styles.settingsDivider} />
 
@@ -770,6 +839,22 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center' as const,
   },
+  nameInput: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a',
+    minWidth: 100,
+    paddingVertical: 2,
+  },
+  settingsSaveText: { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
+  settingsCancelText: { fontSize: 13, color: COLORS.textSecondary },
+  settingsEditText: { fontSize: 12, color: COLORS.textSecondary },
+  signOutRow: {
+    paddingVertical: 4,
+    alignItems: 'center' as const,
+  },
+  signOutText: { fontSize: 15, fontWeight: '600', color: '#E55' },
 
   // 말풍선 (캘린더용)
   // 공통 말풍선 — 캘린더/바 차트 동일 스타일

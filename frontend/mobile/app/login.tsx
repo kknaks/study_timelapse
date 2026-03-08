@@ -66,7 +66,7 @@ export default function LoginScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.googleButtonText}>
-            {isSigningIn ? 'Signing in...' : 'G  Sign in with Google'}
+            {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
           </Text>
         </TouchableOpacity>
       </View>

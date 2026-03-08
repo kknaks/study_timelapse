@@ -60,13 +60,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerSpacer} />
-        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.settingsButton}>
-          <Text style={styles.settingsIcon}>⚙</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
@@ -123,26 +116,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
-  headerSpacer: {
-    flex: 1,
-  },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsIcon: {
-    fontSize: 20,
-    color: COLORS.textSecondary,
   },
   content: {
     flex: 1,
