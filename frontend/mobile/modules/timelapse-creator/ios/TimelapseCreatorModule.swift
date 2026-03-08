@@ -573,9 +573,9 @@ public class TimelapseCreatorModule: Module {
   /// UIKit 좌표계 기준 프로그레스 바 드로잉 (우상단, top-left origin)
   /// 좌측에 목표 시간 텍스트 표시 (예: "2 hrs", "30 min")
   private func drawProgressBar(percent: Double, goalSeconds: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
-    let barHeight: CGFloat = 10  // 타이머 폰트 크기에 맞게 두껍게
+    let barHeight: CGFloat = 10
 
-    // 목표 시간 텍스트 (예: "2 hrs", "30 min")
+    // 목표 시간 텍스트 (예: "1h 15m", "30 min")
     let goalText: String
     let totalMins = Int(goalSeconds / 60)
     if totalMins >= 60 {
@@ -590,30 +590,32 @@ public class TimelapseCreatorModule: Module {
       goalText = "\(totalMins) min"
     }
 
-    // 타이머/스트릭과 동일한 폰트 크기
-    let labelFontSize = fontSize  // 기존 fontSize * 0.7 → fontSize로 변경
     let labelAttrs: [NSAttributedString.Key: Any] = [
-      .font: UIFont.boldSystemFont(ofSize: labelFontSize),
+      .font: UIFont.boldSystemFont(ofSize: fontSize),
       .foregroundColor: UIColor.white.withAlphaComponent(0.9),
+    ]
+    let shadowAttrs: [NSAttributedString.Key: Any] = [
+      .font: UIFont.boldSystemFont(ofSize: fontSize),
+      .foregroundColor: UIColor.black.withAlphaComponent(0.5),
     ]
     let labelSize = (goalText as NSString).size(withAttributes: labelAttrs)
 
-    // 바 너비: 라벨 크기에 맞게 조정
-    let labelGap: CGFloat = 10
-    let barWidth = width * 0.28
-    let totalBlockWidth = labelSize.width + labelGap + barWidth
-    let startX = width - totalBlockWidth - padding
+    let labelGap: CGFloat = 12
+    // 전체 레이아웃: [padding] [라벨] [gap] [바→우측끝-padding]
     let y = padding
+    let textX = padding
+    let barX = textX + labelSize.width + labelGap
+    let barWidth = width - barX - padding  // 우측 끝까지
 
-    // 라벨 그리기 (라벨 높이 기준 y)
-    (goalText as NSString).draw(at: CGPoint(x: startX, y: y), withAttributes: labelAttrs)
+    // 라벨 그림자 + 본문
+    (goalText as NSString).draw(at: CGPoint(x: textX + 1, y: y + 1), withAttributes: shadowAttrs)
+    (goalText as NSString).draw(at: CGPoint(x: textX, y: y), withAttributes: labelAttrs)
 
     // 바: 라벨 세로 중앙 정렬
-    let barX = startX + labelSize.width + labelGap
     let barY = y + (labelSize.height - barHeight) / 2
 
     // Background
-    UIColor.black.withAlphaComponent(0.4).setFill()
+    UIColor.black.withAlphaComponent(0.35).setFill()
     UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: barWidth, height: barHeight), cornerRadius: barHeight / 2).fill()
 
     // Fill

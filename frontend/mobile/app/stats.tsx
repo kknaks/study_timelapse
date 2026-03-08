@@ -9,6 +9,7 @@ import {
   Modal,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -394,6 +395,7 @@ export default function StatsScreen() {
           activeOpacity={1}
           onPress={() => setShowSettings(false)}
         >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity activeOpacity={1} style={styles.settingsPanel}>
             <View style={styles.settingsPanelHandle} />
             <Text style={styles.settingsPanelTitle}>Settings</Text>
@@ -464,6 +466,7 @@ export default function StatsScreen() {
 
             <Text style={styles.appVersion}>FocusTimelapse v1.0.0</Text>
           </TouchableOpacity>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
 
