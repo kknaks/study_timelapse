@@ -49,6 +49,8 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
+  const minZoom = device?.minZoom ?? 1;
+  const maxZoom = device?.maxZoom ?? 8;
   const [zoom, setZoom] = useState(1);
   const lastZoomRef = useRef(1);
 
@@ -61,7 +63,7 @@ export default function FocusScreen() {
       lastZoomRef.current = zoom;
     })
     .onUpdate((e) => {
-      const newZoom = Math.min(Math.max(lastZoomRef.current * e.scale, 1), 8);
+      const newZoom = Math.min(Math.max(lastZoomRef.current * e.scale, minZoom), maxZoom);
       setZoom(newZoom);
     })
     .runOnJS(true);
@@ -324,7 +326,7 @@ export default function FocusScreen() {
             {!hasStarted && Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={styles.flipButton}
-                onPress={() => { setCameraFacing(f => f === 'front' ? 'back' : 'front'); setZoom(1); lastZoomRef.current = 1; }}
+                onPress={() => { setCameraFacing(f => f === 'front' ? 'back' : 'front'); setZoom(minZoom); lastZoomRef.current = minZoom; }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.flipIcon}>⇄</Text>
