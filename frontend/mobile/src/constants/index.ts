@@ -10,6 +10,6 @@ export const COLORS = {
   success: '#10B981',
 };
 
-export const ASPECT_RATIOS = ['9:16', '1:1'] as const;
+export const ASPECT_RATIOS = ['9:16', '1:1', '4:3'] as const;
 export const OUTPUT_SECONDS = [30, 60, 90] as const;
 export const OVERLAY_STYLES = ['stopwatch', 'progress-bar', 'minimal', 'none'] as const;

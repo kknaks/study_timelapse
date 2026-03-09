@@ -268,6 +268,7 @@ export default function FocusScreen() {
               styles.camera,
               aspectRatio === '1:1' && { aspectRatio: 1, width: '100%', height: undefined },
               aspectRatio === '16:9' && { aspectRatio: 16/9, width: '100%', height: undefined },
+              aspectRatio === '4:3' && { aspectRatio: 4/3, width: '100%', height: undefined },
             ]}
             device={device}
             isActive={!showExitModal}

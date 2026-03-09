@@ -29,6 +29,7 @@ function getRatio(ar: string): number {
   if (ar === '16:9') return 16 / 9;
   if (ar === '1:1') return 1;
   if (ar === '4:5') return 4 / 5;
+  if (ar === '4:3') return 4 / 3;
   return 9 / 16;
 }
 

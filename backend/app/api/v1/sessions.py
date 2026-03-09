@@ -17,7 +17,7 @@ from app.schemas.session import SessionCreateRequest, SessionResponse, SessionUp
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
 VALID_OUTPUT_SECONDS = {15, 30, 45, 60, 90, 120}
-VALID_ASPECT_RATIOS = {"9:16", "16:9", "1:1"}
+VALID_ASPECT_RATIOS = {"9:16", "16:9", "1:1", "4:3"}
 
 
 @router.post(
@@ -40,7 +40,7 @@ async def create_session(
     if request.aspect_ratio not in VALID_ASPECT_RATIOS:
         raise HTTPException(
             status_code=422,
-            detail="aspect_ratio must be 9:16, 16:9, or 1:1",
+            detail="aspect_ratio must be 9:16, 16:9, 1:1, or 4:3",
         )
 
     # timezone-aware → naive (DB는 TIMESTAMP WITHOUT TIME ZONE)

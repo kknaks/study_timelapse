@@ -17,7 +17,7 @@ import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest } from '../src/types';
 
 type TimerMode = 'countdown' | 'countup';
-type AspectRatio = '9:16' | '1:1';
+type AspectRatio = '9:16' | '1:1' | '4:3';
 
 const TIMELAPSE_OPTIONS = [15, 30, 45, 60, 90, 120]; // 초
 const FOCUS_MIN = 5;

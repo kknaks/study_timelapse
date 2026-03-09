@@ -23,6 +23,7 @@ const RESOLUTIONS: Record<string, [number, number]> = {
   '1:1':  [720, 720],
   '16:9': [1280, 720],
   '4:5':  [720, 900],
+  '4:3':  [1080, 810],
 };
 
 const GREEN = '#22C55E';
