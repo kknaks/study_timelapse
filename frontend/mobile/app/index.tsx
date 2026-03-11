@@ -4,10 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '../src/api/user';
 import { getWeeklyStats } from '../src/api/stats';
-import { tokenStore } from '../src/auth/tokenStore';
+import { useAuth } from '../src/auth/AuthContext';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 function formatTodayTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -22,17 +22,13 @@ function formatWeeklyTime(seconds: number): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
+  const { isReady, isLoggedIn } = useAuth();
 
   useEffect(() => {
-    tokenStore.getAccessToken().then((token) => {
-      if (!token) {
-        router.replace('/login');
-      } else {
-        setIsReady(true);
-      }
-    });
-  }, []);
+    if (isReady && !isLoggedIn) {
+      router.replace('/login');
+    }
+  }, [isReady, isLoggedIn]);
 
   const { data: userData } = useQuery<{ success: boolean; data: User }>({
     queryKey: ['me'],

@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { loginWithGoogle } from '../src/api/auth';
 import { tokenStore } from '../src/auth/tokenStore';
+import { useAuth } from '../src/auth/AuthContext';
 import { useState } from 'react';
 import Constants from 'expo-constants';
 
@@ -17,6 +18,7 @@ GoogleSignin.configure({
 export default function LoginScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { setLoggedIn } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
@@ -32,7 +34,7 @@ export default function LoginScreen() {
       const res = await loginWithGoogle(idToken);
       const { access_token, refresh_token } = res.data.data.tokens;
       await tokenStore.saveTokens(access_token, refresh_token);
-
+      setLoggedIn(true);
       queryClient.invalidateQueries();
       router.replace('/');
     } catch (error: any) {

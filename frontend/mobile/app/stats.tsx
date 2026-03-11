@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../src/auth/AuthContext';
 import { getWeeklyStats, getDailyStats } from '../src/api/stats';
 import { getMe, updateProfile } from '../src/api/user';
 import { tokenStore } from '../src/auth/tokenStore';
@@ -64,6 +65,7 @@ export default function StatsScreen() {
   const [nameInput, setNameInput] = useState('');
   const cellRefs = useRef<Map<string, View>>(new Map());
   const queryClient = useQueryClient();
+  const { isLoggedIn } = useAuth();
 
   const { mutate: saveName, isPending: isSaving } = useMutation({
     mutationFn: (name: string) => updateProfile(name),
@@ -74,6 +76,8 @@ export default function StatsScreen() {
     onError: () => Alert.alert('Error', 'Failed to update name.'),
   });
 
+  const { setLoggedIn } = useAuth();
+
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -83,6 +87,7 @@ export default function StatsScreen() {
           setShowSettings(false);
           await GoogleSignin.signOut();
           await tokenStore.clearTokens();
+          setLoggedIn(false);
           queryClient.clear();
           router.replace('/login');
         },
@@ -93,11 +98,13 @@ export default function StatsScreen() {
   const { data: statsData } = useQuery({
     queryKey: ['weekly-stats'],
     queryFn: () => getWeeklyStats().then((r) => r.data),
+    enabled: isLoggedIn,
   });
 
   const { data: userData } = useQuery({
     queryKey: ['me'],
     queryFn: () => getMe().then((r) => r.data),
+    enabled: isLoggedIn,
   });
 
   // 캘린더 월별 데이터
@@ -106,6 +113,7 @@ export default function StatsScreen() {
   const { data: monthlyData } = useQuery({
     queryKey: ['daily-stats', calYear, calMonth],
     queryFn: () => getDailyStats(monthStart, monthEnd).then((r) => r.data),
+    enabled: isLoggedIn,
   });
 
   const weeklyStats = statsData?.data;
