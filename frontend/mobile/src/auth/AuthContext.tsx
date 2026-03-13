@@ -1,17 +1,18 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { tokenStore } from './tokenStore';
-import { apiClient } from '../api/client';
 
 interface AuthContextType {
   isReady: boolean;
   isLoggedIn: boolean;
   setLoggedIn: (v: boolean) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   isReady: false,
   isLoggedIn: false,
   setLoggedIn: () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -25,8 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const logout = async () => {
+    await tokenStore.clearTokens();
+    setIsLoggedIn(false);
+  };
+
   return (
-    <AuthContext.Provider value={{ isReady, isLoggedIn, setLoggedIn: setIsLoggedIn }}>
+    <AuthContext.Provider value={{ isReady, isLoggedIn, setLoggedIn: setIsLoggedIn, logout }}>
       {children}
     </AuthContext.Provider>
   );
