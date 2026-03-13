@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -149,7 +148,7 @@ export default function ResultScreen() {
     });
   };
 
-  const handleUpgrade = () => Alert.alert('Coming Soon', 'Upgrade to remove watermark!');
+  const handleUpgrade = () => router.push('/paywall');
 
   const overlayOptions: { key: OverlayStyle; label: string }[] = [
     { key: 'none', label: 'None' },

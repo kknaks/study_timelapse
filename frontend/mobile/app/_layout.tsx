@@ -26,6 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name="saving" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="stats" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="paywall" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
     </QueryClientProvider>
