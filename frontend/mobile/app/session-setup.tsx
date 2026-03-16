@@ -17,9 +17,11 @@ import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest } from '../src/types';
 
 type TimerMode = 'countdown' | 'countup';
-type AspectRatio = '9:16' | '1:1' | '4:3';
+type AspectRatio = '9:16' | '1:1' | '3:4';
 
-const TIMELAPSE_OPTIONS = [15, 30, 45, 60, 90, 120]; // 초
+// 5s/10s는 focus time 2시간(120분) 이하일 때만 활성화
+const TIMELAPSE_OPTIONS = [5, 10, 15, 30, 45, 60, 90, 120]; // 초
+const SHORT_TIMELAPSE_MAX_MINUTES = 120; // 2시간 초과 시 5s/10s 비활성화
 const FOCUS_MIN = 5;
 const FOCUS_MAX = 240;
 const FOCUS_STEP = 5;
@@ -42,6 +44,14 @@ export default function SessionSetupScreen() {
   const router = useRouter();
 
   const [focusMinutes, setFocusMinutes] = useState(120);
+
+  const handleFocusChange = (val: number) => {
+    setFocusMinutes(val);
+    // 2시간 초과 시 5s/10s 선택 상태면 15s로 자동 변경
+    if (val > SHORT_TIMELAPSE_MAX_MINUTES && outputSeconds <= 10) {
+      setOutputSeconds(15);
+    }
+  };
   const [outputSeconds, setOutputSeconds] = useState(30);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
   const [timerMode, setTimerMode] = useState<TimerMode>('countdown');
@@ -114,7 +124,7 @@ export default function SessionSetupScreen() {
                 max={FOCUS_MAX}
                 step={FOCUS_STEP}
                 value={focusMinutes}
-                onChange={(e) => setFocusMinutes(Number(e.target.value))}
+                onChange={(e) => handleFocusChange(Number(e.target.value))}
                 style={{
                   width: '100%',
                   height: 4,
@@ -131,7 +141,7 @@ export default function SessionSetupScreen() {
               maximumValue={FOCUS_MAX}
               step={FOCUS_STEP}
               value={focusMinutes}
-              onValueChange={(val) => setFocusMinutes(val)}
+              onValueChange={(val) => handleFocusChange(val)}
               minimumTrackTintColor="#1a1a1a"
               maximumTrackTintColor="#E0E0E0"
               thumbTintColor="#1a1a1a"
@@ -158,17 +168,30 @@ export default function SessionSetupScreen() {
             <Text style={styles.sectionValue}>{outputSeconds}s</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll}>
-            {TIMELAPSE_OPTIONS.map((val) => (
-              <TouchableOpacity
-                key={val}
-                style={[styles.quickChip, outputSeconds === val && styles.quickChipActive]}
-                onPress={() => setOutputSeconds(val)}
-              >
-                <Text style={[styles.quickChipText, outputSeconds === val && styles.quickChipTextActive]}>
-                  {val}s
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {TIMELAPSE_OPTIONS.map((val) => {
+              const isDisabled = val <= 10 && focusMinutes > SHORT_TIMELAPSE_MAX_MINUTES;
+              const isActive = outputSeconds === val;
+              return (
+                <TouchableOpacity
+                  key={val}
+                  style={[
+                    styles.quickChip,
+                    isActive && styles.quickChipActive,
+                    isDisabled && styles.quickChipDisabled,
+                  ]}
+                  onPress={() => !isDisabled && setOutputSeconds(val)}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                >
+                  <Text style={[
+                    styles.quickChipText,
+                    isActive && styles.quickChipTextActive,
+                    isDisabled && styles.quickChipTextDisabled,
+                  ]}>
+                    {val}s
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
           {showInfoTooltip && (
             <View style={styles.infoTooltip}>
@@ -383,6 +406,13 @@ const styles = StyleSheet.create({
   },
   quickChipTextActive: {
     color: '#FFF',
+  },
+  quickChipDisabled: {
+    backgroundColor: '#F0F0F0',
+    opacity: 0.35,
+  },
+  quickChipTextDisabled: {
+    color: '#1a1a1a',
   },
   infoBtn: {
     width: 18,

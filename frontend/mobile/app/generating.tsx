@@ -10,6 +10,7 @@ const RESOLUTIONS: Record<string, [number, number]> = {
   '1:1': [720, 720],
   '16:9': [1280, 720],
   '4:5': [720, 900],
+  '3:4': [810, 1080],
 };
 
 export default function GeneratingScreen() {
