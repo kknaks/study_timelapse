@@ -16,6 +16,19 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 const ReanimatedCamera = Animated.createAnimatedComponent(Camera);
 import { COLORS } from '../src/constants';
 
+// 비율별 crop 컨테이너 스타일 계산
+// Camera는 항상 sensor format으로 녹화, wrapper만 원하는 비율로 crop
+function getCropStyle(aspectRatio: string) {
+  switch (aspectRatio) {
+    case '9:16': return { width: '100%' as const, aspectRatio: 9 / 16 };
+    case '1:1':  return { width: '100%' as const, aspectRatio: 1 };
+    case '16:9': return { width: '100%' as const, aspectRatio: 16 / 9 };
+    case '4:5':  return { width: '100%' as const, aspectRatio: 4 / 5 };
+    case '3:4':  return { width: '100%' as const, aspectRatio: 3 / 4 };
+    default:     return { width: '100%' as const, aspectRatio: 9 / 16 };
+  }
+}
+
 function formatTime(totalSeconds: number): string {
   const hrs = Math.floor(totalSeconds / 3600);
   const mins = Math.floor((totalSeconds % 3600) / 60);
@@ -268,23 +281,19 @@ export default function FocusScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Camera Preview — aspect ratio 맞게 중앙 배치, 나머지 검정 */}
+      {/* Camera Preview
+          - Camera 자체는 항상 sensor format(4:3 등)으로 녹화
+          - Wrapper View를 원하는 비율로 crop해서 UI 표시
+          - overflow:hidden 으로 센서 비율과 다른 부분 잘라냄
+      */}
       <GestureDetector gesture={pinchGesture}>
-      <View
-        style={webCameraStyle ?? [
-          styles.cameraWrapper,
-          aspectRatio === '16:9' && styles.cameraWrapper16x9,
-        ]}
-      >
-        {Platform.OS !== 'web' && device ? (
+      <View style={styles.cameraWrapper}>
+        {/* 비율별 crop 컨테이너: 화면 중앙에 원하는 비율로 잘라서 표시 */}
+        <View style={[styles.cropContainer, getCropStyle(aspectRatio)]}>
+          {Platform.OS !== 'web' && device ? (
           <ReanimatedCamera
             ref={cameraRef}
-            style={[
-              styles.camera,
-              aspectRatio === '1:1' && { aspectRatio: 1, width: '100%', height: undefined },
-              aspectRatio === '16:9' && { aspectRatio: 16/9, width: '100%', height: undefined },
-              aspectRatio === '3:4' && { aspectRatio: 3/4, width: '100%', height: undefined },
-            ]}
+            style={styles.camera}
             device={device}
             isActive={!showExitModal}
             video={true}
@@ -295,10 +304,9 @@ export default function FocusScreen() {
         ) : (
           <View style={[
             styles.camera,
-            aspectRatio === '1:1' && ({ width: '100vh', height: '100vh', maxWidth: '100%', maxHeight: '100%' } as any),
-            aspectRatio === '16:9' && ({ width: '100%', aspectRatio: '16/9' } as any),
           ]} />
-        )}
+          )}
+        </View>
       </View>
       </GestureDetector>
 
@@ -437,20 +445,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#000',
   },
-  // 1:1: 화면 너비만큼 정사각형으로 crop
-  cameraWrapper1x1: {
-    top: '50%' as any,
-    transform: [{ translateY: -1 }], // 미세 보정
-    ...(Platform.OS === 'web' ? {
-      top: 0,
-      bottom: 0,
-      left: 0,
-      right: 0,
-      overflow: 'hidden',
-    } : {}),
+  // 비율별 crop 컨테이너: overflow:hidden으로 sensor format 밖 영역 잘라냄
+  cropContainer: {
+    overflow: 'hidden',
+    alignSelf: 'center',
   },
-  // 16:9: 위아래 레터박스
-  cameraWrapper16x9: {},
   camera: {
     width: '100%',
     height: '100%',
