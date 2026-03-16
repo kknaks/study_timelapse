@@ -9,11 +9,9 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Animated, { useAnimatedProps, useSharedValue } from 'react-native-reanimated';
+import { useSharedValue, runOnJS } from 'react-native-reanimated';
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-
-const ReanimatedCamera = Animated.createAnimatedComponent(Camera);
 import { COLORS } from '../src/constants';
 
 // 비율별 crop 컨테이너 스타일 계산
@@ -68,33 +66,33 @@ export default function FocusScreen() {
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
 
-  // minZoom/maxZoom을 SharedValue로 — worklet(UI thread)에서 안전하게 읽힘
+  const [zoom, setZoom] = useState(1);
+  const startZoom = useSharedValue(1);
+  const zoomSV = useSharedValue(1);
   const minZoomSV = useSharedValue(1);
   const maxZoomSV = useSharedValue(8);
-  const zoomSV = useSharedValue(1);
-  const startZoom = useSharedValue(1);
 
-  // device 변경 시 zoom 범위 및 현재 zoom 업데이트
+  // device 변경 시 zoom 범위 리셋
   useEffect(() => {
-    minZoomSV.value = device?.minZoom ?? 1;
-    maxZoomSV.value = device?.maxZoom ?? 8;
-    zoomSV.value = device?.minZoom ?? 1; // 카메라 전환 시 zoom 리셋
+    const min = device?.minZoom ?? 1;
+    const max = device?.maxZoom ?? 8;
+    minZoomSV.value = min;
+    maxZoomSV.value = max;
+    zoomSV.value = min;
+    setZoom(min);
   }, [device]);
 
-  // onStart: 두 손가락 모두 인식 완료 후 호출 → 안전한 시작점 캡처
-  // e.scale: onStart 기준 누적값 → startZoom * e.scale이 올바른 계산
+  // Camera는 class component라 createAnimatedComponent로 감싸면 ref 전달 안됨
+  // → zoom은 JS state로 처리 (runOnJS로 업데이트)
   const pinchGesture = Gesture.Pinch()
     .onStart(() => {
       startZoom.value = zoomSV.value;
     })
     .onUpdate((e) => {
-      const next = startZoom.value * e.scale;
-      zoomSV.value = Math.min(Math.max(next, minZoomSV.value), maxZoomSV.value);
+      const next = Math.min(Math.max(startZoom.value * e.scale, minZoomSV.value), maxZoomSV.value);
+      zoomSV.value = next;
+      runOnJS(setZoom)(next);
     });
-
-  const animatedCameraProps = useAnimatedProps(() => ({
-    zoom: zoomSV.value,
-  }));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string | null>(null);
   const isStoppingRef = useRef(false);
@@ -291,14 +289,14 @@ export default function FocusScreen() {
         {/* 비율별 crop 컨테이너: 화면 중앙에 원하는 비율로 잘라서 표시 */}
         <View style={[styles.cropContainer, getCropStyle(aspectRatio)]}>
           {Platform.OS !== 'web' && device ? (
-          <ReanimatedCamera
+          <Camera
             ref={cameraRef}
             style={styles.camera}
             device={device}
             isActive={!showExitModal}
             video={true}
             audio={true}
-            animatedProps={animatedCameraProps}
+            zoom={zoom}
             onInitialized={() => setCameraReady(true)}
           />
         ) : (

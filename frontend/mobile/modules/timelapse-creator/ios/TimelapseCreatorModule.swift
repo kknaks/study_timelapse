@@ -273,42 +273,82 @@ public class TimelapseCreatorModule: Module {
       let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
 
       if options.debugStep == 1 {
-        // Step 1: renderSize만 설정, transform 없음 — 원본 naturalSize 그대로
-        videoComposition.renderSize = naturalSize
-        // layerInstruction에 아무 transform 없음 → identity
-        instruction.layerInstructions = [layerInstruction]
-        videoComposition.instructions = [instruction]
+        // Step 1: AVFoundation 자동 설정 (propertiesOf) — rotation/scale 자동 처리
+        // renderSize만 출력 해상도로 오버라이드
+        let autoComposition = AVMutableVideoComposition(propertiesOf: composition)
+        autoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
+        autoComposition.renderSize = CGSize(width: CGFloat(options.width), height: CGFloat(options.height))
+
+        guard let session = AVAssetExportSession(
+          asset: composition,
+          presetName: AVAssetExportPresetHighestQuality
+        ) else {
+          throw NSError(domain: "TimelapseCreator", code: -6,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+        }
+        session.videoComposition = autoComposition
+        session.outputURL = outputURL
+        session.outputFileType = .mp4
+        session.shouldOptimizeForNetworkUse = true
+
+        self.sendEvent("onProgress", ["progress": 0.0])
+        let pt = Task { while !Task.isCancelled { try? await Task.sleep(nanoseconds: 100_000_000); self.sendEvent("onProgress", ["progress": Double(session.progress)]) } }
+        await session.export()
+        pt.cancel()
+        guard session.status == .completed else {
+          throw NSError(domain: "TimelapseCreator", code: -4, userInfo: [NSLocalizedDescriptionKey: session.error?.localizedDescription ?? "Export failed"])
+        }
+        self.sendEvent("onProgress", ["progress": 1.0])
+        return outputURL.absoluteString
 
       } else if options.debugStep == 2 {
-        // Step 2: preferredTransform만 적용, crop/scale 없음
-        let outW = CGFloat(options.width)
-        let outH = CGFloat(options.height)
-        videoComposition.renderSize = CGSize(width: outW, height: outH)
-        layerInstruction.setTransform(preferredTransform, at: .zero)
+        // Step 2: preferredTransform 수동 적용
+        // iOS 카메라 raw 픽셀은 landscape → transform으로 portrait 변환
+        // naturalSize는 raw 픽셀 기준 (회전 전)
+        let rawW = naturalSize.width   // 예: 1920 (landscape)
+        let rawH = naturalSize.height  // 예: 1080 (landscape)
+
+        // preferredTransform 적용 후 실제 표시 크기
+        let displaySize = naturalSize.applying(preferredTransform)
+        let dispW = abs(displaySize.width)   // 예: 1080 (portrait)
+        let dispH = abs(displaySize.height)  // 예: 1920 (portrait)
+
+        videoComposition.renderSize = CGSize(width: dispW, height: dispH)
+
+        // preferredTransform의 translation을 보정해서 영상이 화면 안에 들어오게
+        var t = preferredTransform
+        // translation 보정: transform 적용 후 origin이 (0,0)이 되도록
+        let origin = CGPoint.zero.applying(t)
+        t = t.concatenating(CGAffineTransform(translationX: -origin.x, y: -origin.y))
+        layerInstruction.setTransform(t, at: .zero)
         instruction.layerInstructions = [layerInstruction]
         videoComposition.instructions = [instruction]
 
       } else {
-        // Step 3 (기본): transform + aspect-fill crop
+        // Step 3 (기본): transform + aspect-fill crop to output resolution
         let outW = CGFloat(options.width)
         let outH = CGFloat(options.height)
         videoComposition.renderSize = CGSize(width: outW, height: outH)
 
-        // naturalSize에 preferredTransform 적용해 실제 표시 크기 계산
-        let transformedSize = naturalSize.applying(preferredTransform)
-        let absW = abs(transformedSize.width)
-        let absH = abs(transformedSize.height)
+        let rawW = naturalSize.width
+        let rawH = naturalSize.height
+        let displaySize = naturalSize.applying(preferredTransform)
+        let dispW = abs(displaySize.width)
+        let dispH = abs(displaySize.height)
 
-        let scale = max(outW / absW, outH / absH) // aspect fill
-        let scaledW = absW * scale
-        let scaledH = absH * scale
+        // aspect-fill scale
+        let scale = max(outW / dispW, outH / dispH)
+        let scaledW = dispW * scale
+        let scaledH = dispH * scale
         let offsetX = (scaledW - outW) / 2
         let offsetY = (scaledH - outH) / 2
 
-        var transform = preferredTransform
-        transform = transform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
-        transform = transform.concatenating(CGAffineTransform(translationX: -offsetX, y: -offsetY))
-        layerInstruction.setTransform(transform, at: .zero)
+        var t = preferredTransform
+        let origin = CGPoint.zero.applying(t)
+        t = t.concatenating(CGAffineTransform(translationX: -origin.x, y: -origin.y))
+        t = t.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        t = t.concatenating(CGAffineTransform(translationX: -offsetX, y: -offsetY))
+        layerInstruction.setTransform(t, at: .zero)
         instruction.layerInstructions = [layerInstruction]
         videoComposition.instructions = [instruction]
       }
