@@ -11,6 +11,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSharedValue, runOnJS } from 'react-native-reanimated';
 import { COLORS } from '../src/constants';
 
 function formatTime(totalSeconds: number): string {
@@ -50,7 +51,6 @@ export default function FocusScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
   const [zoom, setZoom] = useState(1);
-  const lastZoomRef = useRef(1);
 
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
@@ -58,17 +58,16 @@ export default function FocusScreen() {
   const minZoom = device?.minZoom ?? 1;
   const maxZoom = device?.maxZoom ?? 8;
 
-  // 핀치 줌 제스처 (react-native-gesture-handler)
+  // 핀치 줌 — useSharedValue로 worklet 내에서 직접 계산, runOnJS로 state 업데이트
+  const startZoom = useSharedValue(1);
   const pinchGesture = Gesture.Pinch()
     .onBegin(() => {
-      lastZoomRef.current = zoom;
+      startZoom.value = zoom;
     })
     .onUpdate((e) => {
-      const newZoom = Math.min(Math.max(lastZoomRef.current * e.scale, minZoom), maxZoom);
-      lastZoomRef.current = newZoom;
-      setZoom(newZoom);
-    })
-    .runOnJS(true);
+      const next = Math.min(Math.max(startZoom.value * e.scale, minZoom), maxZoom);
+      runOnJS(setZoom)(next);
+    });
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string | null>(null);
   const isStoppingRef = useRef(false);

@@ -310,7 +310,8 @@ public class TimelapseCreatorModule: Module {
     }
 
     self.sendEvent("onProgress", ["progress": 1.0])
-    return options.outputPath
+    // expo-video는 file:// prefix 필요 → absoluteString 반환
+    return outputURL.absoluteString
   }
 
   // MARK: - Pixel Buffer Creation
