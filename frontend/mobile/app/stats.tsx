@@ -428,7 +428,7 @@ export default function StatsScreen() {
             <View style={styles.upgradeBox}>
               <Text style={styles.upgradeTitle}>✦ Upgrade to Pro</Text>
               <Text style={styles.upgradeDesc}>Remove watermark and unlock all features</Text>
-              <TouchableOpacity style={styles.upgradeBtn}>
+              <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/paywall')}>
                 <Text style={styles.upgradeBtnText}>Upgrade Now →</Text>
               </TouchableOpacity>
             </View>
