@@ -95,13 +95,14 @@ export default function GeneratingScreen() {
           height,
           frameRate: fps,
           bitRate: 3_500_000,
-          overlayStyle: 'pure', // 워터마크 없는 순수 영상
+          overlayStyle: 'pure',
           overlayText: '',
           streak: 0,
           timerMode,
           recordingSeconds,
           goalSeconds: studyMinutes * 60,
           cameraFacing,
+          debugStep: 0, // 0=순수export, 1=videoComposition, 2=transform, 3=crop(전체)
         });
       } finally {
         subscription.remove();

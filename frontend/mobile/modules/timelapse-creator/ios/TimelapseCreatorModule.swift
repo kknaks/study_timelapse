@@ -50,6 +50,8 @@ public class TimelapseCreatorModule: Module {
     @Field var recordingSeconds: Double = 0
     @Field var goalSeconds: Double = 0
     @Field var cameraFacing: String = "front"
+    // 디버깅용: 0=순수export, 1=videoComposition추가, 2=transform추가, 3=crop추가(기본)
+    @Field var debugStep: Int = 3
   }
 
   // MARK: - Build Timelapse
@@ -233,68 +235,103 @@ public class TimelapseCreatorModule: Module {
       at: .zero
     )
 
-    // 3. scaleTimeRange — 전체 구간을 outputSeconds로 압축
-    //    AVFoundation이 내부적으로 필요한 프레임만 순차 decode (랜덤 seek 없음)
+    // 3. scaleTimeRange
     let outputDuration = CMTime(seconds: options.outputSeconds, preferredTimescale: 600)
     compTrack.scaleTimeRange(
       CMTimeRange(start: .zero, duration: sourceDuration),
       toDuration: outputDuration
     )
 
-    // 4. AVMutableVideoComposition — 회전/크롭/FPS 설정
-    let videoComposition = AVMutableVideoComposition()
-    videoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
-    videoComposition.renderSize = CGSize(width: options.width, height: options.height)
+    // ── debugStep 분기 ──
+    // 0: videoComposition 없이 순수 export (기준 테스트)
+    // 1: videoComposition 추가 (frameDuration/renderSize만, transform 없음)
+    // 2: transform 추가 (crop 없음)
+    // 3: transform + crop (전체 로직, 기본값)
 
-    // preferredTransform 기반 실제 표시 크기 계산
-    let transformedSize = naturalSize.applying(preferredTransform)
-    let absW = abs(transformedSize.width)
-    let absH = abs(transformedSize.height)
+    let exportSession: AVAssetExportSession
 
-    let instruction = AVMutableVideoCompositionInstruction()
-    instruction.timeRange = CMTimeRange(start: .zero, duration: outputDuration)
+    if options.debugStep == 0 {
+      // ── Step 0: 순수 export — videoComposition 없음 ──
+      guard let session = AVAssetExportSession(
+        asset: composition,
+        presetName: AVAssetExportPresetPassthrough  // 재인코딩 없이 그대로
+      ) else {
+        throw NSError(domain: "TimelapseCreator", code: -6,
+                      userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+      }
+      session.outputURL = outputURL
+      session.outputFileType = .mp4
+      exportSession = session
 
-    let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
+    } else {
+      // ── Step 1~3: videoComposition 사용 ──
+      let videoComposition = AVMutableVideoComposition()
+      videoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
 
-    // 원본 영상을 출력 해상도에 맞게 aspect-fill 변환
-    let outW = CGFloat(options.width)
-    let outH = CGFloat(options.height)
-    let scaleX = outW / absW
-    let scaleY = outH / absH
-    let scale = max(scaleX, scaleY) // aspect fill
+      let instruction = AVMutableVideoCompositionInstruction()
+      instruction.timeRange = CMTimeRange(start: .zero, duration: outputDuration)
+      let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
 
-    let scaledW = absW * scale
-    let scaledH = absH * scale
-    let offsetX = (scaledW - outW) / 2
-    let offsetY = (scaledH - outH) / 2
+      if options.debugStep == 1 {
+        // Step 1: renderSize만 설정, transform 없음 — 원본 naturalSize 그대로
+        videoComposition.renderSize = naturalSize
+        // layerInstruction에 아무 transform 없음 → identity
+        instruction.layerInstructions = [layerInstruction]
+        videoComposition.instructions = [instruction]
 
-    // preferredTransform 적용 + 센터 크롭
-    var transform = preferredTransform
-    transform = transform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
-    transform = transform.concatenating(CGAffineTransform(translationX: -offsetX, y: -offsetY))
-    layerInstruction.setTransform(transform, at: .zero)
+      } else if options.debugStep == 2 {
+        // Step 2: preferredTransform만 적용, crop/scale 없음
+        let outW = CGFloat(options.width)
+        let outH = CGFloat(options.height)
+        videoComposition.renderSize = CGSize(width: outW, height: outH)
+        layerInstruction.setTransform(preferredTransform, at: .zero)
+        instruction.layerInstructions = [layerInstruction]
+        videoComposition.instructions = [instruction]
 
-    instruction.layerInstructions = [layerInstruction]
-    videoComposition.instructions = [instruction]
+      } else {
+        // Step 3 (기본): transform + aspect-fill crop
+        let outW = CGFloat(options.width)
+        let outH = CGFloat(options.height)
+        videoComposition.renderSize = CGSize(width: outW, height: outH)
 
-    // 5. AVAssetExportSession — GPU 가속 export (1번 인코딩)
-    guard let exportSession = AVAssetExportSession(
-      asset: composition,
-      presetName: AVAssetExportPresetHighestQuality
-    ) else {
-      throw NSError(domain: "TimelapseCreator", code: -6,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+        // naturalSize에 preferredTransform 적용해 실제 표시 크기 계산
+        let transformedSize = naturalSize.applying(preferredTransform)
+        let absW = abs(transformedSize.width)
+        let absH = abs(transformedSize.height)
+
+        let scale = max(outW / absW, outH / absH) // aspect fill
+        let scaledW = absW * scale
+        let scaledH = absH * scale
+        let offsetX = (scaledW - outW) / 2
+        let offsetY = (scaledH - outH) / 2
+
+        var transform = preferredTransform
+        transform = transform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        transform = transform.concatenating(CGAffineTransform(translationX: -offsetX, y: -offsetY))
+        layerInstruction.setTransform(transform, at: .zero)
+        instruction.layerInstructions = [layerInstruction]
+        videoComposition.instructions = [instruction]
+      }
+
+      guard let session = AVAssetExportSession(
+        asset: composition,
+        presetName: AVAssetExportPresetHighestQuality
+      ) else {
+        throw NSError(domain: "TimelapseCreator", code: -6,
+                      userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+      }
+      session.videoComposition = videoComposition
+      session.outputURL = outputURL
+      session.outputFileType = .mp4
+      session.shouldOptimizeForNetworkUse = true
+      exportSession = session
     }
-    exportSession.videoComposition = videoComposition
-    exportSession.outputURL = outputURL
-    exportSession.outputFileType = .mp4
-    exportSession.shouldOptimizeForNetworkUse = true
 
-    // 진행률 폴링 (export 중 0.1초 간격)
+    // 진행률 폴링
     self.sendEvent("onProgress", ["progress": 0.0])
     let progressTask = Task {
       while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        try? await Task.sleep(nanoseconds: 100_000_000)
         let p = Double(exportSession.progress)
         self.sendEvent("onProgress", ["progress": p])
       }

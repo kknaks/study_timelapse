@@ -13,6 +13,7 @@ export interface TimelapseOptions {
   recordingSeconds: number;
   goalSeconds: number;
   cameraFacing?: string; // "front"|"back"
+  debugStep?: number; // 0=순수export, 1=videoComposition, 2=transform, 3=crop(기본)
 }
 
 export interface OverlayOptions {

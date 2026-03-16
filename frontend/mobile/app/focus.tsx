@@ -9,9 +9,11 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import Animated, { useAnimatedProps, useSharedValue } from 'react-native-reanimated';
 import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue, runOnJS } from 'react-native-reanimated';
+
+const ReanimatedCamera = Animated.createAnimatedComponent(Camera);
 import { COLORS } from '../src/constants';
 
 function formatTime(totalSeconds: number): string {
@@ -50,24 +52,27 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
-  const [zoom, setZoom] = useState(1);
-
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
 
   const minZoom = device?.minZoom ?? 1;
   const maxZoom = device?.maxZoom ?? 8;
 
-  // 핀치 줌 — useSharedValue로 worklet 내에서 직접 계산, runOnJS로 state 업데이트
+  // 핀치 줌 — UI thread에서 직접 SharedValue 업데이트 → Camera에 Reanimated props로 연결
+  const zoomSV = useSharedValue(1);
   const startZoom = useSharedValue(1);
+
   const pinchGesture = Gesture.Pinch()
     .onBegin(() => {
-      startZoom.value = zoom;
+      startZoom.value = zoomSV.value;
     })
     .onUpdate((e) => {
-      const next = Math.min(Math.max(startZoom.value * e.scale, minZoom), maxZoom);
-      runOnJS(setZoom)(next);
+      zoomSV.value = Math.min(Math.max(startZoom.value * e.scale, minZoom), maxZoom);
     });
+
+  const animatedCameraProps = useAnimatedProps(() => ({
+    zoom: zoomSV.value,
+  }));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoUriRef = useRef<string | null>(null);
   const isStoppingRef = useRef(false);
@@ -262,8 +267,8 @@ export default function FocusScreen() {
           aspectRatio === '16:9' && styles.cameraWrapper16x9,
         ]}
       >
-        {Platform.OS !== 'web' ? (
-          <Camera
+        {Platform.OS !== 'web' && device ? (
+          <ReanimatedCamera
             ref={cameraRef}
             style={[
               styles.camera,
@@ -275,7 +280,7 @@ export default function FocusScreen() {
             isActive={!showExitModal}
             video={true}
             audio={true}
-            zoom={zoom}
+            animatedProps={animatedCameraProps}
             onInitialized={() => setCameraReady(true)}
           />
         ) : (
