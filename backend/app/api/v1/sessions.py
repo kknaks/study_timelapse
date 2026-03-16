@@ -16,7 +16,7 @@ from app.schemas.session import SessionCreateRequest, SessionResponse, SessionUp
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
-VALID_OUTPUT_SECONDS = {15, 30, 45, 60, 90, 120}
+VALID_OUTPUT_SECONDS = {5, 10, 15, 30, 45, 60, 90, 120}
 VALID_ASPECT_RATIOS = {"9:16", "16:9", "1:1", "4:3"}
 
 
