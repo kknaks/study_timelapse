@@ -49,13 +49,14 @@ export default function FocusScreen() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
-  const minZoom = device?.minZoom ?? 1;
-  const maxZoom = device?.maxZoom ?? 8;
   const [zoom, setZoom] = useState(1);
   const lastZoomRef = useRef(1);
 
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
+
+  const minZoom = device?.minZoom ?? 1;
+  const maxZoom = device?.maxZoom ?? 8;
 
   // 핀치 줌 제스처 (react-native-gesture-handler)
   const pinchGesture = Gesture.Pinch()
@@ -64,6 +65,7 @@ export default function FocusScreen() {
     })
     .onUpdate((e) => {
       const newZoom = Math.min(Math.max(lastZoomRef.current * e.scale, minZoom), maxZoom);
+      lastZoomRef.current = newZoom;
       setZoom(newZoom);
     })
     .runOnJS(true);
