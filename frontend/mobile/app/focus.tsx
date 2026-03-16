@@ -55,19 +55,28 @@ export default function FocusScreen() {
   const device = useCameraDevice(cameraFacing);
   const cameraRef = useRef<Camera>(null);
 
-  const minZoom = device?.minZoom ?? 1;
-  const maxZoom = device?.maxZoom ?? 8;
-
-  // 핀치 줌 — UI thread에서 직접 SharedValue 업데이트 → Camera에 Reanimated props로 연결
+  // minZoom/maxZoom을 SharedValue로 — worklet(UI thread)에서 안전하게 읽힘
+  const minZoomSV = useSharedValue(1);
+  const maxZoomSV = useSharedValue(8);
   const zoomSV = useSharedValue(1);
   const startZoom = useSharedValue(1);
 
+  // device 변경 시 zoom 범위 및 현재 zoom 업데이트
+  useEffect(() => {
+    minZoomSV.value = device?.minZoom ?? 1;
+    maxZoomSV.value = device?.maxZoom ?? 8;
+    zoomSV.value = device?.minZoom ?? 1; // 카메라 전환 시 zoom 리셋
+  }, [device]);
+
+  // onStart: 두 손가락 모두 인식 완료 후 호출 → 안전한 시작점 캡처
+  // e.scale: onStart 기준 누적값 → startZoom * e.scale이 올바른 계산
   const pinchGesture = Gesture.Pinch()
-    .onBegin(() => {
+    .onStart(() => {
       startZoom.value = zoomSV.value;
     })
     .onUpdate((e) => {
-      zoomSV.value = Math.min(Math.max(startZoom.value * e.scale, minZoom), maxZoom);
+      const next = startZoom.value * e.scale;
+      zoomSV.value = Math.min(Math.max(next, minZoomSV.value), maxZoomSV.value);
     });
 
   const animatedCameraProps = useAnimatedProps(() => ({
