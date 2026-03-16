@@ -37,6 +37,16 @@ export default function GeneratingScreen() {
   const [progress, setProgress] = useState(0);
   const hasRun = useRef(false);
 
+  // 압축 비율 기반 최적 FPS 자동 계산
+  // 긴 영상일수록 FPS를 낮춰 export 시간을 단축하면서 타임랩스 부드러움 유지
+  function optimalFPS(recSeconds: number, outSeconds: number): number {
+    const ratio = outSeconds > 0 ? recSeconds / outSeconds : 1;
+    if (ratio < 100) return 30;  // ~1.5시간 이하
+    if (ratio < 300) return 24;  // 1.5시간 ~ 2.5시간
+    if (ratio < 500) return 20;  // 2.5시간 ~ 4시간
+    return 15;                   // 4시간 이상
+  }
+
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
@@ -74,13 +84,15 @@ export default function GeneratingScreen() {
       });
 
       try {
+        const fps = optimalFPS(recordingSeconds, actualOutputSeconds);
+
         await createTimelapse({
           videoUri,
           outputPath,
           outputSeconds: actualOutputSeconds,
           width,
           height,
-          frameRate: 30,
+          frameRate: fps,
           bitRate: 3_500_000,
           overlayStyle: 'pure', // 워터마크 없는 순수 영상
           overlayText: '',
