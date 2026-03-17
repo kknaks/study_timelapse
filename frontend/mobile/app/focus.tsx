@@ -72,7 +72,7 @@ export default function FocusScreen() {
   const minZoomSV = useSharedValue(1);
   const maxZoomSV = useSharedValue(8);
 
-  // device 변경 시 zoom 범위 리셋
+  // device 변경 시 zoom 범위 리셋 + cameraReady 초기화
   useEffect(() => {
     const min = device?.minZoom ?? 1;
     const max = device?.maxZoom ?? 8;
@@ -80,6 +80,7 @@ export default function FocusScreen() {
     maxZoomSV.value = max;
     zoomSV.value = min;
     setZoom(min);
+    setCameraReady(false); // 카메라 전환 시 준비 상태 초기화
   }, [device]);
 
   // Camera는 class component라 createAnimatedComponent로 감싸면 ref 전달 안됨
@@ -141,7 +142,7 @@ export default function FocusScreen() {
   }, [elapsed, totalSeconds, isRecording]);
 
   const startRecording = useCallback(() => {
-    if (isRecording || !cameraRef.current || !device) return;
+    if (isRecording || !cameraRef.current || !device || !cameraReady) return;
     setIsRecording(true);
     if (Platform.OS !== 'web') {
       cameraRef.current.startRecording({
@@ -167,7 +168,7 @@ export default function FocusScreen() {
         },
       });
     }
-  }, [isRecording, device, router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
+  }, [isRecording, device, cameraReady, router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
 
   const handleStop = useCallback(async () => {
     if (isStoppingRef.current) return;
@@ -349,7 +350,7 @@ export default function FocusScreen() {
             {!hasStarted && Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={styles.flipButton}
-                onPress={() => { setCameraFacing(f => f === 'front' ? 'back' : 'front'); setZoom(minZoom); lastZoomRef.current = minZoom; }}
+                onPress={() => { setCameraFacing(f => f === 'front' ? 'back' : 'front'); }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.flipIcon}>⇄</Text>
