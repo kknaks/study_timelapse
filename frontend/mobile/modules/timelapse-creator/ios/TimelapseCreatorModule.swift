@@ -303,20 +303,12 @@ public class TimelapseCreatorModule: Module {
 
       } else if options.debugStep == 2 {
         // Step 2: AVMutableVideoComposition(propertiesOf:) 로 transform 자동 처리
-        // propertiesOf가 preferredTransform/renderSize를 자동 계산 → 검정 화면 없음
-        // renderSize만 출력 해상도로 오버라이드해서 크기 맞춤
+        // propertiesOf가 preferredTransform/renderSize/layerInstruction을 자동 계산
+        // renderSize만 출력 해상도로 직접 교체 (스케일 계산 없이)
         let autoComposition = AVMutableVideoComposition(propertiesOf: composition)
         autoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
-
-        // propertiesOf가 계산한 renderSize를 출력 해상도 비율에 맞게 조정
-        let autoSize = autoComposition.renderSize
-        let outW = CGFloat(options.width)
-        let outH = CGFloat(options.height)
-        let scale = min(outW / autoSize.width, outH / autoSize.height)
-        autoComposition.renderSize = CGSize(
-          width: (autoSize.width * scale).rounded(),
-          height: (autoSize.height * scale).rounded()
-        )
+        // propertiesOf의 transform은 그대로, renderSize만 출력 해상도로 교체
+        autoComposition.renderSize = CGSize(width: CGFloat(options.width), height: CGFloat(options.height))
 
         guard let session = AVAssetExportSession(
           asset: composition,
