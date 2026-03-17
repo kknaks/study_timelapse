@@ -102,7 +102,7 @@ export default function GeneratingScreen() {
           recordingSeconds,
           goalSeconds: studyMinutes * 60,
           cameraFacing,
-          debugStep: 0, // 0=순수export(passthrough), 1=videoComposition, 2=transform, 3=crop(전체)
+          debugStep: 2, // 0=순수export(passthrough), 1=videoComposition, 2=propertiesOf+transform자동, 3=crop(전체)
         });
       } finally {
         subscription.remove();

@@ -302,27 +302,43 @@ public class TimelapseCreatorModule: Module {
         return outputURL.absoluteString
 
       } else if options.debugStep == 2 {
-        // Step 2: preferredTransform 수동 적용
-        // iOS 카메라 raw 픽셀은 landscape → transform으로 portrait 변환
-        // naturalSize는 raw 픽셀 기준 (회전 전)
-        let rawW = naturalSize.width   // 예: 1920 (landscape)
-        let rawH = naturalSize.height  // 예: 1080 (landscape)
+        // Step 2: AVMutableVideoComposition(propertiesOf:) 로 transform 자동 처리
+        // propertiesOf가 preferredTransform/renderSize를 자동 계산 → 검정 화면 없음
+        // renderSize만 출력 해상도로 오버라이드해서 크기 맞춤
+        let autoComposition = AVMutableVideoComposition(propertiesOf: composition)
+        autoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
 
-        // preferredTransform 적용 후 실제 표시 크기
-        let displaySize = naturalSize.applying(preferredTransform)
-        let dispW = abs(displaySize.width)   // 예: 1080 (portrait)
-        let dispH = abs(displaySize.height)  // 예: 1920 (portrait)
+        // propertiesOf가 계산한 renderSize를 출력 해상도 비율에 맞게 조정
+        let autoSize = autoComposition.renderSize
+        let outW = CGFloat(options.width)
+        let outH = CGFloat(options.height)
+        let scale = min(outW / autoSize.width, outH / autoSize.height)
+        autoComposition.renderSize = CGSize(
+          width: (autoSize.width * scale).rounded(),
+          height: (autoSize.height * scale).rounded()
+        )
 
-        videoComposition.renderSize = CGSize(width: dispW, height: dispH)
+        guard let session = AVAssetExportSession(
+          asset: composition,
+          presetName: AVAssetExportPresetHighestQuality
+        ) else {
+          throw NSError(domain: "TimelapseCreator", code: -6,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+        }
+        session.videoComposition = autoComposition
+        session.outputURL = outputURL
+        session.outputFileType = .mp4
+        session.shouldOptimizeForNetworkUse = true
 
-        // preferredTransform의 translation을 보정해서 영상이 화면 안에 들어오게
-        var t = preferredTransform
-        // translation 보정: transform 적용 후 origin이 (0,0)이 되도록
-        let origin = CGPoint.zero.applying(t)
-        t = t.concatenating(CGAffineTransform(translationX: -origin.x, y: -origin.y))
-        layerInstruction.setTransform(t, at: .zero)
-        instruction.layerInstructions = [layerInstruction]
-        videoComposition.instructions = [instruction]
+        self.sendEvent("onProgress", ["progress": 0.0])
+        let pt2 = Task { while !Task.isCancelled { try? await Task.sleep(nanoseconds: 100_000_000); self.sendEvent("onProgress", ["progress": Double(session.progress)]) } }
+        await session.export()
+        pt2.cancel()
+        guard session.status == .completed else {
+          throw NSError(domain: "TimelapseCreator", code: -4, userInfo: [NSLocalizedDescriptionKey: session.error?.localizedDescription ?? "Export failed"])
+        }
+        self.sendEvent("onProgress", ["progress": 1.0])
+        return outputURL.absoluteString
 
       } else {
         // Step 3 (기본): transform + aspect-fill crop to output resolution
