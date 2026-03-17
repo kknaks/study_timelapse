@@ -290,10 +290,11 @@ export default function FocusScreen() {
         <View style={[styles.cropContainer, getCropStyle(aspectRatio)]}>
           {Platform.OS !== 'web' && device ? (
           <Camera
+            key={cameraFacing}
             ref={cameraRef}
             style={styles.camera}
             device={device}
-            isActive={!showExitModal}
+            isActive={!showExitModal && device != null}
             video={true}
             audio={true}
             zoom={zoom}
