@@ -304,13 +304,44 @@ public class TimelapseCreatorModule: Module {
         return outputURL.absoluteString
 
       } else if options.debugStep == 2 {
-        // Step 2: AVMutableVideoComposition(propertiesOf:) 로 transform 자동 처리
-        // propertiesOf가 preferredTransform/renderSize/layerInstruction을 자동 계산
-        // renderSize만 출력 해상도로 직접 교체 (스케일 계산 없이)
+        // Step 2: propertiesOf로 transform 자동 처리 + aspect-fill crop
+        // 1) propertiesOf로 rotation/transform 자동 계산
         let autoComposition = AVMutableVideoComposition(propertiesOf: composition)
         autoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
-        // propertiesOf의 transform은 그대로, renderSize만 출력 해상도로 교체
-        autoComposition.renderSize = CGSize(width: CGFloat(options.width), height: CGFloat(options.height))
+
+        // 2) propertiesOf가 계산한 renderSize (rotation 적용된 portrait 크기, 예: 1080x1920)
+        let srcW = autoComposition.renderSize.width   // 예: 1080
+        let srcH = autoComposition.renderSize.height  // 예: 1920
+        let outW = CGFloat(options.width)             // 예: 810 (3:4)
+        let outH = CGFloat(options.height)            // 예: 1080 (3:4)
+
+        // 3) aspect-fill: src를 out에 꽉 채우는 scale
+        let scale = max(outW / srcW, outH / srcH)
+        let scaledW = srcW * scale
+        let scaledH = srcH * scale
+        // 중앙 crop offset
+        let cropX = (scaledW - outW) / 2
+        let cropY = (scaledH - outH) / 2
+
+        // 4) propertiesOf의 기존 layerInstruction에 scale+crop transform 추가
+        // propertiesOf의 instruction을 가져와서 layerInstruction의 transform을 수정
+        if let existingInstruction = autoComposition.instructions.first as? AVMutableVideoCompositionInstruction,
+           let existingLayer = existingInstruction.layerInstructions.first as? AVMutableVideoCompositionLayerInstruction {
+          // 기존 transform (rotation) 위에 scale + translate(crop) 추가
+          var t = CGAffineTransform.identity
+          // propertiesOf가 설정한 기존 transform 읽기
+          var existingT = CGAffineTransform.identity
+          existingLayer.getTransformRamp(for: .zero, start: &existingT, end: nil, timeRange: nil)
+          t = existingT
+          t = t.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+          t = t.concatenating(CGAffineTransform(translationX: -cropX, y: -cropY))
+          existingLayer.setTransform(t, at: .zero)
+          existingInstruction.layerInstructions = [existingLayer]
+          autoComposition.instructions = [existingInstruction]
+        }
+
+        // 5) renderSize를 출력 해상도로 교체
+        autoComposition.renderSize = CGSize(width: outW, height: outH)
 
         guard let session = AVAssetExportSession(
           asset: composition,
