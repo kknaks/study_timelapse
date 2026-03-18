@@ -234,6 +234,8 @@ public class TimelapseCreatorModule: Module {
       of: sourceTrack,
       at: .zero
     )
+    // preferredTransform을 compTrack에도 설정 → propertiesOf가 rotation 인식
+    compTrack.preferredTransform = preferredTransform
 
     // 3. scaleTimeRange
     let outputDuration = CMTime(seconds: options.outputSeconds, preferredTimescale: 600)
