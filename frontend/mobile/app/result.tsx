@@ -181,35 +181,24 @@ export default function ResultScreen() {
       >
         {isReady && (
           <>
-            {/* 영상 프리뷰 */}
-            <View style={{
-              position: 'absolute',
-              left: offsetX, top: offsetY,
-              width: vidW, height: vidH,
-              overflow: 'hidden',
-              // transform: isMirrored ? [{ scaleX: -1 }] : undefined, // vision-camera + AVAssetImageGenerator가 이미 처리
-            }}>
+            {/* 영상 프리뷰 — previewArea 전체를 cover로 채움 */}
+            <View style={StyleSheet.absoluteFillObject}>
               {previewSource ? (
                 <VideoView
                   player={player}
-                  style={{ width: vidW, height: vidH }}
+                  style={StyleSheet.absoluteFillObject}
                   contentFit="cover"
                   nativeControls={false}
                 />
               ) : (
-                <View style={{ width: vidW, height: vidH, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ flex: 1, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: '#999', fontSize: 14 }}>Video preview</Text>
                 </View>
               )}
             </View>
 
             {/* 오버레이 미리보기: 워터마크 항상 + 선택 스타일 */}
-            <View pointerEvents="none" style={{
-              position: 'absolute',
-              left: offsetX, top: offsetY,
-              width: vidW, height: vidH,
-              overflow: 'hidden',
-            }}>
+            <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
               {/* 워터마크: 좌하단 — 항상 표시 */}
               <View style={styles.watermark}>
                 <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
