@@ -8,7 +8,7 @@ public class TimelapseCreatorModule: Module {
   public func definition() -> ModuleDefinition {
     Name("TimelapseCreator")
 
-    Events("onProgress")
+    Events("onProgress", "onDebugLog")
 
     AsyncFunction("createTimelapse") { (options: TimelapseOptions) -> String in
       return try await self.buildTimelapse(options: options)
@@ -220,12 +220,15 @@ public class TimelapseCreatorModule: Module {
     let preferredTransform = try await sourceTrack.load(.preferredTransform)
     let naturalSize = try await sourceTrack.load(.naturalSize)
 
-    // ── 디버그 로그: 실제 값 확인 ──
-    NSLog("[TimelapseCreator] naturalSize: \(naturalSize.width) x \(naturalSize.height)")
-    NSLog("[TimelapseCreator] preferredTransform: a=\(preferredTransform.a) b=\(preferredTransform.b) c=\(preferredTransform.c) d=\(preferredTransform.d) tx=\(preferredTransform.tx) ty=\(preferredTransform.ty)")
+    // ── 디버그 로그: 실제 값 확인 (onDebugLog 이벤트로 JS에 전달) ──
     let displaySize = naturalSize.applying(preferredTransform)
-    NSLog("[TimelapseCreator] displaySize (after transform): \(abs(displaySize.width)) x \(abs(displaySize.height))")
-    NSLog("[TimelapseCreator] options: width=\(options.width) height=\(options.height) cameraFacing=\(options.cameraFacing)")
+    let debugLog = """
+    naturalSize: \(naturalSize.width) x \(naturalSize.height)
+    preferredTransform: a=\(preferredTransform.a) b=\(preferredTransform.b) c=\(preferredTransform.c) d=\(preferredTransform.d) tx=\(preferredTransform.tx) ty=\(preferredTransform.ty)
+    displaySize (after transform): \(abs(displaySize.width)) x \(abs(displaySize.height))
+    options: width=\(options.width) height=\(options.height) cameraFacing=\(options.cameraFacing)
+    """
+    self.sendEvent("onDebugLog", ["log": debugLog])
 
     // 2. AVMutableComposition 생성 — 원본 전체를 삽입
     let composition = AVMutableComposition()
@@ -321,8 +324,7 @@ public class TimelapseCreatorModule: Module {
         let srcH = autoComposition.renderSize.height  // 예: 1920
         let outW = CGFloat(options.width)             // 예: 810 (3:4)
         let outH = CGFloat(options.height)            // 예: 1080 (3:4)
-        NSLog("[TimelapseCreator] propertiesOf renderSize: \(srcW) x \(srcH)")
-        NSLog("[TimelapseCreator] output size: \(outW) x \(outH)")
+        self.sendEvent("onDebugLog", ["log": "propertiesOf renderSize: \(srcW) x \(srcH)\noutput size: \(outW) x \(outH)"])
 
         // 3) aspect-fill: src를 out에 꽉 채우는 scale
         let scale = max(outW / srcW, outH / srcH)

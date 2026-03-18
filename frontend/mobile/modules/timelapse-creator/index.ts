@@ -18,3 +18,9 @@ export function addProgressListener(
 ): EventSubscription {
   return TimelapseCreatorModule.addListener('onProgress', listener);
 }
+
+export function addDebugLogListener(
+  listener: (event: { log: string }) => void
+): EventSubscription {
+  return TimelapseCreatorModule.addListener('onDebugLog', listener);
+}

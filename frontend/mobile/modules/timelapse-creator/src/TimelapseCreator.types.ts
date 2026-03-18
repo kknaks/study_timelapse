@@ -32,4 +32,5 @@ export interface OverlayOptions {
 
 export type TimelapseCreatorModuleEvents = {
   onProgress: (params: { progress: number }) => void;
+  onDebugLog: (params: { log: string }) => void;
 };

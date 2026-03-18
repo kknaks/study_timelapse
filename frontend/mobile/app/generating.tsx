@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
-import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
+import { createTimelapse, addProgressListener, addDebugLogListener } from '../modules/timelapse-creator';
 import { updateSession } from '../src/api/sessions';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
@@ -83,6 +83,9 @@ export default function GeneratingScreen() {
       const subscription = addProgressListener((event) => {
         setProgress(Math.round(event.progress * 100));
       });
+      const debugSubscription = addDebugLogListener((event) => {
+        Alert.alert('Debug Log', event.log);
+      });
 
       try {
         const fps = optimalFPS(recordingSeconds, actualOutputSeconds);
@@ -106,6 +109,7 @@ export default function GeneratingScreen() {
         });
       } finally {
         subscription.remove();
+        debugSubscription.remove();
       }
 
       // 세션 업데이트
