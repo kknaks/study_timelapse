@@ -319,12 +319,15 @@ public class TimelapseCreatorModule: Module {
         let autoComposition = AVMutableVideoComposition(propertiesOf: composition)
         autoComposition.frameDuration = CMTimeMake(value: 1, timescale: Int32(options.frameRate))
 
-        // 2) propertiesOf가 계산한 renderSize (rotation 적용된 portrait 크기, 예: 1080x1920)
-        let srcW = autoComposition.renderSize.width   // 예: 1080
-        let srcH = autoComposition.renderSize.height  // 예: 1920
-        let outW = CGFloat(options.width)             // 예: 810 (3:4)
-        let outH = CGFloat(options.height)            // 예: 1080 (3:4)
-        self.sendEvent("onDebugLog", ["log": "propertiesOf renderSize: \(srcW) x \(srcH)\noutput size: \(outW) x \(outH)"])
+        // 2) propertiesOf renderSize는 rotation 미반영(1920x1080 landscape 그대로)
+        //    → preferredTransform 적용 후 실제 portrait 크기를 src 기준으로 직접 계산
+        let autoRenderSize = autoComposition.renderSize
+        let dispSize = naturalSize.applying(preferredTransform)
+        let srcW = abs(dispSize.width)    // 1080 (portrait width)
+        let srcH = abs(dispSize.height)   // 1920 (portrait height)
+        let outW = CGFloat(options.width)
+        let outH = CGFloat(options.height)
+        self.sendEvent("onDebugLog", ["log": "propertiesOf renderSize: \(autoRenderSize.width) x \(autoRenderSize.height)\ndisplaySize (used as src): \(srcW) x \(srcH)\noutput: \(outW) x \(outH)"])
 
         // 3) aspect-fill: src를 out에 꽉 채우는 scale
         let scale = max(outW / srcW, outH / srcH)
@@ -334,22 +337,24 @@ public class TimelapseCreatorModule: Module {
         let cropX = (scaledW - outW) / 2
         let cropY = (scaledH - outH) / 2
 
-        // 4) propertiesOf의 기존 layerInstruction에 scale+crop transform 추가
-        // propertiesOf의 instruction을 가져와서 layerInstruction의 transform을 수정
-        if let existingInstruction = autoComposition.instructions.first as? AVMutableVideoCompositionInstruction,
-           let existingLayer = existingInstruction.layerInstructions.first as? AVMutableVideoCompositionLayerInstruction {
-          // 기존 transform (rotation) 위에 scale + translate(crop) 추가
-          var t = CGAffineTransform.identity
-          // propertiesOf가 설정한 기존 transform 읽기
-          var existingT = CGAffineTransform.identity
-          existingLayer.getTransformRamp(for: .zero, start: &existingT, end: nil, timeRange: nil)
-          t = existingT
-          t = t.concatenating(CGAffineTransform(scaleX: scale, y: scale))
-          t = t.concatenating(CGAffineTransform(translationX: -cropX, y: -cropY))
-          existingLayer.setTransform(t, at: .zero)
-          existingInstruction.layerInstructions = [existingLayer]
-          autoComposition.instructions = [existingInstruction]
-        }
+        // 4) preferredTransform 기반으로 새 layerInstruction 구성
+        //    propertiesOf의 기존 instruction 대신 직접 계산 (getTransformRamp 불안정 회피)
+        //    preferredTransform(rotation) → scale → crop 순서로 적용
+        let newInstruction = AVMutableVideoCompositionInstruction()
+        newInstruction.timeRange = CMTimeRange(start: .zero, duration: outputDuration)
+        let newLayer = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
+
+        // preferredTransform: rotation만 포함 (tx/ty는 portrait 기준 origin 보정 필요)
+        // displaySize 기준으로 origin이 (0,0)이 되도록 translation 보정
+        var t = preferredTransform
+        let origin = CGPoint.zero.applying(t)
+        t = t.concatenating(CGAffineTransform(translationX: -origin.x, y: -origin.y))
+        // scale + crop
+        t = t.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        t = t.concatenating(CGAffineTransform(translationX: -cropX, y: -cropY))
+        newLayer.setTransform(t, at: .zero)
+        newInstruction.layerInstructions = [newLayer]
+        autoComposition.instructions = [newInstruction]
 
         // 5) renderSize를 출력 해상도로 교체
         autoComposition.renderSize = CGSize(width: outW, height: outH)
