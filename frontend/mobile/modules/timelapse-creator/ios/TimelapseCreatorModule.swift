@@ -346,9 +346,22 @@ public class TimelapseCreatorModule: Module {
 
         // preferredTransform: rotation만 포함 (tx/ty는 portrait 기준 origin 보정 필요)
         // displaySize 기준으로 origin이 (0,0)이 되도록 translation 보정
+        // preferredTransform 적용 후 영상이 화면 밖으로 나가지 않도록 보정
+        // raw 영상의 네 꼭짓점을 transform 적용 후 최소 x, y 계산
+        let rawW = naturalSize.width
+        let rawH = naturalSize.height
+        let corners = [
+          CGPoint(x: 0,    y: 0),
+          CGPoint(x: rawW, y: 0),
+          CGPoint(x: 0,    y: rawH),
+          CGPoint(x: rawW, y: rawH),
+        ].map { $0.applying(preferredTransform) }
+        let minX = corners.map { $0.x }.min() ?? 0
+        let minY = corners.map { $0.y }.min() ?? 0
+
         var t = preferredTransform
-        let origin = CGPoint.zero.applying(t)
-        t = t.concatenating(CGAffineTransform(translationX: -origin.x, y: -origin.y))
+        // 최소 좌표가 (0,0)이 되도록 이동
+        t = t.concatenating(CGAffineTransform(translationX: -minX, y: -minY))
         // scale + crop
         t = t.concatenating(CGAffineTransform(scaleX: scale, y: scale))
         t = t.concatenating(CGAffineTransform(translationX: -cropX, y: -cropY))
