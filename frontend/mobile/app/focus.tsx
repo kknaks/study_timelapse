@@ -298,6 +298,7 @@ export default function FocusScreen() {
             video={true}
             audio={true}
             zoom={zoom}
+            outputOrientation="preview"
             onInitialized={() => setCameraReady(true)}
           />
         ) : (
