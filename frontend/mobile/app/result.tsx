@@ -181,13 +181,20 @@ export default function ResultScreen() {
       >
         {isReady && (
           <>
-            {/* 영상 프리뷰 — previewArea 전체를 cover로 채움 */}
-            <View style={StyleSheet.absoluteFillObject}>
+            {/* 영상 프리뷰 — 선택한 aspectRatio 비율 고정 컨테이너 */}
+            <View style={{
+              width: vidW,
+              height: vidH,
+              position: 'absolute',
+              left: offsetX,
+              top: offsetY,
+              overflow: 'hidden',
+            }}>
               {previewSource ? (
                 <VideoView
                   player={player}
-                  style={StyleSheet.absoluteFillObject}
-                  contentFit="cover"
+                  style={{ width: vidW, height: vidH }}
+                  contentFit="fill"
                   nativeControls={false}
                 />
               ) : (
@@ -198,7 +205,14 @@ export default function ResultScreen() {
             </View>
 
             {/* 오버레이 미리보기: 워터마크 항상 + 선택 스타일 */}
-            <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+            <View pointerEvents="none" style={{
+              position: 'absolute',
+              left: offsetX,
+              top: offsetY,
+              width: vidW,
+              height: vidH,
+              overflow: 'hidden',
+            }}>
               {/* 워터마크: 좌하단 — 항상 표시 */}
               <View style={styles.watermark}>
                 <Image source={require('../assets/logo.png')} style={styles.watermarkIcon} resizeMode="contain" />
