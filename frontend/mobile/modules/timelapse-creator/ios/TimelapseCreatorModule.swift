@@ -56,7 +56,7 @@ public class TimelapseCreatorModule: Module {
 
   // MARK: - Build Timelapse
 
-  // MARK: - Apply Overlay (AVAssetReader pipeline — frame-accurate, no re-sampling jitter)
+  // MARK: - Apply Overlay (AVVideoCompositionCoreAnimationTool — single-pass CALayer overlay)
 
   private func buildOverlay(options: OverlayOptions) async throws -> String {
     // overlay가 none이면 원본 그대로 복사
@@ -75,10 +75,11 @@ public class TimelapseCreatorModule: Module {
     let outputURL = URL(fileURLWithPath: options.outputPath.replacingOccurrences(of: "file://", with: ""))
     try? FileManager.default.removeItem(at: outputURL)
 
-    let width = options.width
-    let height = options.height
+    let outW = CGFloat(options.width)
+    let outH = CGFloat(options.height)
+    let renderSize = CGSize(width: outW, height: outH)
 
-    // ── AVAssetReader 설정 ──
+    // ── Asset 로드 ──
     let asset = AVAsset(url: inputURL)
     let duration = try await asset.load(.duration)
     let durationSeconds = CMTimeGetSeconds(duration)
@@ -93,100 +94,360 @@ public class TimelapseCreatorModule: Module {
                     userInfo: [NSLocalizedDescriptionKey: "No video track found"])
     }
 
-    let reader = try AVAssetReader(asset: asset)
-    let readerOutputSettings: [String: Any] = [
-      kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-    ]
-    let readerOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: readerOutputSettings)
-    readerOutput.alwaysCopiesSampleData = false
-    reader.add(readerOutput)
-
-    // ── AVAssetWriter 설정 ──
-    let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-    let videoSettings: [String: Any] = [
-      AVVideoCodecKey: AVVideoCodecType.h264,
-      AVVideoWidthKey: width,
-      AVVideoHeightKey: height,
-      AVVideoCompressionPropertiesKey: [
-        AVVideoAverageBitRateKey: 4_000_000,
-        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-      ],
-    ]
-    let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-    writerInput.expectsMediaDataInRealTime = false
-    let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-      assetWriterInput: writerInput,
-      sourcePixelBufferAttributes: [
-        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
-        kCVPixelBufferWidthKey as String: width,
-        kCVPixelBufferHeightKey as String: height,
-      ]
+    // ── AVMutableComposition ──
+    let composition = AVMutableComposition()
+    guard let compTrack = composition.addMutableTrack(
+      withMediaType: .video,
+      preferredTrackID: kCMPersistentTrackID_Invalid
+    ) else {
+      throw NSError(domain: "TimelapseCreator", code: -5,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to create composition track"])
+    }
+    try compTrack.insertTimeRange(
+      CMTimeRange(start: .zero, duration: duration),
+      of: videoTrack,
+      at: .zero
     )
-    writer.add(writerInput)
 
-    guard reader.startReading() else {
-      throw NSError(domain: "TimelapseCreator", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to start reading: \(reader.error?.localizedDescription ?? "unknown")"])
-    }
-    guard writer.startWriting() else {
-      throw NSError(domain: "TimelapseCreator", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to start writing: \(writer.error?.localizedDescription ?? "unknown")"])
-    }
-    writer.startSession(atSourceTime: .zero)
+    // ── CALayer 구조 (bottom-left origin) ──
+    let parentLayer = CALayer()
+    parentLayer.frame = CGRect(origin: .zero, size: renderSize)
+    parentLayer.isGeometryFlipped = true // UIKit-style top-left origin
 
-    var frameIndex = 0
-    var totalFrames = 0
+    let videoLayer = CALayer()
+    videoLayer.frame = CGRect(origin: .zero, size: renderSize)
+    parentLayer.addSublayer(videoLayer)
 
-    // 총 프레임 수 추정 (오버레이 진행 계산용)
+    let overlayLayer = CALayer()
+    overlayLayer.frame = CGRect(origin: .zero, size: renderSize)
+    parentLayer.addSublayer(overlayLayer)
+
+    // ── 오버레이 CALayer 구성 ──
+    buildCAOverlay(
+      on: overlayLayer,
+      width: outW,
+      height: outH,
+      style: options.overlayStyle,
+      streak: options.streak,
+      timerMode: options.timerMode,
+      recordingSeconds: options.recordingSeconds,
+      goalSeconds: options.goalSeconds,
+      logoPath: options.logoPath,
+      videoDuration: durationSeconds
+    )
+
+    // ── AVMutableVideoComposition with CoreAnimationTool ──
     let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
-    totalFrames = max(1, Int(durationSeconds * Double(nominalFrameRate)))
+    let fps = nominalFrameRate > 0 ? Int32(nominalFrameRate) : 30
 
-    // ── 프레임 파이프라인 ──
-    while reader.status == .reading {
-      guard let sampleBuffer = readerOutput.copyNextSampleBuffer() else { break }
+    let videoComposition = AVMutableVideoComposition()
+    videoComposition.renderSize = renderSize
+    videoComposition.frameDuration = CMTimeMake(value: 1, timescale: fps)
+    videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
+      postProcessingAsVideoLayer: videoLayer,
+      in: parentLayer
+    )
 
-      while !writerInput.isReadyForMoreMediaData {
-        try await Task.sleep(nanoseconds: 5_000_000) // 5ms
+    let instruction = AVMutableVideoCompositionInstruction()
+    instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+    let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
+    layerInstruction.setTransform(.identity, at: .zero)
+    instruction.layerInstructions = [layerInstruction]
+    videoComposition.instructions = [instruction]
+
+    // ── Export ──
+    guard let exportSession = AVAssetExportSession(
+      asset: composition,
+      presetName: AVAssetExportPresetHighestQuality
+    ) else {
+      throw NSError(domain: "TimelapseCreator", code: -6,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+    }
+    exportSession.videoComposition = videoComposition
+    exportSession.outputURL = outputURL
+    exportSession.outputFileType = .mp4
+    exportSession.shouldOptimizeForNetworkUse = true
+
+    self.sendEvent("onProgress", ["progress": 0.0])
+    let progressTask = Task {
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        self.sendEvent("onProgress", ["progress": Double(exportSession.progress)])
       }
-
-      guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { continue }
-      let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-
-      // BGRA 픽셀 버퍼 → UIImage
-      let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-      let context = CIContext(options: [.useSoftwareRenderer: false])
-      guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { continue }
-
-      // 타임랩스 mp4는 이미 올바른 방향 — transform .identity 전달
-      let uiImage = UIImage(cgImage: cgImage)
-      guard let outBuffer = createPixelBuffer(
-        from: uiImage,
-        width: width,
-        height: height,
-        preferredTransform: .identity,
-        overlayStyle: options.overlayStyle,
-        streak: options.streak,
-        frameIndex: frameIndex,
-        totalFrames: totalFrames,
-        timerMode: options.timerMode,
-        recordingSeconds: options.recordingSeconds,
-        goalSeconds: options.goalSeconds,
-        logoPath: options.logoPath
-      ) else { continue }
-
-      adaptor.append(outBuffer, withPresentationTime: presentationTime)
-      frameIndex += 1
     }
 
-    writerInput.markAsFinished()
-    await writer.finishWriting()
+    await exportSession.export()
+    progressTask.cancel()
 
-    guard writer.status == .completed else {
+    guard exportSession.status == .completed else {
       throw NSError(domain: "TimelapseCreator", code: -4,
-                    userInfo: [NSLocalizedDescriptionKey: writer.error?.localizedDescription ?? "Export failed"])
+                    userInfo: [NSLocalizedDescriptionKey: exportSession.error?.localizedDescription ?? "Export failed"])
     }
 
-    return options.outputPath
+    self.sendEvent("onProgress", ["progress": 1.0])
+    return outputURL.absoluteString
+  }
+
+  // MARK: - CALayer Overlay Builder
+
+  /// parentLayer.isGeometryFlipped = true なので UIKit 座標系 (top-left origin)
+  private func buildCAOverlay(
+    on layer: CALayer,
+    width: CGFloat,
+    height: CGFloat,
+    style: String,
+    streak: Int,
+    timerMode: String,
+    recordingSeconds: Double,
+    goalSeconds: Double,
+    logoPath: String,
+    videoDuration: Double
+  ) {
+    // "pure" = generating 단계 워터마크 없는 순수 영상
+    if style == "pure" { return }
+
+    let padding: CGFloat = 12
+    let fontSize: CGFloat = 18
+
+    // ── Top-right overlay ──
+    switch style {
+    case "timer":
+      addTimerLayer(
+        to: layer, width: width, padding: padding, fontSize: fontSize,
+        timerMode: timerMode, recordingSeconds: recordingSeconds,
+        videoDuration: videoDuration
+      )
+
+    case "progress":
+      addProgressLayer(
+        to: layer, width: width, padding: padding, fontSize: fontSize,
+        recordingSeconds: recordingSeconds, goalSeconds: goalSeconds,
+        videoDuration: videoDuration
+      )
+
+    case "streak":
+      let streakLayer = makeTextLayer(
+        text: "▸ \(streak) days streak",
+        fontSize: fontSize,
+        bold: true,
+        color: .white
+      )
+      let textSize = streakLayer.preferredFrameSize()
+      streakLayer.frame = CGRect(
+        x: width - textSize.width - padding,
+        y: padding,
+        width: textSize.width,
+        height: textSize.height
+      )
+      layer.addSublayer(streakLayer)
+
+    default:
+      break
+    }
+
+    // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
+    let logoSize: CGFloat = 16
+    let wmFontSize: CGFloat = 12
+    let wmGap: CGFloat = 5
+
+    // 로고 이미지 레이어
+    if !logoPath.isEmpty {
+      let path = logoPath.replacingOccurrences(of: "file://", with: "")
+      if let logoImage = UIImage(contentsOfFile: path), let cgImg = logoImage.cgImage {
+        let logoLayer = CALayer()
+        logoLayer.contents = cgImg
+        logoLayer.frame = CGRect(
+          x: padding,
+          y: height - logoSize - padding,
+          width: logoSize,
+          height: logoSize
+        )
+        logoLayer.opacity = 0.9
+        layer.addSublayer(logoLayer)
+      }
+    }
+
+    let wmTextLayer = makeTextLayer(
+      text: "FocusTimelapse",
+      fontSize: wmFontSize,
+      bold: true,
+      color: UIColor.white.withAlphaComponent(0.9)
+    )
+    let wmTextSize = wmTextLayer.preferredFrameSize()
+    let wmTextX = logoPath.isEmpty ? padding : (padding + logoSize + wmGap)
+    wmTextLayer.frame = CGRect(
+      x: wmTextX,
+      y: height - padding - logoSize + (logoSize - wmTextSize.height) / 2,
+      width: wmTextSize.width,
+      height: wmTextSize.height
+    )
+    layer.addSublayer(wmTextLayer)
+  }
+
+  // MARK: - Timer Overlay (CAKeyframeAnimation)
+
+  private func addTimerLayer(
+    to layer: CALayer,
+    width: CGFloat,
+    padding: CGFloat,
+    fontSize: CGFloat,
+    timerMode: String,
+    recordingSeconds: Double,
+    videoDuration: Double
+  ) {
+    // 1초 간격으로 키프레임 생성
+    let totalSteps = max(1, Int(videoDuration))
+    var values: [String] = []
+    var keyTimes: [NSNumber] = []
+
+    for i in 0...totalSteps {
+      let progress = Double(i) / Double(totalSteps)
+      let elapsed = progress * recordingSeconds
+      let displaySeconds = timerMode == "countdown"
+        ? max(0, recordingSeconds - elapsed)
+        : elapsed
+      values.append(formatTime(displaySeconds))
+      keyTimes.append(NSNumber(value: progress))
+    }
+
+    // 최대 텍스트 폭 계산 (고정 프레임 사용)
+    let sampleText = formatTime(recordingSeconds)
+    let font = UIFont.boldSystemFont(ofSize: fontSize)
+    let attrs: [NSAttributedString.Key: Any] = [.font: font]
+    let textSize = (sampleText as NSString).size(withAttributes: attrs)
+
+    let textLayer = CATextLayer()
+    textLayer.string = values.first ?? "00:00:00"
+    textLayer.font = UIFont.boldSystemFont(ofSize: fontSize)
+    textLayer.fontSize = fontSize
+    textLayer.foregroundColor = UIColor.white.cgColor
+    textLayer.alignmentMode = .right
+    textLayer.contentsScale = UIScreen.main.scale
+    textLayer.frame = CGRect(
+      x: width - textSize.width - padding,
+      y: padding,
+      width: textSize.width,
+      height: textSize.height
+    )
+
+    // Shadow
+    textLayer.shadowColor = UIColor.black.cgColor
+    textLayer.shadowOffset = CGSize(width: 1.5, height: 1.5)
+    textLayer.shadowOpacity = 0.6
+    textLayer.shadowRadius = 0
+
+    let anim = CAKeyframeAnimation(keyPath: "string")
+    anim.values = values
+    anim.keyTimes = keyTimes
+    anim.duration = videoDuration
+    anim.calculationMode = .discrete
+    anim.isRemovedOnCompletion = false
+    anim.fillMode = .forwards
+    anim.beginTime = AVCoreAnimationBeginTimeAtZero
+
+    textLayer.add(anim, forKey: "timerAnimation")
+    layer.addSublayer(textLayer)
+  }
+
+  // MARK: - Progress Overlay (CABasicAnimation on bar width)
+
+  private func addProgressLayer(
+    to layer: CALayer,
+    width: CGFloat,
+    padding: CGFloat,
+    fontSize: CGFloat,
+    recordingSeconds: Double,
+    goalSeconds: Double,
+    videoDuration: Double
+  ) {
+    let barMaxWidth: CGFloat = 100
+    let barHeight: CGFloat = 10
+    let labelGap: CGFloat = 8
+
+    // Goal label
+    let goalText = formatGoalText(goalSeconds)
+    let goalLabel = makeTextLayer(
+      text: goalText,
+      fontSize: fontSize,
+      bold: true,
+      color: .white
+    )
+    goalLabel.shadowColor = UIColor.black.cgColor
+    goalLabel.shadowOffset = CGSize(width: 1, height: 1)
+    goalLabel.shadowOpacity = 0.5
+    goalLabel.shadowRadius = 0
+    let labelSize = goalLabel.preferredFrameSize()
+
+    // Layout: right-aligned → [goalLabel][gap][bar][padding] from right
+    let barX = width - padding - barMaxWidth
+    let labelX = barX - labelGap - labelSize.width
+    let topY = padding
+
+    goalLabel.frame = CGRect(x: labelX, y: topY, width: labelSize.width, height: labelSize.height)
+    layer.addSublayer(goalLabel)
+
+    // Bar background
+    let barY = topY + (labelSize.height - barHeight) / 2
+    let barBg = CALayer()
+    barBg.frame = CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight)
+    barBg.backgroundColor = UIColor.black.withAlphaComponent(0.4).cgColor
+    barBg.cornerRadius = 5
+    layer.addSublayer(barBg)
+
+    // Bar fill (animated)
+    let finalPercent = goalSeconds > 0 ? min(1.0, recordingSeconds / goalSeconds) : 1.0
+    let finalWidth = barMaxWidth * CGFloat(finalPercent)
+
+    let barFill = CALayer()
+    barFill.frame = CGRect(x: barX, y: barY, width: 0, height: barHeight)
+    barFill.backgroundColor = UIColor.white.cgColor
+    barFill.cornerRadius = 5
+
+    let boundsAnim = CABasicAnimation(keyPath: "bounds.size.width")
+    boundsAnim.fromValue = 0
+    boundsAnim.toValue = finalWidth
+    boundsAnim.duration = videoDuration
+    boundsAnim.isRemovedOnCompletion = false
+    boundsAnim.fillMode = .forwards
+    boundsAnim.beginTime = AVCoreAnimationBeginTimeAtZero
+
+    // anchorPoint를 왼쪽으로 → 왼쪽 기준 확장
+    barFill.anchorPoint = CGPoint(x: 0, y: 0.5)
+    barFill.position = CGPoint(x: barX, y: barY + barHeight / 2)
+    barFill.bounds = CGRect(x: 0, y: 0, width: 0, height: barHeight)
+
+    barFill.add(boundsAnim, forKey: "progressAnimation")
+    layer.addSublayer(barFill)
+  }
+
+  // MARK: - CALayer Helpers
+
+  private func makeTextLayer(
+    text: String,
+    fontSize: CGFloat,
+    bold: Bool,
+    color: UIColor
+  ) -> CATextLayer {
+    let layer = CATextLayer()
+    layer.string = text
+    let font = bold ? UIFont.boldSystemFont(ofSize: fontSize) : UIFont.systemFont(ofSize: fontSize)
+    layer.font = font
+    layer.fontSize = fontSize
+    layer.foregroundColor = color.cgColor
+    layer.contentsScale = UIScreen.main.scale
+    layer.alignmentMode = .left
+    return layer
+  }
+
+  private func formatGoalText(_ goalSeconds: Double) -> String {
+    let totalMins = Int(goalSeconds / 60)
+    if totalMins >= 60 {
+      let h = totalMins / 60
+      let m = totalMins % 60
+      if m > 0 { return "\(h)h \(m)m" }
+      return h == 1 ? "1 hr" : "\(h) hrs"
+    }
+    return "\(totalMins) min"
   }
 
   // MARK: - Build Timelapse (AVMutableComposition + scaleTimeRange + AVAssetExportSession)
