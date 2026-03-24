@@ -137,6 +137,7 @@ public class TimelapseCreatorModule: Module {
     )
 
     // ── AVMutableVideoComposition with CoreAnimationTool ──
+    let videoPreferredTransform = try await videoTrack.load(.preferredTransform)
     let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
     let fps = nominalFrameRate > 0 ? Int32(nominalFrameRate) : 30
 
@@ -151,7 +152,7 @@ public class TimelapseCreatorModule: Module {
     let instruction = AVMutableVideoCompositionInstruction()
     instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
     let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compTrack)
-    layerInstruction.setTransform(.identity, at: .zero)
+    layerInstruction.setTransform(videoPreferredTransform, at: .zero)
     instruction.layerInstructions = [layerInstruction]
     videoComposition.instructions = [instruction]
 
