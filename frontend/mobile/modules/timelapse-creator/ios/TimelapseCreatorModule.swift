@@ -207,14 +207,19 @@ public class TimelapseCreatorModule: Module {
     // "pure" = generating 단계 워터마크 없는 순수 영상
     if style == "pure" { return }
 
-    let padding: CGFloat = 12
-    let fontSize: CGFloat = 18
+    // 프리뷰(390pt 기준)와 동일한 비율로 오버레이 크기를 맞추기 위한 스케일
+    let referenceScreenWidth: CGFloat = 390.0
+    let scale = width / referenceScreenWidth
+
+    let padding: CGFloat = 12 * scale
+    let fontSize: CGFloat = 18 * scale
 
     // ── Top-right overlay ──
     switch style {
     case "timer":
       addTimerLayer(
         to: layer, width: width, padding: padding, fontSize: fontSize,
+        scale: scale,
         timerMode: timerMode, recordingSeconds: recordingSeconds,
         videoDuration: videoDuration
       )
@@ -222,6 +227,7 @@ public class TimelapseCreatorModule: Module {
     case "progress":
       addProgressLayer(
         to: layer, width: width, padding: padding, fontSize: fontSize,
+        scale: scale,
         recordingSeconds: recordingSeconds, goalSeconds: goalSeconds,
         videoDuration: videoDuration
       )
@@ -247,9 +253,9 @@ public class TimelapseCreatorModule: Module {
     }
 
     // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
-    let logoSize: CGFloat = 16
-    let wmFontSize: CGFloat = 12
-    let wmGap: CGFloat = 5
+    let logoSize: CGFloat = 16 * scale
+    let wmFontSize: CGFloat = 12 * scale
+    let wmGap: CGFloat = 5 * scale
 
     // 로고 이미지 레이어
     if !logoPath.isEmpty {
@@ -292,6 +298,7 @@ public class TimelapseCreatorModule: Module {
     width: CGFloat,
     padding: CGFloat,
     fontSize: CGFloat,
+    scale: CGFloat,
     timerMode: String,
     recordingSeconds: Double,
     videoDuration: Double
@@ -333,7 +340,7 @@ public class TimelapseCreatorModule: Module {
 
     // Shadow
     textLayer.shadowColor = UIColor.black.cgColor
-    textLayer.shadowOffset = CGSize(width: 1.5, height: 1.5)
+    textLayer.shadowOffset = CGSize(width: 1.5 * scale, height: 1.5 * scale)
     textLayer.shadowOpacity = 0.6
     textLayer.shadowRadius = 0
 
@@ -357,13 +364,14 @@ public class TimelapseCreatorModule: Module {
     width: CGFloat,
     padding: CGFloat,
     fontSize: CGFloat,
+    scale: CGFloat,
     recordingSeconds: Double,
     goalSeconds: Double,
     videoDuration: Double
   ) {
-    let barMaxWidth: CGFloat = 100
-    let barHeight: CGFloat = 10
-    let labelGap: CGFloat = 8
+    let barMaxWidth: CGFloat = 100 * scale
+    let barHeight: CGFloat = 10 * scale
+    let labelGap: CGFloat = 8 * scale
 
     // Goal label
     let goalText = formatGoalText(goalSeconds)
@@ -374,7 +382,7 @@ public class TimelapseCreatorModule: Module {
       color: .white
     )
     goalLabel.shadowColor = UIColor.black.cgColor
-    goalLabel.shadowOffset = CGSize(width: 1, height: 1)
+    goalLabel.shadowOffset = CGSize(width: 1 * scale, height: 1 * scale)
     goalLabel.shadowOpacity = 0.5
     goalLabel.shadowRadius = 0
     let labelSize = goalLabel.preferredFrameSize()
@@ -392,7 +400,7 @@ public class TimelapseCreatorModule: Module {
     let barBg = CALayer()
     barBg.frame = CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight)
     barBg.backgroundColor = UIColor.black.withAlphaComponent(0.4).cgColor
-    barBg.cornerRadius = 5
+    barBg.cornerRadius = 5 * scale
     layer.addSublayer(barBg)
 
     // Bar fill (animated)
@@ -402,7 +410,7 @@ public class TimelapseCreatorModule: Module {
     let barFill = CALayer()
     barFill.frame = CGRect(x: barX, y: barY, width: 0, height: barHeight)
     barFill.backgroundColor = UIColor.white.cgColor
-    barFill.cornerRadius = 5
+    barFill.cornerRadius = 5 * scale
 
     let boundsAnim = CABasicAnimation(keyPath: "bounds.size.width")
     boundsAnim.fromValue = 0
