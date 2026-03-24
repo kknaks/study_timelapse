@@ -518,22 +518,8 @@ public class TimelapseCreatorModule: Module {
     let imgW = orientedImage.size.width
     let imgH = orientedImage.size.height
 
-    // Center-crop (aspect fill)
-    let targetRatio = outW / outH
-    let imgRatio = imgW / imgH
-
-    var drawRect: CGRect
-    if imgRatio > targetRatio {
-      // 이미지가 더 넓음 → 좌우 crop
-      let scaledH = outH
-      let scaledW = outH * imgRatio
-      drawRect = CGRect(x: -(scaledW - outW) / 2, y: 0, width: scaledW, height: scaledH)
-    } else {
-      // 이미지가 더 좁음 → 상하 crop
-      let scaledW = outW
-      let scaledH = outW / imgRatio
-      drawRect = CGRect(x: 0, y: -(scaledH - outH) / 2, width: scaledW, height: scaledH)
-    }
+    // 입력 영상은 이미 buildTimelapse에서 출력 해상도로 crop 완료 → 그대로 full-fill
+    let drawRect = CGRect(x: 0, y: 0, width: outW, height: outH)
 
     // ── 이미지 드로잉: CGContext Y-flip 적용 ──
     context.saveGState()
