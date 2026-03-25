@@ -253,9 +253,9 @@ public class TimelapseCreatorModule: Module {
     }
 
     // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
-    let logoSize: CGFloat = 16 * scale
-    let wmFontSize: CGFloat = 12 * scale
-    let wmGap: CGFloat = 5 * scale
+    let logoSize: CGFloat = 20 * scale
+    let wmFontSize: CGFloat = 14 * scale
+    let wmGap: CGFloat = 6 * scale
 
     // 로고 이미지 레이어
     if !logoPath.isEmpty {
@@ -269,6 +269,7 @@ public class TimelapseCreatorModule: Module {
           width: logoSize,
           height: logoSize
         )
+        logoLayer.contentsGravity = .resizeAspect
         logoLayer.opacity = 0.9
         layer.addSublayer(logoLayer)
       }
@@ -369,8 +370,8 @@ public class TimelapseCreatorModule: Module {
     goalSeconds: Double,
     videoDuration: Double
   ) {
-    let barMaxWidth: CGFloat = 100 * scale
-    let barHeight: CGFloat = 10 * scale
+    let barMaxWidth: CGFloat = 160 * scale
+    let barHeight: CGFloat = 12 * scale
     let labelGap: CGFloat = 8 * scale
 
     // Goal label
