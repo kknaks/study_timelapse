@@ -374,7 +374,7 @@ public class TimelapseCreatorModule: Module {
   ) {
     let barMaxWidth: CGFloat = 100 * scale
     let barHeight: CGFloat = 8 * scale
-    let labelGap: CGFloat = 8 * scale
+    let labelGap: CGFloat = 6 * scale
 
     // Goal label
     let goalText = formatGoalText(goalSeconds)
