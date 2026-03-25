@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   progressTrack: {
-    width: 160,
+    width: 120,
     height: 12,
     backgroundColor: 'rgba(0,0,0,0.4)',
     borderRadius: 5,

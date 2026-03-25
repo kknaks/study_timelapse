@@ -283,12 +283,14 @@ public class TimelapseCreatorModule: Module {
     )
     let wmTextSize = wmTextLayer.preferredFrameSize()
     let wmTextX = logoPath.isEmpty ? padding : (padding + logoSize + wmGap)
+    let wmMaxTextWidth = max(0, width - wmTextX - padding)
     wmTextLayer.frame = CGRect(
       x: wmTextX,
       y: height - padding - logoSize + (logoSize - wmTextSize.height) / 2,
-      width: wmTextSize.width,
+      width: wmMaxTextWidth,
       height: wmTextSize.height
     )
+    wmTextLayer.contentsScale = UIScreen.main.scale
     layer.addSublayer(wmTextLayer)
   }
 
@@ -370,7 +372,7 @@ public class TimelapseCreatorModule: Module {
     goalSeconds: Double,
     videoDuration: Double
   ) {
-    let barMaxWidth: CGFloat = 160 * scale
+    let barMaxWidth: CGFloat = 120 * scale
     let barHeight: CGFloat = 12 * scale
     let labelGap: CGFloat = 8 * scale
 
