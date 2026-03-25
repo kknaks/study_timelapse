@@ -211,7 +211,7 @@ public class TimelapseCreatorModule: Module {
     let referenceScreenWidth: CGFloat = 390.0
     let scale = width / referenceScreenWidth
 
-    let padding: CGFloat = 12 * scale
+    let padding: CGFloat = 20 * scale
     let fontSize: CGFloat = 18 * scale
 
     // ── Top-right overlay ──
@@ -254,8 +254,8 @@ public class TimelapseCreatorModule: Module {
 
     // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
     let logoSize: CGFloat = 20 * scale
-    let wmFontSize: CGFloat = 14 * scale
-    let wmGap: CGFloat = 6 * scale
+    let wmFontSize: CGFloat = 16 * scale
+    let wmGap: CGFloat = 8 * scale
 
     // 로고 이미지 레이어
     if !logoPath.isEmpty {
@@ -372,8 +372,8 @@ public class TimelapseCreatorModule: Module {
     goalSeconds: Double,
     videoDuration: Double
   ) {
-    let barMaxWidth: CGFloat = 120 * scale
-    let barHeight: CGFloat = 12 * scale
+    let barMaxWidth: CGFloat = 100 * scale
+    let barHeight: CGFloat = 8 * scale
     let labelGap: CGFloat = 8 * scale
 
     // Goal label
@@ -403,7 +403,7 @@ public class TimelapseCreatorModule: Module {
     let barBg = CALayer()
     barBg.frame = CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight)
     barBg.backgroundColor = UIColor.black.withAlphaComponent(0.4).cgColor
-    barBg.cornerRadius = 5 * scale
+    barBg.cornerRadius = barHeight / 2
     layer.addSublayer(barBg)
 
     // Bar fill (animated)
@@ -413,7 +413,7 @@ public class TimelapseCreatorModule: Module {
     let barFill = CALayer()
     barFill.frame = CGRect(x: barX, y: barY, width: 0, height: barHeight)
     barFill.backgroundColor = UIColor.white.cgColor
-    barFill.cornerRadius = 5 * scale
+    barFill.cornerRadius = barHeight / 2
 
     let boundsAnim = CABasicAnimation(keyPath: "bounds.size.width")
     boundsAnim.fromValue = 0
