@@ -211,8 +211,8 @@ public class TimelapseCreatorModule: Module {
     let referenceScreenWidth: CGFloat = 390.0
     let scale = width / referenceScreenWidth
 
-    let padding: CGFloat = 20 * scale
-    let fontSize: CGFloat = 18 * scale
+    let padding: CGFloat = 16 * scale
+    let fontSize: CGFloat = 24 * scale
 
     // ── Top-right overlay ──
     switch style {
@@ -239,7 +239,8 @@ public class TimelapseCreatorModule: Module {
         bold: true,
         color: .white
       )
-      let textSize = streakLayer.preferredFrameSize()
+      let streakFont = UIFont.boldSystemFont(ofSize: fontSize)
+      let textSize = ("▸ \(streak) days streak" as NSString).size(withAttributes: [.font: streakFont])
       streakLayer.frame = CGRect(
         x: width - textSize.width - padding,
         y: padding,
@@ -253,8 +254,8 @@ public class TimelapseCreatorModule: Module {
     }
 
     // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
-    let logoSize: CGFloat = 20 * scale
-    let wmFontSize: CGFloat = 16 * scale
+    let logoSize: CGFloat = 28 * scale
+    let wmFontSize: CGFloat = 22 * scale
     let wmGap: CGFloat = 8 * scale
 
     // 로고 이미지 레이어
@@ -281,7 +282,8 @@ public class TimelapseCreatorModule: Module {
       bold: true,
       color: UIColor.white.withAlphaComponent(0.9)
     )
-    let wmTextSize = wmTextLayer.preferredFrameSize()
+    let wmFont = UIFont.boldSystemFont(ofSize: wmFontSize)
+    let wmTextSize = ("FocusTimelapse" as NSString).size(withAttributes: [.font: wmFont])
     let wmTextX = logoPath.isEmpty ? padding : (padding + logoSize + wmGap)
     let wmMaxTextWidth = max(0, width - wmTextX - padding)
     wmTextLayer.frame = CGRect(
@@ -329,7 +331,7 @@ public class TimelapseCreatorModule: Module {
 
     let textLayer = CATextLayer()
     textLayer.string = values.first ?? "00:00:00"
-    textLayer.font = UIFont.boldSystemFont(ofSize: fontSize)
+    textLayer.font = CTFontCreateWithName("Helvetica-Bold" as CFString, fontSize, nil)
     textLayer.fontSize = fontSize
     textLayer.foregroundColor = UIColor.white.cgColor
     textLayer.alignmentMode = .right
@@ -372,9 +374,9 @@ public class TimelapseCreatorModule: Module {
     goalSeconds: Double,
     videoDuration: Double
   ) {
-    let barMaxWidth: CGFloat = 100 * scale
-    let barHeight: CGFloat = 8 * scale
-    let labelGap: CGFloat = 6 * scale
+    let barMaxWidth: CGFloat = 140 * scale
+    let barHeight: CGFloat = 11 * scale
+    let labelGap: CGFloat = 8 * scale
 
     // Goal label
     let goalText = formatGoalText(goalSeconds)
@@ -388,18 +390,20 @@ public class TimelapseCreatorModule: Module {
     goalLabel.shadowOffset = CGSize(width: 1 * scale, height: 1 * scale)
     goalLabel.shadowOpacity = 0.5
     goalLabel.shadowRadius = 0
-    let labelSize = goalLabel.preferredFrameSize()
+    let goalFont = UIFont.boldSystemFont(ofSize: fontSize)
+    let labelSize = (goalText as NSString).size(withAttributes: [.font: goalFont])
+    let labelHeight = labelSize.height * 1.2
 
     // Layout: right-aligned → [goalLabel][gap][bar][padding] from right
     let barX = width - padding - barMaxWidth
     let labelX = barX - labelGap - labelSize.width
     let topY = padding
 
-    goalLabel.frame = CGRect(x: labelX, y: topY, width: labelSize.width, height: labelSize.height)
+    goalLabel.frame = CGRect(x: labelX, y: topY, width: labelSize.width, height: labelHeight)
     layer.addSublayer(goalLabel)
 
     // Bar background
-    let barY = topY + (labelSize.height - barHeight) / 2
+    let barY = topY + (labelHeight - barHeight) / 2
     let barBg = CALayer()
     barBg.frame = CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight)
     barBg.backgroundColor = UIColor.black.withAlphaComponent(0.4).cgColor
@@ -442,8 +446,9 @@ public class TimelapseCreatorModule: Module {
   ) -> CATextLayer {
     let layer = CATextLayer()
     layer.string = text
-    let font = bold ? UIFont.boldSystemFont(ofSize: fontSize) : UIFont.systemFont(ofSize: fontSize)
-    layer.font = font
+    let fontName: CFString = bold ? "Helvetica-Bold" as CFString : "Helvetica" as CFString
+    let fontRef = CTFontCreateWithName(fontName, fontSize, nil)
+    layer.font = fontRef
     layer.fontSize = fontSize
     layer.foregroundColor = color.cgColor
     layer.contentsScale = UIScreen.main.scale
