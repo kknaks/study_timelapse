@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { applyOverlay } from '../modules/timelapse-creator';
 import { Asset } from 'expo-asset';
 import { updateSession } from '../src/api/sessions';
+import { buildScaledLayout } from '../src/constants/overlayLayout';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -141,6 +142,9 @@ export default function SavingScreen() {
       await logoAsset.downloadAsync();
       const logoPath = logoAsset.localUri ?? '';
 
+      const scaledLayout = buildScaledLayout(width);
+      const overlayLayoutJson = JSON.stringify(scaledLayout);
+
       const finalPath = await applyOverlay({
         videoUri: timelapsePath,
         outputPath: overlayOutputPath,
@@ -153,6 +157,7 @@ export default function SavingScreen() {
         width,
         height,
         logoPath,
+        overlayLayoutJson,
       });
       setDone(idx); idx++;
 

@@ -37,6 +37,38 @@ export const OVERLAY_LAYOUT = {
   },
 } as const satisfies OverlaySpec;
 
+/**
+ * ScaledOverlayLayout - Swift에 전달할 px 단위 레이아웃
+ * pt × (videoWidth / 390.0) 로 변환된 값
+ */
+export interface ScaledOverlayLayout {
+  watermark: {
+    paddingLeft: number;
+    paddingBottom: number;
+    logoSize: number;
+    gap: number;
+    fontSize: number;
+  };
+  progress: {
+    paddingRight: number;
+    paddingTop: number;
+    fontSize: number;
+    labelGap: number;
+    barWidth: number;
+    barHeight: number;
+  };
+  timer: {
+    paddingRight: number;
+    paddingTop: number;
+    fontSize: number;
+  };
+  streak: {
+    paddingRight: number;
+    paddingTop: number;
+    fontSize: number;
+  };
+}
+
 /** Swift 변환용: pt → px 스케일 팩터 계산 */
 export function getOverlayScale(videoWidth: number): number {
   return videoWidth / 390.0;
@@ -45,4 +77,40 @@ export function getOverlayScale(videoWidth: number): number {
 /** pt 값을 videoWidth 기준 px로 변환 */
 export function ptToPx(pt: number, videoWidth: number): number {
   return pt * getOverlayScale(videoWidth);
+}
+
+/**
+ * OVERLAY_LAYOUT의 pt값을 videoWidth 기준 px로 변환
+ * Swift buildOverlay에서 이 값을 직접 사용
+ */
+export function buildScaledLayout(videoWidth: number): ScaledOverlayLayout {
+  const scale = getOverlayScale(videoWidth);
+  const L = OVERLAY_LAYOUT;
+  return {
+    watermark: {
+      paddingLeft: L.watermark.paddingLeft * scale,
+      paddingBottom: L.watermark.paddingBottom * scale,
+      logoSize: L.watermark.logoSize * scale,
+      gap: L.watermark.gap * scale,
+      fontSize: L.watermark.fontSize * scale,
+    },
+    progress: {
+      paddingRight: L.progress.paddingRight * scale,
+      paddingTop: L.progress.paddingTop * scale,
+      fontSize: L.progress.fontSize * scale,
+      labelGap: L.progress.labelGap * scale,
+      barWidth: L.progress.barWidth * scale,
+      barHeight: L.progress.barHeight * scale,
+    },
+    timer: {
+      paddingRight: L.timer.paddingRight * scale,
+      paddingTop: L.timer.paddingTop * scale,
+      fontSize: L.timer.fontSize * scale,
+    },
+    streak: {
+      paddingRight: L.streak.paddingRight * scale,
+      paddingTop: L.streak.paddingTop * scale,
+      fontSize: L.streak.fontSize * scale,
+    },
+  };
 }
