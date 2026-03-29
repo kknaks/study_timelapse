@@ -33,6 +33,49 @@ public class TimelapseCreatorModule: Module {
     @Field var width: Int = 720
     @Field var height: Int = 1280
     @Field var logoPath: String = ""
+    @Field var overlayLayoutJson: String = "{}"
+  }
+
+  // MARK: - Overlay Layout (px 단위, JS buildScaledLayout에서 전달)
+  struct OverlayWatermarkPx: Codable {
+    let paddingLeft: Double
+    let paddingBottom: Double
+    let logoSize: Double
+    let gap: Double
+    let fontSize: Double
+  }
+
+  struct OverlayProgressPx: Codable {
+    let paddingRight: Double
+    let paddingTop: Double
+    let fontSize: Double
+    let labelGap: Double
+    let barWidth: Double
+    let barHeight: Double
+  }
+
+  struct OverlayTimerPx: Codable {
+    let paddingRight: Double
+    let paddingTop: Double
+    let fontSize: Double
+  }
+
+  struct OverlayStreakPx: Codable {
+    let paddingRight: Double
+    let paddingTop: Double
+    let fontSize: Double
+  }
+
+  struct OverlayLayoutPx: Codable {
+    let watermark: OverlayWatermarkPx
+    let progress: OverlayProgressPx
+    let timer: OverlayTimerPx
+    let streak: OverlayStreakPx
+  }
+
+  private func parseOverlayLayout(_ json: String, videoWidth: CGFloat) -> OverlayLayoutPx? {
+    guard let data = json.data(using: .utf8) else { return nil }
+    return try? JSONDecoder().decode(OverlayLayoutPx.self, from: data)
   }
 
   struct TimelapseOptions: Record {
@@ -122,6 +165,21 @@ public class TimelapseCreatorModule: Module {
     overlayLayer.frame = CGRect(origin: .zero, size: renderSize)
     parentLayer.addSublayer(overlayLayer)
 
+    // ── overlayLayoutJson 파싱 ──
+    let layout: OverlayLayoutPx
+    if let parsed = parseOverlayLayout(options.overlayLayoutJson, videoWidth: outW) {
+      layout = parsed
+    } else {
+      // fallback: compute from 390pt reference
+      let scale = Double(outW) / 390.0
+      layout = OverlayLayoutPx(
+        watermark: OverlayWatermarkPx(paddingLeft: 16*scale, paddingBottom: 16*scale, logoSize: 28*scale, gap: 8*scale, fontSize: 22*scale),
+        progress: OverlayProgressPx(paddingRight: 16*scale, paddingTop: 16*scale, fontSize: 24*scale, labelGap: 8*scale, barWidth: 140*scale, barHeight: 11*scale),
+        timer: OverlayTimerPx(paddingRight: 16*scale, paddingTop: 16*scale, fontSize: 24*scale),
+        streak: OverlayStreakPx(paddingRight: 16*scale, paddingTop: 16*scale, fontSize: 24*scale)
+      )
+    }
+
     // ── 오버레이 CALayer 구성 ──
     buildCAOverlay(
       on: overlayLayer,
@@ -133,7 +191,8 @@ public class TimelapseCreatorModule: Module {
       recordingSeconds: options.recordingSeconds,
       goalSeconds: options.goalSeconds,
       logoPath: options.logoPath,
-      videoDuration: durationSeconds
+      videoDuration: durationSeconds,
+      layout: layout
     )
 
     // ── AVMutableVideoComposition with CoreAnimationTool ──
@@ -189,168 +248,143 @@ public class TimelapseCreatorModule: Module {
     return outputURL.absoluteString
   }
 
-  // MARK: - CALayer Overlay Builder
+  // MARK: - CALayer Overlay Builder (UIGraphicsImageRenderer)
 
-  /// parentLayer.isGeometryFlipped = true なので UIKit 座標系 (top-left origin)
   private func buildCAOverlay(
     on layer: CALayer,
-    width: CGFloat,
-    height: CGFloat,
-    style: String,
-    streak: Int,
-    timerMode: String,
-    recordingSeconds: Double,
-    goalSeconds: Double,
-    logoPath: String,
-    videoDuration: Double
+    width: CGFloat, height: CGFloat,
+    style: String, streak: Int,
+    timerMode: String, recordingSeconds: Double,
+    goalSeconds: Double, logoPath: String,
+    videoDuration: Double, layout: OverlayLayoutPx
   ) {
-    // "pure" = generating 단계 워터마크 없는 순수 영상
     if style == "pure" { return }
+    let size = CGSize(width: width, height: height)
 
-    // 프리뷰(390pt 기준)와 동일한 비율로 오버레이 크기를 맞추기 위한 스케일
-    let referenceScreenWidth: CGFloat = 390.0
-    let scale = width / referenceScreenWidth
+    // ── 1. Watermark (static) ──
+    let wmImage = renderWatermark(size: size, logoPath: logoPath, layout: layout)
+    let wmLayer = CALayer()
+    wmLayer.frame = CGRect(origin: .zero, size: size)
+    wmLayer.contents = wmImage?.cgImage
+    wmLayer.contentsGravity = .resize
+    layer.addSublayer(wmLayer)
 
-    let padding: CGFloat = 16 * scale
-    let fontSize: CGFloat = 24 * scale
-
-    // ── Top-right overlay ──
+    // ── 2. Animated overlay ──
     switch style {
     case "timer":
-      addTimerLayer(
-        to: layer, width: width, padding: padding, fontSize: fontSize,
-        scale: scale,
-        timerMode: timerMode, recordingSeconds: recordingSeconds,
-        videoDuration: videoDuration
-      )
-
+      addUIKitTimerLayer(to: layer, size: size, timerMode: timerMode,
+        recordingSeconds: recordingSeconds, videoDuration: videoDuration, layout: layout)
     case "progress":
-      addProgressLayer(
-        to: layer, width: width, padding: padding, fontSize: fontSize,
-        scale: scale,
+      addUIKitProgressLayer(to: layer, size: size,
         recordingSeconds: recordingSeconds, goalSeconds: goalSeconds,
-        videoDuration: videoDuration
-      )
-
+        videoDuration: videoDuration, layout: layout)
     case "streak":
-      let streakLayer = makeTextLayer(
-        text: "▸ \(streak) days streak",
-        fontSize: fontSize,
-        bold: true,
-        color: .white
-      )
-      let streakFont = UIFont.boldSystemFont(ofSize: fontSize)
-      let textSize = ("▸ \(streak) days streak" as NSString).size(withAttributes: [.font: streakFont])
-      streakLayer.frame = CGRect(
-        x: width - textSize.width - padding,
-        y: padding,
-        width: textSize.width,
-        height: textSize.height
-      )
-      layer.addSublayer(streakLayer)
-
+      let sImg = renderStreakImage(size: size, streak: streak, layout: layout)
+      let sLayer = CALayer()
+      sLayer.frame = CGRect(origin: .zero, size: size)
+      sLayer.contents = sImg?.cgImage
+      sLayer.contentsGravity = .resize
+      layer.addSublayer(sLayer)
     default:
       break
     }
-
-    // ── Watermark (bottom-left): logo + "FocusTimelapse" ──
-    let logoSize: CGFloat = 28 * scale
-    let wmFontSize: CGFloat = 22 * scale
-    let wmGap: CGFloat = 8 * scale
-
-    // 로고 이미지 레이어
-    if !logoPath.isEmpty {
-      let path = logoPath.replacingOccurrences(of: "file://", with: "")
-      if let logoImage = UIImage(contentsOfFile: path), let cgImg = logoImage.cgImage {
-        let logoLayer = CALayer()
-        logoLayer.contents = cgImg
-        logoLayer.frame = CGRect(
-          x: padding,
-          y: height - logoSize - padding,
-          width: logoSize,
-          height: logoSize
-        )
-        logoLayer.contentsGravity = .resizeAspect
-        logoLayer.opacity = 0.9
-        layer.addSublayer(logoLayer)
-      }
-    }
-
-    let wmTextLayer = makeTextLayer(
-      text: "FocusTimelapse",
-      fontSize: wmFontSize,
-      bold: true,
-      color: UIColor.white.withAlphaComponent(0.9)
-    )
-    let wmFont = UIFont.boldSystemFont(ofSize: wmFontSize)
-    let wmTextSize = ("FocusTimelapse" as NSString).size(withAttributes: [.font: wmFont])
-    let wmTextX = logoPath.isEmpty ? padding : (padding + logoSize + wmGap)
-    let wmMaxTextWidth = max(0, width - wmTextX - padding)
-    wmTextLayer.frame = CGRect(
-      x: wmTextX,
-      y: height - padding - logoSize + (logoSize - wmTextSize.height) / 2,
-      width: wmMaxTextWidth,
-      height: wmTextSize.height
-    )
-    wmTextLayer.contentsScale = UIScreen.main.scale
-    layer.addSublayer(wmTextLayer)
   }
 
-  // MARK: - Timer Overlay (CAKeyframeAnimation)
+  // MARK: - UIGraphicsImageRenderer Helpers
 
-  private func addTimerLayer(
-    to layer: CALayer,
-    width: CGFloat,
-    padding: CGFloat,
-    fontSize: CGFloat,
-    scale: CGFloat,
-    timerMode: String,
-    recordingSeconds: Double,
-    videoDuration: Double
+  private func renderWatermark(size: CGSize, logoPath: String, layout: OverlayLayoutPx) -> UIImage? {
+    let wm = layout.watermark
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { ctx in
+      // load logo
+      let logoImage: UIImage?
+      if !logoPath.isEmpty {
+        let path = logoPath.replacingOccurrences(of: "file://", with: "")
+        logoImage = UIImage(contentsOfFile: path)
+      } else {
+        logoImage = nil
+      }
+      let logoSize = CGFloat(wm.logoSize)
+      let paddingLeft = CGFloat(wm.paddingLeft)
+      let paddingBottom = CGFloat(wm.paddingBottom)
+      let gap = CGFloat(wm.gap)
+      let fontSize = CGFloat(wm.fontSize)
+      let font = UIFont.boldSystemFont(ofSize: fontSize)
+      let textAttrs: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: UIColor.white.withAlphaComponent(0.9)
+      ]
+      let text = "FocusTimelapse"
+      let textSize = (text as NSString).size(withAttributes: textAttrs)
+      let totalH = max(logoSize, textSize.height)
+      let baseY = size.height - paddingBottom - totalH
+
+      // draw logo
+      if let logo = logoImage {
+        let logoRect = CGRect(x: paddingLeft, y: baseY + (totalH - logoSize) / 2, width: logoSize, height: logoSize)
+        logo.draw(in: logoRect)
+      }
+
+      // draw text
+      let textX = logoImage != nil ? (paddingLeft + logoSize + gap) : paddingLeft
+      let textY = baseY + (totalH - textSize.height) / 2
+      (text as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: textAttrs)
+    }
+  }
+
+  private func renderStreakImage(size: CGSize, streak: Int, layout: OverlayLayoutPx) -> UIImage? {
+    let s = layout.streak
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { _ in
+      let font = UIFont.boldSystemFont(ofSize: CGFloat(s.fontSize))
+      let text = "▸ \(streak) day\(streak != 1 ? "s" : "") streak"
+      let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+      let shadowAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black.withAlphaComponent(0.6)]
+      let textSize = (text as NSString).size(withAttributes: attrs)
+      let x = size.width - CGFloat(s.paddingRight) - textSize.width
+      let y = CGFloat(s.paddingTop)
+      (text as NSString).draw(at: CGPoint(x: x+1.5, y: y+1.5), withAttributes: shadowAttrs)
+      (text as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+    }
+  }
+
+  private func addUIKitTimerLayer(
+    to layer: CALayer, size: CGSize,
+    timerMode: String, recordingSeconds: Double,
+    videoDuration: Double, layout: OverlayLayoutPx
   ) {
-    // 1초 간격으로 키프레임 생성
+    let t = layout.timer
+    let font = UIFont.boldSystemFont(ofSize: CGFloat(t.fontSize))
     let totalSteps = max(1, Int(videoDuration))
-    var values: [String] = []
+    var images: [CGImage] = []
     var keyTimes: [NSNumber] = []
 
     for i in 0...totalSteps {
       let progress = Double(i) / Double(totalSteps)
       let elapsed = progress * recordingSeconds
-      let displaySeconds = timerMode == "countdown"
-        ? max(0, recordingSeconds - elapsed)
-        : elapsed
-      values.append(formatTime(displaySeconds))
+      let displaySeconds = timerMode == "countdown" ? max(0, recordingSeconds - elapsed) : elapsed
+      let text = formatTime(displaySeconds)
+      let renderer = UIGraphicsImageRenderer(size: size)
+      let img = renderer.image { _ in
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+        let shadowAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black.withAlphaComponent(0.6)]
+        let textSize = (text as NSString).size(withAttributes: attrs)
+        let x = size.width - CGFloat(t.paddingRight) - textSize.width
+        let y = CGFloat(t.paddingTop)
+        (text as NSString).draw(at: CGPoint(x: x+1.5, y: y+1.5), withAttributes: shadowAttrs)
+        (text as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+      }
+      if let cgImg = img.cgImage { images.append(cgImg) }
       keyTimes.append(NSNumber(value: progress))
     }
 
-    // 최대 텍스트 폭 계산 (고정 프레임 사용)
-    let sampleText = formatTime(recordingSeconds)
-    let font = UIFont.boldSystemFont(ofSize: fontSize)
-    let attrs: [NSAttributedString.Key: Any] = [.font: font]
-    let textSize = (sampleText as NSString).size(withAttributes: attrs)
+    let timerLayer = CALayer()
+    timerLayer.frame = CGRect(origin: .zero, size: size)
+    timerLayer.contents = images.first
+    timerLayer.contentsGravity = .resize
 
-    let textLayer = CATextLayer()
-    textLayer.string = values.first ?? "00:00:00"
-    textLayer.font = CTFontCreateWithName("Helvetica-Bold" as CFString, fontSize, nil)
-    textLayer.fontSize = fontSize
-    textLayer.foregroundColor = UIColor.white.cgColor
-    textLayer.alignmentMode = .right
-    textLayer.contentsScale = UIScreen.main.scale
-    textLayer.frame = CGRect(
-      x: width - textSize.width - padding,
-      y: padding,
-      width: textSize.width,
-      height: textSize.height
-    )
-
-    // Shadow
-    textLayer.shadowColor = UIColor.black.cgColor
-    textLayer.shadowOffset = CGSize(width: 1.5 * scale, height: 1.5 * scale)
-    textLayer.shadowOpacity = 0.6
-    textLayer.shadowRadius = 0
-
-    let anim = CAKeyframeAnimation(keyPath: "string")
-    anim.values = values
+    let anim = CAKeyframeAnimation(keyPath: "contents")
+    anim.values = images
     anim.keyTimes = keyTimes
     anim.duration = videoDuration
     anim.calculationMode = .discrete
@@ -358,102 +392,74 @@ public class TimelapseCreatorModule: Module {
     anim.fillMode = .forwards
     anim.beginTime = AVCoreAnimationBeginTimeAtZero
 
-    textLayer.add(anim, forKey: "timerAnimation")
-    layer.addSublayer(textLayer)
+    timerLayer.add(anim, forKey: "timerAnimation")
+    layer.addSublayer(timerLayer)
   }
 
-  // MARK: - Progress Overlay (CABasicAnimation on bar width)
-
-  private func addProgressLayer(
-    to layer: CALayer,
-    width: CGFloat,
-    padding: CGFloat,
-    fontSize: CGFloat,
-    scale: CGFloat,
-    recordingSeconds: Double,
-    goalSeconds: Double,
-    videoDuration: Double
+  private func addUIKitProgressLayer(
+    to layer: CALayer, size: CGSize,
+    recordingSeconds: Double, goalSeconds: Double,
+    videoDuration: Double, layout: OverlayLayoutPx
   ) {
-    let barMaxWidth: CGFloat = 140 * scale
-    let barHeight: CGFloat = 11 * scale
-    let labelGap: CGFloat = 8 * scale
-
-    // Goal label
-    let goalText = formatGoalText(goalSeconds)
-    let goalLabel = makeTextLayer(
-      text: goalText,
-      fontSize: fontSize,
-      bold: true,
-      color: .white
-    )
-    goalLabel.shadowColor = UIColor.black.cgColor
-    goalLabel.shadowOffset = CGSize(width: 1 * scale, height: 1 * scale)
-    goalLabel.shadowOpacity = 0.5
-    goalLabel.shadowRadius = 0
-    let goalFont = UIFont.boldSystemFont(ofSize: fontSize)
-    let labelSize = (goalText as NSString).size(withAttributes: [.font: goalFont])
-    let labelHeight = labelSize.height * 1.2
-
-    // Layout: right-aligned → [goalLabel][gap][bar][padding] from right
-    let barX = width - padding - barMaxWidth
-    let labelX = barX - labelGap - labelSize.width
-    let topY = padding
-
-    goalLabel.frame = CGRect(x: labelX, y: topY, width: labelSize.width, height: labelHeight)
-    layer.addSublayer(goalLabel)
-
-    // Bar background
-    let barY = topY + (labelHeight - barHeight) / 2
-    let barBg = CALayer()
-    barBg.frame = CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight)
-    barBg.backgroundColor = UIColor.black.withAlphaComponent(0.4).cgColor
-    barBg.cornerRadius = barHeight / 2
-    layer.addSublayer(barBg)
-
-    // Bar fill (animated)
+    let p = layout.progress
+    let font = UIFont.boldSystemFont(ofSize: CGFloat(p.fontSize))
+    let totalSteps = max(1, Int(videoDuration))
     let finalPercent = goalSeconds > 0 ? min(1.0, recordingSeconds / goalSeconds) : 1.0
-    let finalWidth = barMaxWidth * CGFloat(finalPercent)
+    var images: [CGImage] = []
+    var keyTimes: [NSNumber] = []
 
-    let barFill = CALayer()
-    barFill.frame = CGRect(x: barX, y: barY, width: 0, height: barHeight)
-    barFill.backgroundColor = UIColor.white.cgColor
-    barFill.cornerRadius = barHeight / 2
+    let goalText = formatGoalText(goalSeconds)
+    let barMaxWidth = CGFloat(p.barWidth)
+    let barHeight = CGFloat(p.barHeight)
+    let labelGap = CGFloat(p.labelGap)
+    let paddingRight = CGFloat(p.paddingRight)
+    let paddingTop = CGFloat(p.paddingTop)
 
-    let boundsAnim = CABasicAnimation(keyPath: "bounds.size.width")
-    boundsAnim.fromValue = 0
-    boundsAnim.toValue = finalWidth
-    boundsAnim.duration = videoDuration
-    boundsAnim.isRemovedOnCompletion = false
-    boundsAnim.fillMode = .forwards
-    boundsAnim.beginTime = AVCoreAnimationBeginTimeAtZero
+    for i in 0...totalSteps {
+      let progress = Double(i) / Double(totalSteps)
+      let currentPercent = finalPercent * progress
+      let fillWidth = barMaxWidth * CGFloat(currentPercent)
+      let renderer = UIGraphicsImageRenderer(size: size)
+      let img = renderer.image { _ in
+        // goal label
+        let labelAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white.withAlphaComponent(0.9)]
+        let shadowAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black.withAlphaComponent(0.5)]
+        let labelSize = (goalText as NSString).size(withAttributes: labelAttrs)
+        let barX = size.width - paddingRight - barMaxWidth
+        let labelX = barX - labelGap - labelSize.width
+        let topY = paddingTop
+        (goalText as NSString).draw(at: CGPoint(x: labelX+1, y: topY+1), withAttributes: shadowAttrs)
+        (goalText as NSString).draw(at: CGPoint(x: labelX, y: topY), withAttributes: labelAttrs)
+        // bar background
+        let barY = topY + (labelSize.height - barHeight) / 2
+        UIColor.black.withAlphaComponent(0.4).setFill()
+        UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: barMaxWidth, height: barHeight), cornerRadius: barHeight/2).fill()
+        // bar fill
+        if fillWidth > 0 {
+          UIColor.white.setFill()
+          UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: fillWidth, height: barHeight), cornerRadius: barHeight/2).fill()
+        }
+      }
+      if let cgImg = img.cgImage { images.append(cgImg) }
+      keyTimes.append(NSNumber(value: progress))
+    }
 
-    // anchorPoint를 왼쪽으로 → 왼쪽 기준 확장
-    barFill.anchorPoint = CGPoint(x: 0, y: 0.5)
-    barFill.position = CGPoint(x: barX, y: barY + barHeight / 2)
-    barFill.bounds = CGRect(x: 0, y: 0, width: 0, height: barHeight)
+    let progressLayer = CALayer()
+    progressLayer.frame = CGRect(origin: .zero, size: size)
+    progressLayer.contents = images.first
+    progressLayer.contentsGravity = .resize
 
-    barFill.add(boundsAnim, forKey: "progressAnimation")
-    layer.addSublayer(barFill)
-  }
+    let anim = CAKeyframeAnimation(keyPath: "contents")
+    anim.values = images
+    anim.keyTimes = keyTimes
+    anim.duration = videoDuration
+    anim.calculationMode = .discrete
+    anim.isRemovedOnCompletion = false
+    anim.fillMode = .forwards
+    anim.beginTime = AVCoreAnimationBeginTimeAtZero
 
-  // MARK: - CALayer Helpers
-
-  private func makeTextLayer(
-    text: String,
-    fontSize: CGFloat,
-    bold: Bool,
-    color: UIColor
-  ) -> CATextLayer {
-    let layer = CATextLayer()
-    layer.string = text
-    let fontName: CFString = bold ? "Helvetica-Bold" as CFString : "Helvetica" as CFString
-    let fontRef = CTFontCreateWithName(fontName, fontSize, nil)
-    layer.font = fontRef
-    layer.fontSize = fontSize
-    layer.foregroundColor = color.cgColor
-    layer.contentsScale = UIScreen.main.scale
-    layer.alignmentMode = .left
-    return layer
+    progressLayer.add(anim, forKey: "progressAnimation")
+    layer.addSublayer(progressLayer)
   }
 
   private func formatGoalText(_ goalSeconds: Double) -> String {

@@ -100,3 +100,34 @@ describe('buildScaledLayout', () => {
     expect(parsed.progress.barWidth).toBeCloseTo(scaled.progress.barWidth);
   });
 });
+
+describe('buildScaledLayout → Swift layout verification', () => {
+  test('810px video: no progress bar overflow with typical label', () => {
+    const scaled = buildScaledLayout(810);
+    const barX = 810 - scaled.progress.paddingRight - scaled.progress.barWidth;
+    const estimatedLabelWidth = scaled.progress.fontSize * 5; // '5 min'
+    const labelX = barX - scaled.progress.labelGap - estimatedLabelWidth;
+    expect(barX).toBeGreaterThan(0);
+    expect(labelX).toBeGreaterThan(0);
+  });
+
+  test('810px video: watermark text fits after logo', () => {
+    const scaled = buildScaledLayout(810);
+    const wmTextX = scaled.watermark.paddingLeft + scaled.watermark.logoSize + scaled.watermark.gap;
+    const available = 810 - wmTextX - scaled.watermark.paddingLeft;
+    const estimatedTextWidth = scaled.watermark.fontSize * 14 * 0.6; // 'FocusTimelapse'
+    expect(available).toBeGreaterThan(estimatedTextWidth);
+  });
+
+  test('scaled values match Swift fallback formula', () => {
+    const videoWidth = 810;
+    const scale = videoWidth / 390;
+    const scaled = buildScaledLayout(videoWidth);
+    expect(scaled.watermark.paddingLeft).toBeCloseTo(16 * scale, 2);
+    expect(scaled.watermark.logoSize).toBeCloseTo(28 * scale, 2);
+    expect(scaled.progress.barWidth).toBeCloseTo(140 * scale, 2);
+    expect(scaled.progress.fontSize).toBeCloseTo(24 * scale, 2);
+    expect(scaled.timer.fontSize).toBeCloseTo(24 * scale, 2);
+    expect(scaled.streak.paddingRight).toBeCloseTo(16 * scale, 2);
+  });
+});
