@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
+import { OVERLAY_LAYOUT } from '../src/constants/overlayLayout';
 
 type OverlayStyle = 'none' | 'timer' | 'progress' | 'streak';
 
@@ -226,7 +227,7 @@ export default function ResultScreen() {
                     <Text style={styles.timerText}>{formatTime(elapsed)}</Text>
                   )}
                   {overlayStyle === 'progress' && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: OVERLAY_LAYOUT.progress.labelGap }}>
                       <Text style={styles.goalLabel}>
                         {goalSeconds >= 3600
                           ? `${Math.floor(goalSeconds / 3600)}${goalSeconds % 3600 > 0 ? `h ${Math.floor((goalSeconds % 3600) / 60)}m` : ' hr'}`
@@ -297,29 +298,32 @@ const styles = StyleSheet.create({
   },
   watermark: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
+    bottom: OVERLAY_LAYOUT.watermark.paddingBottom,
+    left: OVERLAY_LAYOUT.watermark.paddingLeft,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: OVERLAY_LAYOUT.watermark.gap,
   },
-  watermarkIcon: { width: 28, height: 28 },
+  watermarkIcon: {
+    width: OVERLAY_LAYOUT.watermark.logoSize,
+    height: OVERLAY_LAYOUT.watermark.logoSize,
+  },
   watermarkText: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 22,
+    fontSize: OVERLAY_LAYOUT.watermark.fontSize,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   topRightOverlay: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: OVERLAY_LAYOUT.progress.paddingTop,
+    right: OVERLAY_LAYOUT.progress.paddingRight,
     alignItems: 'flex-end',
-    gap: 8,
+    gap: OVERLAY_LAYOUT.progress.labelGap,
   },
   timerText: {
     color: '#FFF',
-    fontSize: 24,
+    fontSize: OVERLAY_LAYOUT.timer.fontSize,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -328,22 +332,22 @@ const styles = StyleSheet.create({
   },
   goalLabel: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 24,
+    fontSize: OVERLAY_LAYOUT.progress.fontSize,
     fontWeight: '700',
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   progressTrack: {
-    width: 140,
-    height: 11,
+    width: OVERLAY_LAYOUT.progress.barWidth,
+    height: OVERLAY_LAYOUT.progress.barHeight,
     backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 5,
+    borderRadius: OVERLAY_LAYOUT.progress.barHeight / 2,
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#FFF',
-    borderRadius: 5,
+    borderRadius: OVERLAY_LAYOUT.progress.barHeight / 2,
   },
   bottomCard: {
     backgroundColor: '#FFF',
