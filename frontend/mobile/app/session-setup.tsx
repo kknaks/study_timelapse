@@ -15,6 +15,7 @@ import { createSession } from '../src/api/sessions';
 import Slider from '@react-native-community/slider';
 import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest } from '../src/types';
+import { formatFocusMinutes } from '../src/utils/timeFormat';
 
 type TimerMode = 'countdown' | 'countup';
 type AspectRatio = '9:16' | '1:1' | '3:4';
@@ -25,13 +26,6 @@ const SHORT_TIMELAPSE_MAX_MINUTES = 120; // 2시간 초과 시 5s/10s 비활성�
 const FOCUS_MIN = 5;
 const FOCUS_MAX = 240;
 const FOCUS_STEP = 5;
-
-function formatFocusTime(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h 0m`;
-}
 
 function estimateSizeMB(outputSeconds: number, aspectRatio: string): number {
   const base = 3.5; // MB per 30s
@@ -113,7 +107,7 @@ export default function SessionSetupScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionLabel}>TOTAL FOCUS TIME</Text>
-            <Text style={styles.sectionValue}>{formatFocusTime(focusMinutes)}</Text>
+            <Text style={styles.sectionValue}>{formatFocusMinutes(focusMinutes)}</Text>
           </View>
           {Platform.OS === 'web' ? (
             // 웹: 네이티브 range input

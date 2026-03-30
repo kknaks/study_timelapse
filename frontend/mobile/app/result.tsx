@@ -1,3 +1,4 @@
+import { formatGoalLabel } from '../src/utils/timeFormat';
 import { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -229,9 +230,7 @@ export default function ResultScreen() {
                   {overlayStyle === 'progress' && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: OVERLAY_LAYOUT.progress.labelGap }}>
                       <Text style={styles.goalLabel}>
-                        {goalSeconds >= 3600
-                          ? `${Math.floor(goalSeconds / 3600)}${goalSeconds % 3600 > 0 ? `h ${Math.floor((goalSeconds % 3600) / 60)}m` : ' hr'}`
-                          : `${Math.floor(goalSeconds / 60)} min`}
+                        {formatGoalLabel(goalSeconds)}
                       </Text>
                       <View style={styles.progressTrack}>
                         <View style={[styles.progressFill, { width: `${Math.min(100, progressPercent * (recordingSecs / goalSeconds))}%` as any }]} />

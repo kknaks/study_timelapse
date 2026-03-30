@@ -8,17 +8,7 @@ import { useAuth } from '../src/auth/AuthContext';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
 import { useEffect } from 'react';
-
-function formatTodayTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
-
-function formatWeeklyTime(seconds: number): string {
-  const h = (seconds / 3600).toFixed(1);
-  return `${h}h`;
-}
+import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -87,11 +77,11 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>TODAY</Text>
-            <Text style={styles.statValue}>{formatTodayTime(todaySeconds)}</Text>
+            <Text style={styles.statValue}>{formatDurationCompact(todaySeconds)}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>WEEKLY FOCUS</Text>
-            <Text style={styles.statValue}>{formatWeeklyTime(weeklySeconds)}</Text>
+            <Text style={styles.statValue}>{formatWeeklyHours(weeklySeconds)}</Text>
           </View>
         </View>
 

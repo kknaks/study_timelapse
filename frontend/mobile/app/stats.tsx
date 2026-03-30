@@ -19,18 +19,13 @@ import { getMe, updateProfile } from '../src/api/user';
 import { tokenStore } from '../src/auth/tokenStore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { COLORS } from '../src/constants';
+import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-
-function formatHoursMinutes(totalSeconds: number): { hours: number; minutes: number } {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  return { hours: h, minutes: m };
-}
 
 function getToday(): string {
   const d = new Date();
@@ -122,14 +117,12 @@ export default function StatsScreen() {
   // Today's focus time
   const todayEntry = weeklyStats?.daily?.find((d) => d.date === today);
   const todaySeconds = todayEntry?.total_seconds ?? 0;
-  const { hours: todayH, minutes: todayM } = formatHoursMinutes(todaySeconds);
-
   // Streak
   const streak = user?.streak ?? 0;
 
   // Weekly bar chart
   const totalWeekSeconds = weeklyStats?.total_seconds ?? 0;
-  const totalWeekHours = (totalWeekSeconds / 3600).toFixed(1);
+  const totalWeekHours = formatWeeklyHours(totalWeekSeconds);
   const dailyData = weeklyStats?.daily ?? [];
 
   // week_start 기준으로 7일 배열 만들기 (sparse → dense)
@@ -211,7 +204,7 @@ export default function StatsScreen() {
           <View style={styles.statCard}>
             <Text style={styles.statCardLabel}>TODAY</Text>
             <Text style={styles.statCardValue}>
-              {todayH}h {todayM}m
+              {formatDurationCompact(todaySeconds)}
             </Text>
           </View>
 
@@ -229,7 +222,7 @@ export default function StatsScreen() {
         <View style={styles.card}>
           <View style={styles.chartTitleRow}>
             <Text style={styles.cardTitle}>This Week</Text>
-            <Text style={styles.chartSubtitle}>{totalWeekHours}h focused</Text>
+            <Text style={styles.chartSubtitle}>{totalWeekHours} focused</Text>
           </View>
 
           {/* 바 클릭 말풍선 — 카드 우측 상단 고정 */}
@@ -242,11 +235,7 @@ export default function StatsScreen() {
               <View style={[styles.sharedBubble, styles.barBubble]}>
                 <Text style={styles.barBubbleDate}>{barBubble.label}</Text>
                 <Text style={styles.barBubbleTime}>
-                  {(() => {
-                    const h = Math.floor(barBubble.seconds / 3600);
-                    const m = Math.floor((barBubble.seconds % 3600) / 60);
-                    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-                  })()}
+                  {formatDurationCompact(barBubble.seconds)}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -491,11 +480,7 @@ export default function StatsScreen() {
                 {`${MONTH_NAMES[parseInt(selectedDate.split('-')[1]) - 1]} ${parseInt(selectedDate.split('-')[2])}`}
               </Text>
               <Text style={styles.sharedBubbleTime}>
-                {(() => {
-                  const h = Math.floor(selectedSeconds / 3600);
-                  const m = Math.floor((selectedSeconds % 3600) / 60);
-                  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-                })()}
+                {formatDurationCompact(selectedSeconds)}
               </Text>
             </View>
             {/* 꼬리: 날짜 셀 중앙을 가리키도록 offset 계산 */}

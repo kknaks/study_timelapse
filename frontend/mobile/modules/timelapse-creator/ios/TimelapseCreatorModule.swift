@@ -462,15 +462,23 @@ public class TimelapseCreatorModule: Module {
     layer.addSublayer(progressLayer)
   }
 
+  /// JS formatGoalLabel()과 동일한 규칙:
+  ///   1 hr / 2 hrs  (시간 단수복수)
+  ///   1 min / 2 mins (분 단수복수)
+  ///   1 hr 30 mins  (시간+분 조합)
   private func formatGoalText(_ goalSeconds: Double) -> String {
     let totalMins = Int(goalSeconds / 60)
-    if totalMins >= 60 {
-      let h = totalMins / 60
-      let m = totalMins % 60
-      if m > 0 { return "\(h)h \(m)m" }
+    let h = totalMins / 60
+    let m = totalMins % 60
+    if h > 0 && m > 0 {
+      let hrLabel = h == 1 ? "1 hr" : "\(h) hrs"
+      let minLabel = m == 1 ? "1 min" : "\(m) mins"
+      return "\(hrLabel) \(minLabel)"
+    }
+    if h > 0 {
       return h == 1 ? "1 hr" : "\(h) hrs"
     }
-    return "\(totalMins) min"
+    return m == 1 ? "1 min" : "\(m) mins"
   }
 
   // MARK: - Build Timelapse (AVMutableComposition + scaleTimeRange + AVAssetExportSession)
@@ -978,20 +986,8 @@ public class TimelapseCreatorModule: Module {
   private func drawProgressBar(percent: Double, goalSeconds: Double, padding: CGFloat, width: CGFloat, fontSize: CGFloat) {
     let barHeight: CGFloat = 10
 
-    // 목표 시간 텍스트 (예: "1h 15m", "30 min")
-    let goalText: String
-    let totalMins = Int(goalSeconds / 60)
-    if totalMins >= 60 {
-      let h = totalMins / 60
-      let m = totalMins % 60
-      if m > 0 {
-        goalText = "\(h)h \(m)m"
-      } else {
-        goalText = h == 1 ? "1 hr" : "\(h) hrs"
-      }
-    } else {
-      goalText = "\(totalMins) min"
-    }
+    // 목표 시간 텍스트 — formatGoalText()로 통일 (JS formatGoalLabel과 동일 규칙)
+    let goalText = formatGoalText(goalSeconds)
 
     let labelAttrs: [NSAttributedString.Key: Any] = [
       .font: UIFont.boldSystemFont(ofSize: fontSize),
