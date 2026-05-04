@@ -2,6 +2,7 @@ import ExpoModulesCore
 import AVFoundation
 import CoreGraphics
 import UIKit
+import VisionCamera
 
 // MARK: - Constants (internal: shared with VisionCameraTimelapseCapture)
 
@@ -77,6 +78,17 @@ public class TimelapseCreatorModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("TimelapseCreator")
+
+    // VisionCamera Frame Processor Plugin 등록.
+    // ObjC __attribute__((constructor)) 는 dynamic framework 환경에서 호출 시점이 불안정 → registry add 실패 사례.
+    // Module 의 OnCreate lifecycle 은 ExpoModulesCore 가 모듈 인스턴스 생성 시 호출 → 항상 RN 측
+    // VisionCameraProxy.initFrameProcessorPlugin(...) 호출보다 먼저. 등록 보장.
+    OnCreate {
+      FrameProcessorPluginRegistry.addFrameProcessorPlugin("captureTimelapseFrame") { (proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]?) in
+        return VisionCameraTimelapseCapture(proxy: proxy, options: options ?? [:])
+      }
+      NSLog("[Capture] FrameProcessorPlugin registered: captureTimelapseFrame")
+    }
 
     Events(
       "onCaptureProgress",

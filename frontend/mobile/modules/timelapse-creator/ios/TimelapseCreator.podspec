@@ -10,14 +10,20 @@ Pod::Spec.new do |s|
     :tvos => '15.1'
   }
   s.source         = { git: '' }
-  s.static_framework = true
+  # NOTE: static_framework = true 는 ObjC __attribute__((constructor)) 를 dead code stripping
+  # → VISION_EXPORT_SWIFT_FRAME_PROCESSOR 매크로의 plugin 등록이 안 됨.
+  # VisionCamera 본인도 static_framework 안 씀. dynamic 으로.
+  # s.static_framework = true   ← 의도적 비활성
 
   s.dependency 'ExpoModulesCore'
   s.dependency 'VisionCamera'
 
-  # Swift/Objective-C compatibility
+  # Swift/Objective-C compatibility + ObjC categories 강제 로드 (백업 보장)
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
+  }
+  s.user_target_xcconfig = {
+    'OTHER_LDFLAGS' => '$(inherited) -ObjC'
   }
 
   s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"

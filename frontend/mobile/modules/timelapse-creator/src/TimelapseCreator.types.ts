@@ -32,6 +32,10 @@ export interface OverlayOptions {
 }
 
 export type TimelapseCreatorModuleEvents = {
+  // Legacy events (T-011에서 정리 예정)
   onProgress: (params: { progress: number }) => void;
   onDebugLog: (params: { log: string }) => void;
+  // Phase 1 신규 이벤트
+  onCaptureProgress: (params: { count: number; totalEstimate: number; nextAtSec: number }) => void;
+  onStitchProgress: (params: { progress: number }) => void;
 };

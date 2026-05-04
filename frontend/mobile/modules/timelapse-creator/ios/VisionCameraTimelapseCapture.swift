@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import CoreImage
 import UIKit
+import VisionCamera
 
 // MARK: - VisionCameraTimelapseCapture
 //
@@ -80,18 +81,33 @@ public class VisionCameraTimelapseCapture: FrameProcessorPlugin {
 
     guard elapsedSec >= scheduledEnforced else { return nil }
 
-    // Frame → JPEG
+    // Frame → JPEG (sensor orientation 적용해서 픽셀 회전)
     let sampleBuffer = frame.buffer
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
       NSLog("[Capture] ERROR no pixel buffer")
       return nil
     }
-    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-    guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
+
+    // 진단 로그: frame.orientation 값을 raw int 로 찍어서 어떤 회전이 들어오는지 확인
+    // UIImageOrientation: 0=up, 1=down, 2=left, 3=right, 4=upMirrored, 5=downMirrored, 6=leftMirrored, 7=rightMirrored
+    if capturedCount < 3 {
+      NSLog("[Capture] frame.orientation rawValue=%d isMirrored=%@", frame.orientation.rawValue, frame.isMirrored ? "Y" : "N")
+    }
+
+    // CIImage 의 oriented(...) 로 픽셀 회전을 한 번만 적용.
+    // ciImage.oriented 는 transform 을 metadata 가 아닌 픽셀 좌표계에 적용 → createCGImage 후 결과가 portrait.
+    // 이전 패턴 (UIImage(cgImage:scale:orientation:) + draw) 은 frame 이 이미 정렬된 경우 이중 회전 위험.
+    // EXIF 5 적용 후 horizontal flip 추가
+    // CIImage.transformed 의 scaleX: -1 만 적용 (translation 불필요 — extent 자동 추적).
+    let ciImageRaw = CIImage(cvPixelBuffer: pixelBuffer)
+    let ciImage5 = ciImageRaw.oriented(forExifOrientation: 5)
+    let ciImageOriented = ciImage5.transformed(by: CGAffineTransform(scaleX: -1, y: 1))
+    guard let cgImage = ciContext.createCGImage(ciImageOriented, from: ciImageOriented.extent) else {
       NSLog("[Capture] ERROR createCGImage failed")
       return nil
     }
-    let uiImage = UIImage(cgImage: cgImage)
+
+    let uiImage = UIImage(cgImage: cgImage)  // orientation = .up 이미 픽셀 회전됨
     guard let data = uiImage.jpegData(compressionQuality: JPEG_QUALITY) else {
       NSLog("[Capture] ERROR jpegData nil")
       return nil
@@ -114,5 +130,38 @@ public class VisionCameraTimelapseCapture: FrameProcessorPlugin {
     }
 
     return ["count": capturedCount, "filename": filename] as [String: Any]
+  }
+
+  // MARK: - Helpers
+
+  /// frame.orientation + isMirrored 를 합쳐 정확한 UIImage.Orientation 으로 변환.
+  /// VisionCamera v4 는 base orientation 과 mirror flag 를 분리 표시 → 우리가 합쳐야 함.
+  private func combineOrientation(orientation: UIImage.Orientation, isMirrored: Bool) -> UIImage.Orientation {
+    if !isMirrored { return orientation }
+    switch orientation {
+    case .up:    return .upMirrored
+    case .down:  return .downMirrored
+    case .left:  return .leftMirrored
+    case .right: return .rightMirrored
+    case .upMirrored, .downMirrored, .leftMirrored, .rightMirrored:
+      return orientation  // 이미 mirrored
+    @unknown default: return orientation
+    }
+  }
+
+  /// UIImageOrientation → EXIF orientation int
+  /// EXIF 표준: 1=up, 2=upMirrored, 3=down, 4=downMirrored, 5=leftMirrored, 6=right, 7=rightMirrored, 8=left
+  private func cgImagePropertyOrientation(from uiOrientation: UIImage.Orientation) -> Int32 {
+    switch uiOrientation {
+    case .up:             return 1
+    case .upMirrored:     return 2
+    case .down:           return 3
+    case .downMirrored:   return 4
+    case .leftMirrored:   return 5
+    case .right:          return 6
+    case .rightMirrored:  return 7
+    case .left:           return 8
+    @unknown default:     return 1
+    }
   }
 }
