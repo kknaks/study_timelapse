@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-nativ
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
-import { updateSession } from '../src/api/sessions';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -106,19 +105,6 @@ export default function GeneratingScreen() {
         });
       } finally {
         subscription.remove();
-      }
-
-      // 세션 업데이트
-      if (sessionId) {
-        try {
-          await updateSession(sessionId, {
-            end_time: new Date().toISOString(),
-            duration: recordingSeconds,
-            status: 'completed',
-          });
-        } catch (e) {
-          console.warn('[generating] session update failed:', e);
-        }
       }
 
       // 완료 → result로 이동
