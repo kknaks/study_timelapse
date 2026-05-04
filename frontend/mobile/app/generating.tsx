@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
-import { createTimelapse, addProgressListener } from '../modules/timelapse-creator';
+import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
+import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -15,20 +16,22 @@ const RESOLUTIONS: Record<string, [number, number]> = {
 export default function GeneratingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    videoUri: string;
+    captureDir: string;
     sessionId: string;
     outputSeconds: string;
     recordingSeconds: string;
+    goalSec: string;
     aspectRatio: string;
     studyMinutes: string;
     timerMode: string;
     cameraFacing: string;
   }>();
 
-  const videoUri = params.videoUri ?? '';
+  const captureDir = params.captureDir ?? '';
   const sessionId = params.sessionId ?? '';
   const outputSeconds = Number(params.outputSeconds) || 30;
   const recordingSeconds = Number(params.recordingSeconds) || 0;
+  const goalSec = Number(params.goalSec) || Number(params.studyMinutes) * 60 || 3600;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const studyMinutes = Number(params.studyMinutes) || 0;
   const timerMode = params.timerMode ?? 'countdown';
@@ -37,21 +40,11 @@ export default function GeneratingScreen() {
   const [progress, setProgress] = useState(0);
   const hasRun = useRef(false);
 
-  // 압축 비율 기반 최적 FPS 자동 계산
-  // 긴 영상일수록 FPS를 낮춰 export 시간을 단축하면서 타임랩스 부드러움 유지
-  function optimalFPS(recSeconds: number, outSeconds: number): number {
-    const ratio = outSeconds > 0 ? recSeconds / outSeconds : 1;
-    if (ratio < 100) return 30;  // ~1.5시간 이하
-    if (ratio < 300) return 24;  // 1.5시간 ~ 2.5시간
-    if (ratio < 500) return 20;  // 2.5시간 ~ 4시간
-    return 15;                   // 4시간 이상
-  }
-
   useEffect(() => {
     if (hasRun.current) return;
     hasRun.current = true;
     runGenerate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runGenerate = async () => {
@@ -59,63 +52,49 @@ export default function GeneratingScreen() {
       if (Platform.OS === 'web') {
         router.replace({
           pathname: '/result',
-          params: { ...params, timelapsePath: '' },
+          params: { ...params, previewPath: '' },
         });
         return;
       }
 
-      if (!videoUri) {
-        throw new Error('No video recorded. Please try again.');
+      if (!captureDir) {
+        throw new Error('No capture directory found. Please try again.');
       }
 
       const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
-      const cacheDir = FileSystem.cacheDirectory ?? '';
-      const outputPath = `${cacheDir}timelapse_${Date.now()}.mp4`;
+      const previewPath = `${FileSystem.documentDirectory ?? ''}sessions/${sessionId}/preview.mp4`;
 
-      // 실제 촬영 시간에 비례해서 영상 길이 계산
-      // 예: 목표 2시간, 설정 15초, 실제 1시간 → 7.5초
-      const goalSeconds = studyMinutes * 60;
-      const actualOutputSeconds = goalSeconds > 0
-        ? Math.max(1, Math.round(outputSeconds * (recordingSeconds / goalSeconds) * 10) / 10)
-        : outputSeconds;
-
-      const subscription = addProgressListener((event) => {
+      const subscription = TimelapseCreatorModule.addListener('onStitchProgress', (event) => {
         setProgress(Math.round(event.progress * 100));
       });
 
       try {
-        const fps = optimalFPS(recordingSeconds, actualOutputSeconds);
-
-        await createTimelapse({
-          videoUri,
-          outputPath,
-          outputSeconds: actualOutputSeconds,
+        await TimelapseCreatorModule.stitchTimelapse({
+          captureDir,
+          outputPath: previewPath,
           width,
           height,
-          frameRate: fps,
-          bitRate: 3_500_000,
-          overlayStyle: 'pure',
-          overlayText: '',
-          streak: 0,
-          timerMode,
-          recordingSeconds,
-          goalSeconds: studyMinutes * 60,
-          cameraFacing,
-          debugStep: 2, // 0=순수export(passthrough), 1=videoComposition, 2=propertiesOf+transform자동, 3=crop(전체)
+          outputFps: CAPTURE_TUNING.outputFps,
+          overlayStyle: 'none',
+          overlayMeta: {
+            recordingSec: recordingSeconds,
+            goalSec,
+            outputSec: outputSeconds,
+          },
         });
       } finally {
         subscription.remove();
       }
 
-      // 완료 → result로 이동
       router.replace({
         pathname: '/result',
         params: {
-          timelapsePath: outputPath,
-          videoUri,
+          previewPath,
+          captureDir,
           sessionId,
-          outputSeconds: String(actualOutputSeconds),
+          outputSeconds: String(outputSeconds),
           recordingSeconds: String(recordingSeconds),
+          goalSec: String(goalSec),
           aspectRatio,
           studyMinutes: String(studyMinutes),
           timerMode,
@@ -141,21 +120,7 @@ export default function GeneratingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  text: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  progress: {
-    color: '#FFF',
-    fontSize: 32,
-    fontWeight: '700',
-  },
+  container: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: 16 },
+  text: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  progress: { color: '#FFF', fontSize: 32, fontWeight: '700' },
 });

@@ -7,16 +7,21 @@ import {
   Modal,
   StatusBar,
   Platform,
+  AppState,
+  AppStateStatus,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSharedValue, runOnJS } from 'react-native-reanimated';
-import { Camera, useCameraDevice, useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import * as FileSystem from 'expo-file-system/legacy';
 import { COLORS } from '../src/constants';
 import { formatTimerDisplay } from '../src/utils/timeFormat';
+import { CAPTURE_TUNING } from '../src/constants/captureTuning';
+import { estimateOutputSec } from '../src/utils/captureSchedule';
+import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 
-// 비율별 crop 컨테이너 스타일 계산
-// Camera는 항상 sensor format으로 녹화, wrapper만 원하는 비율로 crop
 function getCropStyle(aspectRatio: string) {
   switch (aspectRatio) {
     case '9:16': return { width: '100%' as const, aspectRatio: 9 / 16 };
@@ -41,19 +46,19 @@ export default function FocusScreen() {
   }>();
 
   const studyMinutes = Number(params.studyMinutes) || 60;
-  const totalSeconds = studyMinutes * 60;
+  const goalSec = studyMinutes * 60;
   const sessionId = params.sessionId ?? '';
   const outputSeconds = Number(params.outputSeconds) || 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
 
   const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
-  const { hasPermission: hasMicPermission, requestPermission: requestMicPermission } = useMicrophonePermission();
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [showStopModal, setShowStopModal] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
   const device = useCameraDevice(cameraFacing);
@@ -65,7 +70,11 @@ export default function FocusScreen() {
   const minZoomSV = useSharedValue(1);
   const maxZoomSV = useSharedValue(8);
 
-  // device 변경 시 zoom 범위 리셋 + cameraReady 초기화
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef = useRef(0);
+  const isStoppingRef = useRef(false);
+  const isPausedForModalRef = useRef(false);
+
   useEffect(() => {
     const min = device?.minZoom ?? 1;
     const max = device?.maxZoom ?? 8;
@@ -73,40 +82,25 @@ export default function FocusScreen() {
     maxZoomSV.value = max;
     zoomSV.value = min;
     setZoom(min);
-    setCameraReady(false); // 카메라 전환 시 준비 상태 초기화
+    setCameraReady(false);
   }, [device]);
 
-  // Camera는 class component라 createAnimatedComponent로 감싸면 ref 전달 안됨
-  // → zoom은 JS state로 처리 (runOnJS로 업데이트)
   const pinchGesture = Gesture.Pinch()
-    .onStart(() => {
-      startZoom.value = zoomSV.value;
-    })
+    .onStart(() => { startZoom.value = zoomSV.value; })
     .onUpdate((e) => {
       const next = Math.min(Math.max(startZoom.value * e.scale, minZoomSV.value), maxZoomSV.value);
       zoomSV.value = next;
       runOnJS(setZoom)(next);
     });
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const videoUriRef = useRef<string | null>(null);
-  const isStoppingRef = useRef(false);
-  const elapsedRef = useRef(0);
-  const shouldNavigateRef = useRef(false);
 
-  const remaining = Math.max(0, totalSeconds - elapsed);
+  const remaining = Math.max(0, goalSec - elapsed);
 
-  // Request camera + microphone permissions on mount
+  // Request camera permission on mount (사용자 액션 후 호출, 이미 permission 있으면 skip)
   useEffect(() => {
-    const requestPerms = async () => {
-      if (!hasCameraPermission) {
-        await requestCameraPermission();
-      }
-      if (!hasMicPermission) {
-        await requestMicPermission();
-      }
-    };
-    requestPerms();
-  }, [hasCameraPermission, hasMicPermission, requestCameraPermission, requestMicPermission]);
+    if (!hasCameraPermission) {
+      requestCameraPermission();
+    }
+  }, [hasCameraPermission, requestCameraPermission]);
 
   // Timer interval
   useEffect(() => {
@@ -128,65 +122,114 @@ export default function FocusScreen() {
 
   // Auto-stop when time is up
   useEffect(() => {
-    if (elapsed >= totalSeconds && isRecording) {
-      handleStop();
+    if (elapsed >= goalSec && isRecording) {
+      handleStop(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsed, totalSeconds, isRecording]);
+  }, [elapsed, goalSec, isRecording]);
 
-  const startRecording = useCallback(() => {
-    if (isRecording || !cameraRef.current || !device || !cameraReady) return;
+  // AppState: background/inactive → auto-pause + notify (adr-06, spec-01 E1)
+  useEffect(() => {
+    if (!hasStarted) return;
+    const sub = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+      if ((nextState === 'background' || nextState === 'inactive') && isRecording) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        setIsRecording(false);
+        if (Platform.OS !== 'web') {
+          try { await TimelapseCreatorModule.pauseCapture(); } catch {}
+        }
+        Alert.alert('Recording Paused', 'Focus session paused because the app went to the background.');
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasStarted, isRecording]);
+
+  // TODO(expo-keep-awake): install expo-keep-awake and call activateKeepAwake() while recording
+
+  const startCapture = useCallback(async () => {
+    if (isRecording || !cameraReady) return;
     setIsRecording(true);
     if (Platform.OS !== 'web') {
-      cameraRef.current.startRecording({
-        onRecordingFinished: (video) => {
-          videoUriRef.current = video.path;
-          if (!shouldNavigateRef.current) return;
-          router.replace({
-            pathname: '/generating',
-            params: {
-              videoUri: video.path,
-              sessionId,
-              outputSeconds: String(outputSeconds),
-              recordingSeconds: String(elapsedRef.current),
-              aspectRatio,
-              studyMinutes: String(studyMinutes),
-              timerMode,
-              cameraFacing,
-            },
-          });
-        },
-        onRecordingError: (error) => {
-          console.warn('[focus] recording error:', error);
-        },
-      });
+      const baseDir = `${FileSystem.documentDirectory ?? ''}sessions/${sessionId}/`;
+      try {
+        await TimelapseCreatorModule.startCapture({
+          sessionId,
+          goalSec,
+          outputSec: outputSeconds,
+          outputFps: CAPTURE_TUNING.outputFps,
+          cameraFacing,
+          baseDir,
+        });
+      } catch (e) {
+        console.warn('[focus] startCapture error:', e);
+        setIsRecording(false);
+      }
     }
-  }, [isRecording, device, cameraReady, router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
+  }, [isRecording, cameraReady, sessionId, goalSec, outputSeconds, cameraFacing]);
 
-  const handleStop = useCallback(async () => {
+  // 정지 버튼 탭: 10초 미만 가드 + stop modal 표시 (캡처 일시정지)
+  const handleStopPress = useCallback(async () => {
+    if (elapsedRef.current < CAPTURE_TUNING.minRecordingSec) {
+      Alert.alert('Too Short', '최소 10초 이상 녹화해주세요.');
+      return;
+    }
+    // 모달 표시 전 캡처 일시정지 (D-SPEC-1-2)
+    isPausedForModalRef.current = true;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (Platform.OS !== 'web') {
+      try { await TimelapseCreatorModule.pauseCapture(); } catch {}
+    }
+    setShowStopModal(true);
+  }, []);
+
+  // 정지 확정
+  const handleStop = useCallback(async (auto = false) => {
     if (isStoppingRef.current) return;
     isStoppingRef.current = true;
-
-    // Clear timer interval
+    setShowStopModal(false);
+    setIsRecording(false);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    setIsRecording(false);
-
     if (Platform.OS !== 'web') {
-      shouldNavigateRef.current = true;
-      await cameraRef.current?.stopRecording();
-      // Navigation happens in onRecordingFinished callback
+      try {
+        const result = await TimelapseCreatorModule.stopCapture();
+        router.replace({
+          pathname: '/generating',
+          params: {
+            captureDir: result.captureDir,
+            sessionId,
+            outputSeconds: String(outputSeconds),
+            recordingSeconds: String(result.elapsedSec),
+            goalSec: String(goalSec),
+            aspectRatio,
+            studyMinutes: String(studyMinutes),
+            timerMode,
+            cameraFacing,
+          },
+        });
+      } catch (e) {
+        console.warn('[focus] stopCapture error:', e);
+        isStoppingRef.current = false;
+      }
     } else {
       router.replace({
         pathname: '/generating',
         params: {
-          videoUri: '',
+          captureDir: '',
           sessionId,
           outputSeconds: String(outputSeconds),
           recordingSeconds: String(elapsedRef.current),
+          goalSec: String(goalSec),
           aspectRatio,
           studyMinutes: String(studyMinutes),
           timerMode,
@@ -194,43 +237,49 @@ export default function FocusScreen() {
         },
       });
     }
-  }, [router, sessionId, outputSeconds, aspectRatio, studyMinutes, timerMode, cameraFacing]);
+  }, [router, sessionId, outputSeconds, goalSec, aspectRatio, studyMinutes, timerMode, cameraFacing]);
 
-  const handleExit = () => {
-    setShowExitModal(true);
-  };
+  // 정지 모달 "계속" → resume
+  const handleStopCancel = useCallback(async () => {
+    setShowStopModal(false);
+    isPausedForModalRef.current = false;
+    if (Platform.OS !== 'web') {
+      try { await TimelapseCreatorModule.resumeCapture(); } catch {}
+    }
+    setIsRecording(true);
+  }, []);
 
-  const confirmExit = () => {
+  const handleExit = () => { setShowExitModal(true); };
+
+  const confirmExit = async () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    // Stop recording if active (shouldNavigateRef stays false → no navigation from callback)
     if (Platform.OS !== 'web' && hasStarted) {
-      cameraRef.current?.stopRecording();
+      try { await TimelapseCreatorModule.stopCapture(); } catch {}
     }
     setShowExitModal(false);
     router.canGoBack() ? router.back() : router.replace('/');
   };
 
-  // Permissions not yet granted
-  if (!hasCameraPermission || !hasMicPermission) {
+  // 예상 결과 영상 길이 (정지 모달 / 인디케이터용)
+  const estimatedOutputSec = estimateOutputSec(elapsed, goalSec, outputSeconds);
+
+  if (!hasCameraPermission) {
     return (
       <View style={styles.permContainer}>
         <StatusBar barStyle="light-content" />
         <View style={styles.permIconWrap}>
           <Text style={styles.permIconText}>⊙</Text>
         </View>
-        <Text style={styles.permTitle}>Camera & Microphone Access</Text>
+        <Text style={styles.permTitle}>Camera Access Required</Text>
         <Text style={styles.permText}>
-          We need camera and microphone permission to record your focus session.
+          We need camera access to record your focus session.
         </Text>
         <TouchableOpacity
           style={styles.permButton}
-          onPress={async () => {
-            await requestCameraPermission();
-            await requestMicPermission();
-          }}
+          onPress={requestCameraPermission}
         >
           <Text style={styles.permButtonText}>Grant Permission</Text>
         </TouchableOpacity>
@@ -241,7 +290,6 @@ export default function FocusScreen() {
     );
   }
 
-  // No camera device found
   if (!device) {
     return (
       <View style={styles.permContainer}>
@@ -254,58 +302,35 @@ export default function FocusScreen() {
     );
   }
 
-  const progressPercent = totalSeconds > 0 ? (elapsed / totalSeconds) * 100 : 0;
-
-  // 웹에서 1:1 crop을 위한 인라인 스타일
-  const webCameraStyle = Platform.OS === 'web' && aspectRatio === '1:1'
-    ? ({
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#000',
-        overflow: 'hidden',
-      } as any)
-    : undefined;
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Camera Preview
-          - Camera 자체는 항상 sensor format(4:3 등)으로 녹화
-          - Wrapper View를 원하는 비율로 crop해서 UI 표시
-          - overflow:hidden 으로 센서 비율과 다른 부분 잘라냄
-      */}
       <GestureDetector gesture={pinchGesture}>
-      <View style={styles.cameraWrapper}>
-        {/* 비율별 crop 컨테이너: 화면 중앙에 원하는 비율로 잘라서 표시 */}
-        <View style={[styles.cropContainer, getCropStyle(aspectRatio)]}>
-          {Platform.OS !== 'web' && device ? (
-          <Camera
-            ref={cameraRef}
-            style={styles.camera}
-            device={device}
-            isActive={!showExitModal}
-            video={true}
-            audio={true}
-            zoom={zoom}
-            outputOrientation="preview"
-            onInitialized={() => setCameraReady(true)}
-          />
-        ) : (
-          <View style={[
-            styles.camera,
-          ]} />
-          )}
+        <View style={styles.cameraWrapper}>
+          <View style={[styles.cropContainer, getCropStyle(aspectRatio)]}>
+            {Platform.OS !== 'web' && device ? (
+              <Camera
+                ref={cameraRef}
+                style={styles.camera}
+                device={device}
+                isActive={!showExitModal && !showStopModal}
+                video={true}
+                audio={false}
+                zoom={zoom}
+                outputOrientation="preview"
+                onInitialized={() => setCameraReady(true)}
+              />
+            ) : (
+              <View style={styles.camera} />
+            )}
+          </View>
         </View>
-      </View>
       </GestureDetector>
 
       {/* Overlay */}
       <View style={styles.overlay}>
-        {/* Top: 뒤로가기(왼쪽) + 타이머 (오른쪽) */}
+        {/* Top row */}
         <View style={styles.topRow}>
           <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
             <Text style={styles.exitButtonText}>←</Text>
@@ -326,20 +351,21 @@ export default function FocusScreen() {
           </View>
         </View>
 
-        {/* Camera Unavailable 표시 (웹) */}
-        {!hasCameraPermission && (
-          <View style={styles.cameraUnavailable}>
-            <Text style={styles.cameraUnavailableText}>⊘  Camera Unavailable</Text>
+        {/* 인디케이터: 결과 영상 예상 길이 (adr-07) */}
+        {hasStarted && elapsed > 0 && (
+          <View style={styles.indicatorRow}>
+            <Text style={styles.indicatorText}>
+              정지 시 결과 영상 약 {Math.round(estimatedOutputSec)}초
+            </Text>
           </View>
         )}
 
-        {/* Bottom: FOCUS SESSION ACTIVE + 버튼들 */}
+        {/* Bottom row */}
         <View style={styles.bottomRow}>
           <Text style={styles.sessionActiveLabel}>
             {!hasStarted ? 'READY TO RECORD' : isRecording ? 'FOCUS SESSION ACTIVE' : 'PAUSED'}
           </Text>
           <View style={styles.controls}>
-            {/* 카메라 전환 버튼 */}
             {!hasStarted && Platform.OS !== 'web' && (
               <TouchableOpacity
                 style={styles.flipButton}
@@ -356,15 +382,19 @@ export default function FocusScreen() {
               onPress={async () => {
                 if (!hasStarted) {
                   setHasStarted(true);
-                  startRecording();
+                  await startCapture();
                 } else if (isRecording) {
                   if (Platform.OS !== 'web') {
-                    await cameraRef.current?.pauseRecording();
+                    try { await TimelapseCreatorModule.pauseCapture(); } catch {}
+                  }
+                  if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
                   }
                   setIsRecording(false);
                 } else {
                   if (Platform.OS !== 'web') {
-                    await cameraRef.current?.resumeRecording();
+                    try { await TimelapseCreatorModule.resumeCapture(); } catch {}
                   }
                   setIsRecording(true);
                 }
@@ -387,7 +417,7 @@ export default function FocusScreen() {
             {hasStarted && (
               <TouchableOpacity
                 style={styles.stopButton}
-                onPress={handleStop}
+                onPress={handleStopPress}
                 activeOpacity={0.7}
               >
                 <View style={styles.stopIcon} />
@@ -397,7 +427,35 @@ export default function FocusScreen() {
         </View>
       </View>
 
-      {/* Exit Confirmation Modal */}
+      {/* 정지 확인 모달 (adr-07) */}
+      <Modal visible={showStopModal} transparent animationType="slide" onRequestClose={handleStopCancel}>
+        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={handleStopCancel}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>녹화를 종료할까요?</Text>
+            <Text style={styles.modalText}>
+              목표 {studyMinutes}분 중 {Math.floor(elapsed / 60)}분 진행.{'\n'}
+              결과 영상 약 {Math.round(estimatedOutputSec)}초.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={handleStopCancel}
+              >
+                <Text style={styles.modalBtnCancelText}>계속</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnConfirm]}
+                onPress={() => handleStop(false)}
+              >
+                <Text style={styles.modalBtnConfirmText}>정지</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 나가기 확인 모달 */}
       <Modal visible={showExitModal} transparent animationType="slide" onRequestClose={() => setShowExitModal(false)}>
         <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={() => setShowExitModal(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
@@ -428,29 +486,16 @@ export default function FocusScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  container: { flex: 1, backgroundColor: '#000' },
   cameraWrapper: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000',
   },
-  // 비율별 crop 컨테이너: overflow:hidden으로 sensor format 밖 영역 잘라냄
-  cropContainer: {
-    overflow: 'hidden',
-    alignSelf: 'center',
-  },
-  camera: {
-    width: '100%',
-    height: '100%',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
-  },
+  cropContainer: { overflow: 'hidden', alignSelf: 'center' },
+  camera: { width: '100%', height: '100%' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
   topRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -458,258 +503,79 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 24,
   },
-  timerContainer: {
-    alignItems: 'flex-start',
-  },
-  recIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  recDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF3B30',
-  },
-  recText: {
-    color: '#FF3B30',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  timerLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  timerTime: {
-    color: '#FFF',
-    fontSize: 52,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
+  timerContainer: { alignItems: 'flex-start' },
+  recIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF3B30' },
+  recText: { color: '#FF3B30', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  timerLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', letterSpacing: 1, marginBottom: 4 },
+  timerTime: { color: '#FFF', fontSize: 52, fontWeight: '700', letterSpacing: 1 },
   exitButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
+    alignItems: 'center', justifyContent: 'center', marginTop: 8,
   },
-  exitButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cameraUnavailable: {
+  exitButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  indicatorRow: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 16,
   },
-  cameraUnavailableText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-  },
-  bottomRow: {
-    alignItems: 'center',
-    paddingBottom: 60,
-    gap: 20,
-  },
-  sessionActiveLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.5,
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
-  },
+  indicatorText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '500' },
+  bottomRow: { alignItems: 'center', paddingBottom: 60, gap: 20 },
+  sessionActiveLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600', letterSpacing: 1.5 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: 24 },
   flipButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+    alignItems: 'center', justifyContent: 'center', marginRight: 16,
   },
-  flipIcon: {
-    fontSize: 22,
-    color: '#FFF',
-    fontWeight: '600',
-  },
+  flipIcon: { fontSize: 22, color: '#FFF', fontWeight: '600' },
   pauseButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 60, height: 60, borderRadius: 30,
     backgroundColor: 'rgba(255,255,255,0.5)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  pauseIconWrap: {
-    flexDirection: 'row',
-    gap: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pauseBar: {
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: '#FFF',
-  },
+  pauseIconWrap: { flexDirection: 'row', gap: 5, alignItems: 'center', justifyContent: 'center' },
+  pauseBar: { width: 4, height: 18, borderRadius: 2, backgroundColor: '#FFF' },
   playIcon: {
-    width: 0,
-    height: 0,
-    borderTopWidth: 9,
-    borderBottomWidth: 9,
-    borderLeftWidth: 16,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderLeftColor: '#FFF',
+    width: 0, height: 0,
+    borderTopWidth: 9, borderBottomWidth: 9, borderLeftWidth: 16,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: '#FFF',
     marginLeft: 3,
   },
   stopButton: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center',
   },
-  stopIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 4,
-    backgroundColor: '#1a1a1a',
-  },
-  // Permission screen
-  permContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
+  stopIcon: { width: 26, height: 26, borderRadius: 4, backgroundColor: '#1a1a1a' },
+  permContainer: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 32 },
   permIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2.5,
-    borderColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    width: 80, height: 80, borderRadius: 40,
+    borderWidth: 2.5, borderColor: '#FFF',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
   },
-  permIconText: {
-    fontSize: 32,
-    color: '#FFF',
-  },
-  permEmoji: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  permTitle: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  permText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-  },
-  permButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 14,
-    marginBottom: 16,
-  },
-  permButtonText: {
-    color: '#FFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  permBackButton: {
-    paddingVertical: 12,
-  },
-  permBackText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
-  },
-  // Modal
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
+  permIconText: { fontSize: 32, color: '#FFF' },
+  permTitle: { color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 },
+  permText: { color: 'rgba(255,255,255,0.7)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+  permButton: { backgroundColor: COLORS.primary, paddingVertical: 16, paddingHorizontal: 32, borderRadius: 14, marginBottom: 16 },
+  permButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  permBackButton: { paddingVertical: 12 },
+  permBackText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-    gap: 16,
+    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 40, gap: 16,
   },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#DDD',
-    alignSelf: 'center',
-    marginBottom: 4,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  modalText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  modalBtnCancel: {
-    backgroundColor: '#F5F5F5',
-  },
-  modalBtnCancelText: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  modalBtnConfirm: {
-    backgroundColor: '#FF3B30',
-  },
-  modalBtnConfirmText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 4 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  modalText: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 20 },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  modalBtnCancel: { backgroundColor: '#F5F5F5' },
+  modalBtnCancelText: { color: COLORS.text, fontSize: 15, fontWeight: '600' },
+  modalBtnConfirm: { backgroundColor: '#FF3B30' },
+  modalBtnConfirmText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

@@ -14,10 +14,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { applyOverlay } from '../modules/timelapse-creator';
-import { Asset } from 'expo-asset';
+import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 import { updateSession } from '../src/api/sessions';
-import { buildScaledLayout } from '../src/constants/overlayLayout';
+import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -44,22 +43,25 @@ export default function SavingScreen() {
     studyMinutes: string;
     recordingSeconds: string;
     outputSeconds: string;
+    goalSec: string;
     aspectRatio: string;
     timerMode: string;
-    overlayText: string;
-    photoUris: string;  // timelapsePath (완성된 mp4 경로)
+    previewPath: string;
+    captureDir: string;
     cameraFacing: string;
     sessionId: string;
   }>();
 
   const overlayStyle = params.overlayStyle ?? 'none';
-  const overlayText = params.overlayText ?? '';
   const streak = Number(params.streak) || 0;
   const studyMinutes = Number(params.studyMinutes) || 0;
   const recordingSeconds = Number(params.recordingSeconds) || 0;
+  const outputSeconds = Number(params.outputSeconds) || 30;
+  const goalSec = Number(params.goalSec) || studyMinutes * 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const timerMode = params.timerMode ?? 'countdown';
-  const timelapsePath = params.photoUris ?? '';
+  const previewPath = params.previewPath ?? '';
+  const captureDir = params.captureDir ?? '';
   const sessionId = params.sessionId ?? '';
 
   const isWeb = Platform.OS === 'web';
@@ -100,7 +102,7 @@ export default function SavingScreen() {
     if (hasRun.current) return;
     hasRun.current = true;
     runSave();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runSave = async () => {
@@ -126,45 +128,40 @@ export default function SavingScreen() {
       }
       setDone(idx); idx++;
 
-      // ── Step 1: 오버레이 합성 ──
+      // ── Step 1: stitchTimelapse (burn-in 포함) ──
       setActive(idx);
-      if (!timelapsePath) {
-        throw new Error('No timelapse file found. Please try again.');
+      if (!captureDir) {
+        throw new Error('No capture directory found. Please try again.');
       }
 
-      // overlayStyle에 상관없이 항상 applyOverlay 호출 (워터마크는 항상 합성)
       const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
       const cacheDir = FileSystem.cacheDirectory ?? '';
-      const overlayOutputPath = `${cacheDir}timelapse_overlay_${Date.now()}.mp4`;
+      const finalPath = `${cacheDir}timelapse_final_${Date.now()}.mp4`;
 
-      // 로고 이미지 로컬 경로 가져오기
-      const logoAsset = Asset.fromModule(require('../assets/logo.png'));
-      await logoAsset.downloadAsync();
-      const logoPath = logoAsset.localUri ?? '';
-
-      const scaledLayout = buildScaledLayout(width);
-      const overlayLayoutJson = JSON.stringify(scaledLayout);
-
-      const finalPath = await applyOverlay({
-        videoUri: timelapsePath,
-        outputPath: overlayOutputPath,
-        overlayStyle,
-        overlayText,
-        streak,
-        recordingSeconds,
-        goalSeconds: studyMinutes * 60,
-        timerMode,
-        width,
-        height,
-        logoPath,
-        overlayLayoutJson,
-      });
+      const subscription = TimelapseCreatorModule.addListener('onStitchProgress', () => {});
+      try {
+        await TimelapseCreatorModule.stitchTimelapse({
+          captureDir,
+          outputPath: finalPath,
+          width,
+          height,
+          outputFps: CAPTURE_TUNING.outputFps,
+          overlayStyle: overlayStyle as 'none' | 'timer' | 'progress' | 'streak',
+          overlayMeta: {
+            recordingSec: recordingSeconds,
+            goalSec,
+            outputSec: outputSeconds,
+            streak,
+          },
+        });
+      } finally {
+        subscription.remove();
+      }
       setDone(idx); idx++;
 
       // ── Step 2: 갤러리 저장 ──
       setActive(idx);
       await MediaLibrary.saveToLibraryAsync(finalPath);
-      console.log('[saving] Saved to gallery.');
 
       // 세션 업데이트
       if (sessionId) {
@@ -178,6 +175,17 @@ export default function SavingScreen() {
           console.warn('[saving] session update failed:', e);
         }
       }
+
+      // cleanup (adr-08): preview 즉시 삭제, captureDir 5분 후 삭제
+      if (previewPath) {
+        FileSystem.deleteAsync(previewPath, { idempotent: true }).catch(() => {});
+      }
+      if (captureDir) {
+        setTimeout(() => {
+          FileSystem.deleteAsync(captureDir, { idempotent: true }).catch(() => {});
+        }, CAPTURE_TUNING.cleanupTtlSec * 1000);
+      }
+
       setDone(idx); idx++;
 
       // ── Step 3: 완료 ──
@@ -185,6 +193,8 @@ export default function SavingScreen() {
       await wait(300);
       setDone(idx);
       setFinished(true);
+
+      // TODO(monetization): if (!user.is_pro && dailyCount >= 1) 한도 안내
 
     } catch (e) {
       console.error('Save error:', e);
@@ -256,13 +266,7 @@ export default function SavingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
-  inner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 12,
-  },
+  inner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   title: { fontSize: 22, fontWeight: '800', color: DARK, marginBottom: 4 },
   subtitle: { fontSize: 15, color: '#888', marginBottom: 32 },
   stepsContainer: { width: '100%', gap: 20, marginBottom: 36 },
@@ -276,33 +280,12 @@ const styles = StyleSheet.create({
   progressTrack: { width: '100%', height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: DARK, borderRadius: 3 },
   actionButtons: { width: '100%', flexDirection: 'row', gap: 10, marginTop: 24 },
-  saveBtn: {
-    flex: 4,
-    backgroundColor: DARK,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
+  saveBtn: { flex: 4, backgroundColor: DARK, borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  saveBtnDisabled: { backgroundColor: '#D1D5DB' },
   saveBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   saveBtnTextDisabled: { color: '#9CA3AF' },
-  instaBtn: {
-    flex: 1.5,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-  },
-  instaBtnDisabled: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
-  },
+  instaBtn: { flex: 1.5, backgroundColor: '#FFF', borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E0E0' },
+  instaBtnDisabled: { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' },
   instaIcon: { width: 28, height: 28 },
   instaIconDisabled: { opacity: 0.3 },
 });
