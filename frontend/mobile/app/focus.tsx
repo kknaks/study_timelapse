@@ -13,14 +13,18 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSharedValue, runOnJS } from 'react-native-reanimated';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { useSharedValue as useWSharedValue } from 'react-native-worklets-core';
+import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor, VisionCameraProxy } from 'react-native-vision-camera';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as FileSystem from 'expo-file-system/legacy';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { COLORS } from '../src/constants';
 import { formatTimerDisplay } from '../src/utils/timeFormat';
 import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 import { estimateOutputSec } from '../src/utils/captureSchedule';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
+
+const captureTimelapseFramePlugin = VisionCameraProxy.initFrameProcessorPlugin('captureTimelapseFrame');
 
 function getCropStyle(aspectRatio: string) {
   switch (aspectRatio) {
@@ -70,6 +74,13 @@ export default function FocusScreen() {
   const minZoomSV = useSharedValue(1);
   const maxZoomSV = useSharedValue(8);
 
+  // worklets-core shared values for frame processor (worklet thread reads these)
+  const elapsedSecSV = useWSharedValue(0);
+  const isPausedSV = useWSharedValue(false);
+  const captureDirSV = useWSharedValue('');
+  const goalSecSV = useWSharedValue(goalSec);
+  const outputSecSV = useWSharedValue(outputSeconds);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(0);
   const isStoppingRef = useRef(false);
@@ -108,6 +119,7 @@ export default function FocusScreen() {
       intervalRef.current = setInterval(() => {
         setElapsed((prev) => {
           elapsedRef.current = prev + 1;
+          elapsedSecSV.value = prev + 1;
           return prev + 1;
         });
       }, 1000);
@@ -137,6 +149,7 @@ export default function FocusScreen() {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
+        isPausedSV.value = true;
         setIsRecording(false);
         if (Platform.OS !== 'web') {
           try { await TimelapseCreatorModule.pauseCapture(); } catch {}
@@ -148,7 +161,32 @@ export default function FocusScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasStarted, isRecording]);
 
-  // TODO(expo-keep-awake): install expo-keep-awake and call activateKeepAwake() while recording
+  // adr-06: 녹화 중 화면 자동 잠금 방지 (idle timer 비활성). 정지/언마운트 시 deactivate.
+  useEffect(() => {
+    if (isRecording) {
+      activateKeepAwakeAsync('focus-recording');
+      return () => {
+        deactivateKeepAwake('focus-recording');
+      };
+    }
+  }, [isRecording]);
+
+  useEffect(() => { goalSecSV.value = goalSec; }, [goalSec]);
+  useEffect(() => { outputSecSV.value = outputSeconds; }, [outputSeconds]);
+
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet';
+    if (captureTimelapseFramePlugin == null) return;
+    if (captureDirSV.value === '') return;
+    captureTimelapseFramePlugin.call(frame, {
+      elapsedSec: elapsedSecSV.value,
+      goalSec: goalSecSV.value,
+      outputSec: outputSecSV.value,
+      outputFps: 30,
+      captureDir: captureDirSV.value,
+      isPaused: isPausedSV.value,
+    });
+  }, []);
 
   const startCapture = useCallback(async () => {
     if (isRecording || !cameraReady) return;
@@ -164,6 +202,8 @@ export default function FocusScreen() {
           cameraFacing,
           baseDir,
         });
+        captureDirSV.value = `${baseDir}captures`;
+        isPausedSV.value = false;
       } catch (e) {
         console.warn('[focus] startCapture error:', e);
         setIsRecording(false);
@@ -179,6 +219,7 @@ export default function FocusScreen() {
     }
     // 모달 표시 전 캡처 일시정지 (D-SPEC-1-2)
     isPausedForModalRef.current = true;
+    isPausedSV.value = true;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -243,6 +284,7 @@ export default function FocusScreen() {
   const handleStopCancel = useCallback(async () => {
     setShowStopModal(false);
     isPausedForModalRef.current = false;
+    isPausedSV.value = false;
     if (Platform.OS !== 'web') {
       try { await TimelapseCreatorModule.resumeCapture(); } catch {}
     }
@@ -320,6 +362,7 @@ export default function FocusScreen() {
                 zoom={zoom}
                 outputOrientation="preview"
                 onInitialized={() => setCameraReady(true)}
+                frameProcessor={frameProcessor}
               />
             ) : (
               <View style={styles.camera} />
@@ -384,6 +427,7 @@ export default function FocusScreen() {
                   setHasStarted(true);
                   await startCapture();
                 } else if (isRecording) {
+                  isPausedSV.value = true;
                   if (Platform.OS !== 'web') {
                     try { await TimelapseCreatorModule.pauseCapture(); } catch {}
                   }
@@ -393,6 +437,7 @@ export default function FocusScreen() {
                   }
                   setIsRecording(false);
                 } else {
+                  isPausedSV.value = false;
                   if (Platform.OS !== 'web') {
                     try { await TimelapseCreatorModule.resumeCapture(); } catch {}
                   }
