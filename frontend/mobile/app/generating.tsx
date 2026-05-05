@@ -23,7 +23,6 @@ export default function GeneratingScreen() {
     goalSec: string;
     aspectRatio: string;
     studyMinutes: string;
-    timerMode: string;
     cameraFacing: string;
   }>();
 
@@ -34,7 +33,6 @@ export default function GeneratingScreen() {
   const goalSec = Number(params.goalSec) || Number(params.studyMinutes) * 60 || 3600;
   const aspectRatio = params.aspectRatio ?? '9:16';
   const studyMinutes = Number(params.studyMinutes) || 0;
-  const timerMode = params.timerMode ?? 'countdown';
   const cameraFacing = params.cameraFacing ?? 'front';
 
   const [progress, setProgress] = useState(0);
@@ -97,7 +95,6 @@ export default function GeneratingScreen() {
           goalSec: String(goalSec),
           aspectRatio,
           studyMinutes: String(studyMinutes),
-          timerMode,
           cameraFacing,
         },
       });

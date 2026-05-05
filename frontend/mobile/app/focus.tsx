@@ -24,7 +24,9 @@ import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 import { estimateOutputSec } from '../src/utils/captureSchedule';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 
-const captureTimelapseFramePlugin = VisionCameraProxy.initFrameProcessorPlugin('captureTimelapseFrame');
+const captureTimelapseFramePlugin = VisionCameraProxy.initFrameProcessorPlugin('captureTimelapseFrame', {});
+// 진단: plugin 등록 여부 즉시 확인
+console.log('[focus] plugin instance:', captureTimelapseFramePlugin == null ? 'NULL — registration failed' : 'OK');
 
 function getCropStyle(aspectRatio: string) {
   switch (aspectRatio) {
@@ -254,7 +256,6 @@ export default function FocusScreen() {
             goalSec: String(goalSec),
             aspectRatio,
             studyMinutes: String(studyMinutes),
-            timerMode,
             cameraFacing,
           },
         });
@@ -273,12 +274,11 @@ export default function FocusScreen() {
           goalSec: String(goalSec),
           aspectRatio,
           studyMinutes: String(studyMinutes),
-          timerMode,
           cameraFacing,
         },
       });
     }
-  }, [router, sessionId, outputSeconds, goalSec, aspectRatio, studyMinutes, timerMode, cameraFacing]);
+  }, [router, sessionId, outputSeconds, goalSec, aspectRatio, studyMinutes, cameraFacing]);
 
   // 정지 모달 "계속" → resume
   const handleStopCancel = useCallback(async () => {

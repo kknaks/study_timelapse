@@ -1,0 +1,201 @@
+{
+  "main": {
+    "id": "fd4448ddb4ec4727",
+    "type": "split",
+    "children": [
+      {
+        "id": "bd3f9f5d56a41620",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "dd311f000f7241bf",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "current/spec/spec-02-capture-pipeline.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "spec-02-capture-pipeline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "30a1f0ecaab04c05",
+    "type": "split",
+    "children": [
+      {
+        "id": "b103387cecb39f0c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9dabda2ba96b235e",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "파일 탐색기"
+            }
+          },
+          {
+            "id": "4e6f88f252612e52",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "검색"
+            }
+          },
+          {
+            "id": "87527c3ca5dc5985",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "북마크"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "427ab8aa9e76cbbb",
+    "type": "split",
+    "children": [
+      {
+        "id": "d10657f1f1235164",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8a16202d6ee6dcd6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "current/spec/spec-02-capture-pipeline.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "spec-02-capture-pipeline 의 백링크"
+            }
+          },
+          {
+            "id": "88e807d2ea675cec",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "current/spec/spec-02-capture-pipeline.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "spec-02-capture-pipeline 의 나가는 링크"
+            }
+          },
+          {
+            "id": "8d2cc69bdb0ad66a",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "태그"
+            }
+          },
+          {
+            "id": "a221bafac93f1b69",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "모든 속성"
+            }
+          },
+          {
+            "id": "c993deb9b9d1aba6",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "current/spec/spec-02-capture-pipeline.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "spec-02-capture-pipeline 의 개요"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:빠른 전환기 열기": false,
+      "graph:그래프 뷰 열기": false,
+      "canvas:새 캔버스 만들기": false,
+      "daily-notes:오늘의 일일 노트 열기": false,
+      "templates:템플릿 삽입": false,
+      "command-palette:명령어 팔레트 열기": false,
+      "bases:새 베이스 생성하기": false
+    }
+  },
+  "active": "dd311f000f7241bf",
+  "lastOpenFiles": [
+    "current/tech-debt.md",
+    "current/adr/adr-09-camera-integration.md",
+    "current/spec/spec-01-recording-state-machine.md",
+    "current/adr/adr-08-cache-lifecycle.md",
+    "current/spec/spec-02-capture-pipeline.md",
+    "current/adr/adr-07-stop-confirmation-ux.md",
+    "current/adr/adr-06-background-recording-policy.md",
+    "current/adr/adr-05-capture-schedule-function.md",
+    "current/adr/adr-04-recording-paradigm.md",
+    "current/planning/planning-01-recording-pipeline.md",
+    "current/adr/adr-02-session-update-policy.md",
+    "current/adr/adr-01-aspect-ratio-unify.md"
+  ]
+}

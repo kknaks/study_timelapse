@@ -32,6 +32,8 @@ async def get_me(
             total_focus_time=current_user.total_focus_time,
             subscription_status=current_user.subscription_status,
             trial_start_date=current_user.trial_start_date,
+            is_pro=current_user.is_pro,
+            pro_until=current_user.pro_until,
             created_at=current_user.created_at,
             updated_at=current_user.updated_at,
         ).model_dump(mode="json"),

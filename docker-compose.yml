@@ -9,7 +9,6 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/code
-      - upload_data:/code/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -34,4 +33,3 @@ services:
 
 volumes:
   pg_data:
-  upload_data:

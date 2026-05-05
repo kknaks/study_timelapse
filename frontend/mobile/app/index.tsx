@@ -22,13 +22,13 @@ export default function HomeScreen() {
 
   const { data: userData } = useQuery<{ success: boolean; data: User }>({
     queryKey: ['me'],
-    queryFn: () => getMe().then((r) => r.data),
+    queryFn: () => getMe().then((r) => r.data as unknown as { success: boolean; data: User }),
     enabled: isReady,
   });
 
   const { data: statsData } = useQuery<{ success: boolean; data: WeeklyStats }>({
     queryKey: ['weekly-stats'],
-    queryFn: () => getWeeklyStats().then((r) => r.data),
+    queryFn: () => getWeeklyStats().then((r) => r.data as unknown as { success: boolean; data: WeeklyStats }),
     enabled: isReady,
   });
 

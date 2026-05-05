@@ -272,24 +272,30 @@ public class TimelapseCreatorModule: Module {
     let meta = options.overlayMeta
 
     for (i, fileURL) in jpegFiles.enumerated() {
-      guard let imgData = try? Data(contentsOf: fileURL),
-            let uiImage = UIImage(data: imgData) else { continue }
+      // 매 iteration 의 UIImage / renderer 비트맵 / 중간 버퍼를 즉시 release 하기 위해
+      // autoreleasepool 로 감싼다. 351 프레임 누적 OOM 방지.
+      let bufferOpt: CVPixelBuffer? = autoreleasepool {
+        guard let imgData = try? Data(contentsOf: fileURL),
+              let uiImage = UIImage(data: imgData) else { return nil }
 
-      let frameImage: UIImage
-      if options.overlayStyle != "none" {
-        frameImage = burnInOverlay(
-          image: uiImage,
-          width: outW, height: outH,
-          style: options.overlayStyle,
-          frameIndex: i,
-          totalFrames: totalFrames,
-          meta: meta
-        )
-      } else {
-        frameImage = resizedImage(uiImage, width: outW, height: outH)
+        let frameImage: UIImage
+        if options.overlayStyle != "none" {
+          frameImage = burnInOverlay(
+            image: uiImage,
+            width: outW, height: outH,
+            style: options.overlayStyle,
+            frameIndex: i,
+            totalFrames: totalFrames,
+            meta: meta
+          )
+        } else {
+          frameImage = resizedImage(uiImage, width: outW, height: outH)
+        }
+
+        return makePixelBuffer(from: frameImage, width: outW, height: outH)
       }
 
-      guard let buffer = makePixelBuffer(from: frameImage, width: outW, height: outH) else { continue }
+      guard let buffer = bufferOpt else { continue }
 
       let presentationTime = CMTimeMultiply(fps, multiplier: Int32(i))
 
@@ -357,14 +363,17 @@ public class TimelapseCreatorModule: Module {
       let totalH = max(logoSize, wmTextSize.height)
       let baseY = CGFloat(height) - wmPaddingB - totalH
 
+      var logoW: CGFloat = logoSize
       if !meta.logoPath.isEmpty {
         let path = meta.logoPath.replacingOccurrences(of: "file://", with: "")
         if let logo = UIImage(contentsOfFile: path) {
-          let logoRect = CGRect(x: wmPaddingL, y: baseY + (totalH - logoSize) / 2, width: logoSize, height: logoSize)
+          let logoAspect = logo.size.width / max(1, logo.size.height)
+          logoW = logoSize * logoAspect
+          let logoRect = CGRect(x: wmPaddingL, y: baseY + (totalH - logoSize) / 2, width: logoW, height: logoSize)
           logo.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
         }
       }
-      let textX = meta.logoPath.isEmpty ? wmPaddingL : (wmPaddingL + logoSize + gap)
+      let textX = meta.logoPath.isEmpty ? wmPaddingL : (wmPaddingL + logoW + gap)
       let textY = baseY + (totalH - wmTextSize.height) / 2
       (wmText as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: wmAttrs)
 
@@ -372,19 +381,22 @@ public class TimelapseCreatorModule: Module {
       let overlayFont = UIFont.boldSystemFont(ofSize: overlayFontSize)
       let paddingR: CGFloat = 16 * scale
       let paddingT: CGFloat = 16 * scale
-      let elapsed = totalFrames > 0
-        ? (Double(frameIndex) / Double(totalFrames)) * meta.recordingSec
-        : 0
+      let playbackRatio = totalFrames > 0 ? Double(frameIndex) / Double(totalFrames) : 0
 
       switch style {
-      case "timer":
+      case "timer-up":
+        let elapsed = playbackRatio * meta.recordingSec
+        let text = formatTimeHMS(elapsed)
+        drawTextTopRight(text, font: overlayFont, paddingRight: paddingR, paddingTop: paddingT, canvasWidth: CGFloat(width))
+
+      case "timer-down":
+        let elapsed = (1 - playbackRatio) * meta.recordingSec
         let text = formatTimeHMS(elapsed)
         drawTextTopRight(text, font: overlayFont, paddingRight: paddingR, paddingTop: paddingT, canvasWidth: CGFloat(width))
 
       case "progress":
         let finalPercent = meta.goalSec > 0 ? min(1.0, meta.recordingSec / meta.goalSec) : 1.0
-        let playback = totalFrames > 0 ? Double(frameIndex) / Double(totalFrames) : 0
-        let percent = finalPercent * playback
+        let percent = finalPercent * playbackRatio
         drawProgressBar(
           percent: percent,
           goalSeconds: meta.goalSec,
@@ -480,12 +492,19 @@ public class TimelapseCreatorModule: Module {
   }
 
   private func drawTextTopRight(_ text: String, font: UIFont, paddingRight: CGFloat, paddingTop: CGFloat, canvasWidth: CGFloat) {
-    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-    let shadowAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black.withAlphaComponent(0.6)]
-    let textSize = (text as NSString).size(withAttributes: attrs)
+    let scale = canvasWidth / 390.0
+    let shadow = NSShadow()
+    shadow.shadowColor = UIColor.black.withAlphaComponent(0.6)
+    shadow.shadowOffset = CGSize(width: 0, height: 1 * scale)
+    shadow.shadowBlurRadius = 4 * scale
+    let attrs: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: UIColor.white,
+      .shadow: shadow,
+    ]
+    let textSize = (text as NSString).size(withAttributes: [.font: font])
     let x = canvasWidth - paddingRight - textSize.width
     let y = paddingTop
-    (text as NSString).draw(at: CGPoint(x: x + 1.5, y: y + 1.5), withAttributes: shadowAttrs)
     (text as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
   }
 
@@ -496,15 +515,22 @@ public class TimelapseCreatorModule: Module {
     let labelGap: CGFloat = 8
     let goalText = formatGoalText(goalSeconds)
 
-    let labelAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white.withAlphaComponent(0.9)]
-    let shadowAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.black.withAlphaComponent(0.5)]
-    let labelSize = (goalText as NSString).size(withAttributes: labelAttrs)
+    let scale = canvasWidth / 390.0
+    let shadow = NSShadow()
+    shadow.shadowColor = UIColor.black.withAlphaComponent(0.6)
+    shadow.shadowOffset = CGSize(width: 0, height: 1 * scale)
+    shadow.shadowBlurRadius = 4 * scale
+    let labelAttrs: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: UIColor.white.withAlphaComponent(0.9),
+      .shadow: shadow,
+    ]
+    let labelSize = (goalText as NSString).size(withAttributes: [.font: font])
 
     let barX = canvasWidth - paddingRight - barWidth
     let labelX = barX - labelGap - labelSize.width
     let topY = paddingTop
 
-    (goalText as NSString).draw(at: CGPoint(x: labelX + 1, y: topY + 1), withAttributes: shadowAttrs)
     (goalText as NSString).draw(at: CGPoint(x: labelX, y: topY), withAttributes: labelAttrs)
 
     let barY = topY + (labelSize.height - barHeight) / 2

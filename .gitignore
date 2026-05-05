@@ -6,6 +6,8 @@ secret.env
 
 # Dependencies
 node_modules/
+.venv/
+uv.lock
 
 # Build
 dist/
@@ -18,3 +20,6 @@ __pycache__/
 # Uploads/Outputs (runtime data)
 uploads/
 outputs/
+
+# Local agent state (per-machine)
+.claude/

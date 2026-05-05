@@ -5,8 +5,6 @@ services:
       - "18001:8000"
     env_file:
       - secret.env
-    volumes:
-      - upload_data:/code/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -29,4 +27,3 @@ services:
 
 volumes:
   pg_data:
-  upload_data:

@@ -14,7 +14,7 @@ import { useMutation } from '@tanstack/react-query';
 import { createSession } from '../src/api/sessions';
 import Slider from '@react-native-community/slider';
 import { COLORS, ASPECT_RATIOS } from '../src/constants';
-import type { CreateSessionRequest } from '../src/types';
+import type { CreateSessionRequest, Session } from '../src/types';
 import { formatFocusMinutes } from '../src/utils/timeFormat';
 
 type TimerMode = 'countdown' | 'countup';
@@ -54,7 +54,7 @@ export default function SessionSetupScreen() {
   const mutation = useMutation({
     mutationFn: (data: CreateSessionRequest) => createSession(data),
     onSuccess: (res) => {
-      const session = res.data?.data;
+      const session = (res.data as unknown as { data: Session }).data;
       router.push({
         pathname: '/focus',
         params: {

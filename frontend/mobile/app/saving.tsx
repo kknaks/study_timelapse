@@ -13,6 +13,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Asset } from 'expo-asset';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 import { updateSession } from '../src/api/sessions';
@@ -45,7 +46,6 @@ export default function SavingScreen() {
     outputSeconds: string;
     goalSec: string;
     aspectRatio: string;
-    timerMode: string;
     previewPath: string;
     captureDir: string;
     cameraFacing: string;
@@ -59,7 +59,6 @@ export default function SavingScreen() {
   const outputSeconds = Number(params.outputSeconds) || 30;
   const goalSec = Number(params.goalSec) || studyMinutes * 60;
   const aspectRatio = params.aspectRatio ?? '9:16';
-  const timerMode = params.timerMode ?? 'countdown';
   const previewPath = params.previewPath ?? '';
   const captureDir = params.captureDir ?? '';
   const sessionId = params.sessionId ?? '';
@@ -138,6 +137,10 @@ export default function SavingScreen() {
       const cacheDir = FileSystem.cacheDirectory ?? '';
       const finalPath = `${cacheDir}timelapse_final_${Date.now()}.mp4`;
 
+      const logoAsset = Asset.fromModule(require('../assets/logo.png'));
+      await logoAsset.downloadAsync();
+      const logoPath = logoAsset.localUri ?? '';
+
       const subscription = TimelapseCreatorModule.addListener('onStitchProgress', () => {});
       try {
         await TimelapseCreatorModule.stitchTimelapse({
@@ -146,12 +149,13 @@ export default function SavingScreen() {
           width,
           height,
           outputFps: CAPTURE_TUNING.outputFps,
-          overlayStyle: overlayStyle as 'none' | 'timer' | 'progress' | 'streak',
+          overlayStyle: overlayStyle as 'none' | 'timer-up' | 'timer-down' | 'progress' | 'streak',
           overlayMeta: {
             recordingSec: recordingSeconds,
             goalSec,
             outputSec: outputSeconds,
             streak,
+            logoPath,
           },
         });
       } finally {
@@ -168,7 +172,7 @@ export default function SavingScreen() {
         try {
           await updateSession(sessionId, {
             end_time: new Date().toISOString(),
-            duration: recordingSeconds,
+            duration: Math.floor(recordingSeconds),
             status: 'completed',
           });
         } catch (e) {
@@ -181,9 +185,13 @@ export default function SavingScreen() {
         FileSystem.deleteAsync(previewPath, { idempotent: true }).catch(() => {});
       }
       if (captureDir) {
+        const ttlMs = CAPTURE_TUNING.cleanupTtlSec * 1000;
+        console.log(`[cleanup] scheduled in ${CAPTURE_TUNING.cleanupTtlSec}s for ${captureDir}`);
         setTimeout(() => {
-          FileSystem.deleteAsync(captureDir, { idempotent: true }).catch(() => {});
-        }, CAPTURE_TUNING.cleanupTtlSec * 1000);
+          FileSystem.deleteAsync(captureDir, { idempotent: true })
+            .then(() => console.log('[cleanup] captureDir deleted:', captureDir))
+            .catch((e) => console.log('[cleanup] failed:', e));
+        }, ttlMs);
       }
 
       setDone(idx); idx++;

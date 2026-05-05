@@ -33,7 +33,7 @@ export type StitchOptions = {
   width: number;
   height: number;
   outputFps: number;      // 30
-  overlayStyle: 'none' | 'timer' | 'progress' | 'streak';
+  overlayStyle: 'none' | 'timer-up' | 'timer-down' | 'progress' | 'streak';
   overlayMeta: StitchOverlayMeta;
 };
 

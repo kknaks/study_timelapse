@@ -135,3 +135,25 @@ export interface TimelapseStatusResponse {
 
 /** 지원 언어 */
 export type SupportedLocale = 'ko' | 'zh' | 'ja' | 'en' | 'es';
+
+/** 구독 상태 */
+export type SubscriptionStatus = 'free' | 'trial' | 'pro';
+
+/** 사용자 정보 — 백엔드 UserResponse 미러링 (snake_case → camelCase) */
+export interface User {
+  id: string;
+  provider: string;
+  email: string | null;
+  name: string | null;
+  streak: number;
+  longestStreak: number;
+  totalFocusTime: number;
+  subscriptionStatus: SubscriptionStatus;
+  trialStartDate: string | null;
+  /** Pro 구독 여부 (백엔드 is_pro 매핑) */
+  isPro: boolean;
+  /** Pro 구독 만료일 ISO 8601, 없으면 null (백엔드 pro_until 매핑) */
+  proUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

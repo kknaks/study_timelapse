@@ -13,10 +13,6 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     debug: bool = False
 
-    # Upload
-    upload_dir: str = "/code/uploads"
-    max_upload_size_mb: int = 2048
-
     # CORS
     cors_origins: str = "*"
 

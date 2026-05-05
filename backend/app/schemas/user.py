@@ -17,6 +17,8 @@ class UserResponse(BaseModel):
     total_focus_time: int = 0
     subscription_status: str = "free"
     trial_start_date: date | None = None
+    is_pro: bool = False
+    pro_until: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -19,6 +19,7 @@ import { getMe, updateProfile } from '../src/api/user';
 import { tokenStore } from '../src/auth/tokenStore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { COLORS } from '../src/constants';
+import type { User, WeeklyStats } from '../src/types';
 import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -90,15 +91,15 @@ export default function StatsScreen() {
     ]);
   };
 
-  const { data: statsData } = useQuery({
+  const { data: statsData } = useQuery<{ success: boolean; data: WeeklyStats }>({
     queryKey: ['weekly-stats'],
-    queryFn: () => getWeeklyStats().then((r) => r.data),
+    queryFn: () => getWeeklyStats().then((r) => r.data as unknown as { success: boolean; data: WeeklyStats }),
     enabled: isLoggedIn,
   });
 
-  const { data: userData } = useQuery({
+  const { data: userData } = useQuery<{ success: boolean; data: User }>({
     queryKey: ['me'],
-    queryFn: () => getMe().then((r) => r.data),
+    queryFn: () => getMe().then((r) => r.data as unknown as { success: boolean; data: User }),
     enabled: isLoggedIn,
   });
 

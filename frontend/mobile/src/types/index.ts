@@ -1,9 +1,12 @@
 export interface User {
   id: string;
+  name?: string;
   streak: number;
   longest_streak: number;
   total_focus_time: number;
   subscription_status: 'free' | 'trial' | 'pro';
+  is_pro: boolean;
+  pro_until: string | null;
 }
 
 export interface Session {
