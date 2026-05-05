@@ -20,8 +20,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "This app does not use your location.",
         "NSCameraUsageDescription": "FocusTimelapse needs camera access to record your study session and create a timelapse video.",
-        "NSPhotoLibraryAddUsageDescription": "FocusTimelapse needs permission to save the completed timelapse video to your gallery.",
-        "LSMinimumSystemVersion": "16.0"
+        "NSPhotoLibraryAddUsageDescription": "FocusTimelapse needs permission to save the completed timelapse video to your gallery."
       }
     },
     "android": {
