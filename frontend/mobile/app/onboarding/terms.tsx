@@ -25,7 +25,9 @@ export default function OnboardingTermsScreen() {
     try {
       setIsSubmitting(true);
       await agreeToTerms();
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      // invalidate + active query refetch 끝까지 await (race condition 방지)
+      // 안 그러면 RouteGuard가 stale data로 다시 onboarding redirect
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
       router.replace('/');
     } catch (e: any) {
       const status = e?.response?.status;
