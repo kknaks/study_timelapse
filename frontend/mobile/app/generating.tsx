@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Asset } from 'expo-asset';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 import { useSubscription } from '../src/hooks/useSubscription';
@@ -66,6 +67,11 @@ export default function GeneratingScreen() {
       const [width, height] = RESOLUTIONS[aspectRatio] ?? [720, 1280];
       const previewPath = `${FileSystem.documentDirectory ?? ''}sessions/${sessionId}/preview.mp4`;
 
+      // logoPath: preview 도 갤러리와 동일하게 logo + FocusTimelapse 워터마크 burn-in
+      const logoAsset = Asset.fromModule(require('../assets/logo.png'));
+      await logoAsset.downloadAsync();
+      const logoPath = logoAsset.localUri ?? '';
+
       const subscription = TimelapseCreatorModule.addListener('onStitchProgress', (event) => {
         setProgress(Math.round(event.progress * 100));
       });
@@ -82,7 +88,8 @@ export default function GeneratingScreen() {
             recordingSec: recordingSeconds,
             goalSec,
             outputSec: outputSeconds,
-            showAppMark: showWatermark,  // preview 도 갤러리와 일관 (Free=표시, Pro/Trial=제거)
+            logoPath,  // preview 도 갤러리와 동일하게 logo 전달
+            showAppMark: showWatermark,  // Free=표시, Pro/Trial=제거
           },
         });
       } finally {
