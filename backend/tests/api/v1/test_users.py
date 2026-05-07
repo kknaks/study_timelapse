@@ -47,6 +47,9 @@ class _FakeDb:
     async def flush(self) -> None:
         pass
 
+    async def refresh(self, obj) -> None:
+        pass
+
     async def execute(self, stmt) -> MagicMock:
         result = MagicMock()
         result.scalar_one_or_none.return_value = None
