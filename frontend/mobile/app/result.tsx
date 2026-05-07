@@ -200,16 +200,7 @@ export default function ResultScreen() {
               height: vidH,
               overflow: 'hidden',
             }}>
-              {showWatermark && (
-                <View style={[styles.watermark, {
-                  bottom: SL.watermark.paddingBottom,
-                  left: SL.watermark.paddingLeft,
-                  gap: SL.watermark.gap,
-                }]}>
-                  <Image source={require('../assets/logo.png')} style={{ width: SL.watermark.logoSize * (232 / 186), height: SL.watermark.logoSize }} resizeMode="contain" />
-                  <Text style={[styles.watermarkText, { fontSize: SL.watermark.fontSize }]}>FocusTimelapse</Text>
-                </View>
-              )}
+              {/* 워터마크 RN 오버레이 제거 — preview 영상 자체에 burn-in 됨 (Native burnInOverlay) */}
 
               {(overlayStyle === 'timer-up' || overlayStyle === 'timer-down' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
                 <View style={[styles.topRightOverlay, {
