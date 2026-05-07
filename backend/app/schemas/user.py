@@ -63,3 +63,10 @@ class ProfileUpdateRequest(BaseModel):
     """프로필 업데이트 요청."""
 
     name: str
+
+
+class TermsAgreeRequest(BaseModel):
+    """약관 동의 요청."""
+
+    terms_agreed: bool
+    privacy_agreed: bool

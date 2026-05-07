@@ -47,6 +47,11 @@ class TermsNotAgreedError(AppError):
         super().__init__(402, "TERMS_NOT_AGREED", "약관 동의가 필요합니다.")
 
 
+class InvalidAgreementError(AppError):
+    def __init__(self) -> None:
+        super().__init__(400, "INVALID_AGREEMENT", "약관 및 개인정보처리방침 동의가 필요합니다.")
+
+
 class InvalidPlanError(AppError):
     def __init__(self) -> None:
         super().__init__(400, "INVALID_PLAN", "'monthly' 플랜만 지원합니다.")

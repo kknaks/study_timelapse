@@ -6,8 +6,6 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { loginWithGoogle } from '../src/api/auth';
 import { tokenStore } from '../src/auth/tokenStore';
 import { useAuth } from '../src/auth/AuthContext';
-import { TermsAgreementCheckbox } from '../src/components/TermsAgreementCheckbox';
-import { ls } from '../src/i18n/subscription';
 import { useState } from 'react';
 import Constants from 'expo-constants';
 
@@ -22,11 +20,8 @@ export default function LoginScreen() {
   const queryClient = useQueryClient();
   const { setLoggedIn } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [termsAgreed, setTermsAgreed] = useState(false);
-  const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
-  const canSignIn = termsAgreed && privacyAgreed;
 
   function detectTimezone(): string {
     try {
@@ -37,10 +32,6 @@ export default function LoginScreen() {
   }
 
   const handleGoogleSignIn = async () => {
-    if (!canSignIn) {
-      Alert.alert('', ls.validationMessage);
-      return;
-    }
     try {
       setIsSigningIn(true);
       await GoogleSignin.hasPlayServices();
@@ -50,15 +41,19 @@ export default function LoginScreen() {
 
       const res = await loginWithGoogle({
         id_token: idToken,
-        terms_agreed: true,
-        privacy_agreed: true,
+        terms_agreed: false,
+        privacy_agreed: false,
         timezone: detectTimezone(),
       });
       const { access_token, refresh_token } = res.data.data.tokens;
       await tokenStore.saveTokens(access_token, refresh_token);
       setLoggedIn(true);
       queryClient.invalidateQueries();
-      router.replace('/');
+      if (res.data.data.user.is_new) {
+        router.replace('/onboarding/terms');
+      } else {
+        router.replace('/');
+      }
     } catch (error: any) {
       if (error.code === statusCodes.SIGN_IN_CANCELLED) return;
       if (error.code === statusCodes.IN_PROGRESS) return;
@@ -83,20 +78,13 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
 
-        <TermsAgreementCheckbox
-          termsAgreed={termsAgreed}
-          privacyAgreed={privacyAgreed}
-          onTermsChange={setTermsAgreed}
-          onPrivacyChange={setPrivacyAgreed}
-        />
-
         <TouchableOpacity
-          style={[styles.googleButton, !canSignIn && styles.googleButtonDisabled]}
+          style={[styles.googleButton, isSigningIn && styles.googleButtonDisabled]}
           onPress={handleGoogleSignIn}
-          disabled={isSigningIn || !canSignIn}
+          disabled={isSigningIn}
           activeOpacity={0.8}
         >
-          <Text style={[styles.googleButtonText, !canSignIn && styles.googleButtonTextDisabled]}>
+          <Text style={[styles.googleButtonText, isSigningIn && styles.googleButtonTextDisabled]}>
             {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
           </Text>
         </TouchableOpacity>

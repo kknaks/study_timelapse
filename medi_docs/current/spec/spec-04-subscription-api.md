@@ -1,10 +1,10 @@
 ---
 id: spec-04
 type: spec
-title: 구독 API 계약 — mock-purchase / debug / GET users/me 확장
+title: 구독 API 계약 — mock-purchase / debug / GET users/me 확장 / PUT terms-agree
 status: draft
 created: 2026-05-06
-updated: 2026-05-06
+updated: 2026-05-07
 sources:
   - "[[plan-03-payment-roadmap]]"
   - "[[adr-12-mock-purchase-api-and-events]]"
@@ -262,6 +262,61 @@ else:                              → null
 
 ---
 
+---
+
+### 3-4. PUT /api/users/me/terms-agree
+
+**목적**: 신규 가입자 onboarding 화면에서 이용약관 + 개인정보처리방침 동의를 별도 endpoint 로 기록. OAuth 가입 시 `terms_agreed_at = NULL` 로 생성된 사용자가 호출한다. 기존 동의 사용자 재호출 시 시각 갱신 (멱등 허용).
+
+**인증**: JWT 필수 (`Authorization: Bearer <jwt>`)
+
+**Request**
+```json
+PUT /api/users/me/terms-agree
+Authorization: Bearer <jwt>
+Content-Type: application/json
+
+{
+  "terms_agreed": true,
+  "privacy_agreed": true
+}
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|:---:|------|
+| `terms_agreed` | `bool` | ✓ | 이용약관 동의 여부. `true` 여야 유효 |
+| `privacy_agreed` | `bool` | ✓ | 개인정보처리방침 동의 여부. `true` 여야 유효 |
+
+**Response 200 — 성공**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "provider": "google",
+    ...
+    "terms_agreed_at": "2026-05-07T09:00:00Z",
+    "privacy_agreed_at": "2026-05-07T09:00:00Z",
+    ...
+  }
+}
+```
+
+`data` 는 `GET /api/users/me` 와 동일한 `UserResponseV2` 포맷.
+
+**Response 4xx**
+
+| HTTP | code | 조건 |
+|------|------|------|
+| 400 | `INVALID_AGREEMENT` | `terms_agreed` 또는 `privacy_agreed` 중 하나라도 `false` |
+| 401 | `UNAUTHORIZED` | 인증 토큰 없음 또는 만료 |
+
+**Side-effect**:
+- `User.terms_agreed_at = now()`, `User.privacy_agreed_at = now()` (UTC)
+- 재호출 시 덮어쓰기 허용 (시각 갱신)
+
+---
+
 ## 4. 에러 코드 목록
 
 | Code | HTTP | 설명 |
@@ -273,6 +328,7 @@ else:                              → null
 | `DEBUG_API_DISABLED` | 404 | debug API: ENV 가드 미통과 |
 | `UNAUTHORIZED` | 401 | 인증 토큰 없음 또는 만료 |
 | `DAILY_QUOTA_EXCEEDED` | 403 | 일일 한도 초과 (세션 시작 시) |
+| `INVALID_AGREEMENT` | 400 | terms-agree: `terms_agreed` 또는 `privacy_agreed` 가 `false` |
 
 ---
 
