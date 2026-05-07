@@ -27,14 +27,6 @@ export type StitchOverlayMeta = {
   logoPath?: string;
 };
 
-export type WatermarkPayload = {
-  text: string;
-  position: 'bottom-right' | 'bottom-left' | 'bottom-center';
-  fontSize: number;
-  opacity: number;
-  color: string;
-};
-
 export type StitchOptions = {
   captureDir: string;     // captures/ 디렉토리
   outputPath: string;     // 결과 MP4 경로
@@ -43,7 +35,6 @@ export type StitchOptions = {
   outputFps: number;      // 30
   overlayStyle: 'none' | 'timer-up' | 'timer-down' | 'progress' | 'streak';
   overlayMeta: StitchOverlayMeta;
-  watermark?: WatermarkPayload; // undefined = no watermark (Swift default: empty text)
 };
 
 // ── Module declaration ──────────────────────────────────────────────────────
