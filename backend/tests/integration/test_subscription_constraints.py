@@ -1,7 +1,7 @@
 """T-007 — 구독 Check Constraint + 인덱스 실DB 통합 테스트.
 
 실행 전제: alembic upgrade head 완료 (subscription_events 테이블 존재).
-DB: localhost:15434 (docker-compose)
+DB: TEST_DATABASE_URL > DATABASE_URL(+asyncpg 제거) > localhost:15434 (로컬 기본값)
 """
 
 from __future__ import annotations
@@ -11,10 +11,15 @@ import uuid
 
 import pytest
 
-_DB_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql://timelapse:timelapse123@localhost:15434/study_timelapse",
-)
+
+def _resolve_db_url() -> str:
+    if url := os.getenv("TEST_DATABASE_URL"):
+        return url
+    url = os.getenv("DATABASE_URL", "postgresql://timelapse:timelapse123@localhost:15434/study_timelapse")
+    return url.replace("postgresql+asyncpg://", "postgresql://")
+
+
+_DB_URL = _resolve_db_url()
 
 # asyncpg 가 설치돼 있고 DB가 접근 가능할 때만 실행
 asyncpg = pytest.importorskip("asyncpg")
