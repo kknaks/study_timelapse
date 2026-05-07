@@ -97,14 +97,50 @@ async def update_terms_agree(
     now = datetime.utcnow()
     current_user.terms_agreed_at = now
     current_user.privacy_agreed_at = now
-    # 진단 모드 — minimal 응답으로 격리
+    # onupdate=func.now() 컬럼(updated_at)은 UPDATE 후 server-side 갱신이라
+    # SQLAlchemy가 stale로 mark → 응답 build 시 sync lazy load 시도 → MissingGreenlet
+    # 정석: flush + 명시 refresh 로 async 컨텍스트에서 재로드
+    await db.flush()
+    await db.refresh(current_user)
+
+    try:
+        tz = ZoneInfo(current_user.timezone)
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = ZoneInfo("UTC")
+    today_local = datetime.now(tz).date()
+    result = await db.execute(
+        select(DailyFocus).where(
+            DailyFocus.user_id == current_user.id,
+            DailyFocus.date == today_local,
+        )
+    )
+    daily = result.scalar_one_or_none()
+    daily_session_count = daily.session_count if daily else 0
+
     return {
         "success": True,
-        "data": {
-            "id": str(current_user.id),
-            "terms_agreed_at": current_user.terms_agreed_at.isoformat(),
-            "privacy_agreed_at": current_user.privacy_agreed_at.isoformat(),
-        },
+        "data": UserResponseV2(
+            id=str(current_user.id),
+            provider=current_user.provider,
+            email=current_user.email,
+            name=current_user.name,
+            streak=current_user.streak,
+            longest_streak=current_user.longest_streak,
+            total_focus_time=current_user.total_focus_time,
+            subscription_status=current_user.subscription_status,
+            trial_start_date=current_user.trial_start_date,
+            is_pro=current_user.is_pro,
+            pro_until=current_user.pro_until,
+            timezone=current_user.timezone,
+            terms_agreed_at=current_user.terms_agreed_at,
+            privacy_agreed_at=current_user.privacy_agreed_at,
+            daily_session_count=daily_session_count,
+            daily_quota=sub_service.compute_daily_quota(current_user),
+            daily_quota_resets_at=sub_service.compute_daily_quota_resets_at(current_user),
+            banner_alert=sub_service.compute_banner_alert(current_user),
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at,
+        ).model_dump(mode="json"),
     }
 
 
