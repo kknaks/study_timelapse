@@ -21,6 +21,8 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
 import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
+import { useSubscription } from '../src/hooks/useSubscription';
+import { SubscriptionBadge } from '../src/components/SubscriptionBadge';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_NAMES = [
@@ -58,6 +60,7 @@ export default function StatsScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [timerAlert, setTimerAlert] = useState(true);
   const [editingName, setEditingName] = useState(false);
+  const { status: subscriptionStatus, trialDaysRemaining } = useSubscription();
   const [nameInput, setNameInput] = useState('');
   const cellRefs = useRef<Map<string, View>>(new Map());
   const queryClient = useQueryClient();
@@ -416,7 +419,12 @@ export default function StatsScreen() {
 
             {/* Upgrade */}
             <View style={styles.upgradeBox}>
-              <Text style={styles.upgradeTitle}>✦ Upgrade to Pro</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={styles.upgradeTitle}>✦ Upgrade to Pro</Text>
+                {subscriptionStatus === 'trial' && (
+                  <SubscriptionBadge daysRemaining={trialDaysRemaining} />
+                )}
+              </View>
               <Text style={styles.upgradeDesc}>Remove watermark and unlock all features</Text>
               <TouchableOpacity style={styles.upgradeBtn} onPress={() => { setShowSettings(false); router.push('/paywall'); }}>
                 <Text style={styles.upgradeBtnText}>Upgrade Now →</Text>

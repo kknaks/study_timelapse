@@ -15,14 +15,14 @@ export function SubscriptionBadge({ daysRemaining }: Props) {
 
 const styles = StyleSheet.create({
   badge: {
-    backgroundColor: '#FFF3CD',
+    backgroundColor: '#E5E7EB',
     borderRadius: 12,
     paddingVertical: 4,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
   text: {
-    color: '#856404',
+    color: '#6B7280',
     fontSize: 12,
     fontWeight: '600',
   },
