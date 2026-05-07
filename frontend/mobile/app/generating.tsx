@@ -4,6 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 import { CAPTURE_TUNING } from '../src/constants/captureTuning';
+import { useSubscription } from '../src/hooks/useSubscription';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -35,15 +36,18 @@ export default function GeneratingScreen() {
   const studyMinutes = Number(params.studyMinutes) || 0;
   const cameraFacing = params.cameraFacing ?? 'front';
 
+  const { showWatermark, isLoading: subLoading } = useSubscription();
+
   const [progress, setProgress] = useState(0);
   const hasRun = useRef(false);
 
   useEffect(() => {
+    if (subLoading) return;
     if (hasRun.current) return;
     hasRun.current = true;
     runGenerate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [subLoading]);
 
   const runGenerate = async () => {
     try {
@@ -78,6 +82,7 @@ export default function GeneratingScreen() {
             recordingSec: recordingSeconds,
             goalSec,
             outputSec: outputSeconds,
+            showAppMark: showWatermark,  // preview 도 갤러리와 일관 (Free=표시, Pro/Trial=제거)
           },
         });
       } finally {
