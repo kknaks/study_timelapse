@@ -52,6 +52,7 @@ struct StitchOverlayMeta: Record {
   @Field var outputSec: Double = 5
   @Field var streak: Int = 0
   @Field var logoPath: String = ""
+  @Field var showAppMark: Bool = true   // 좌하단 logo + FocusTimelapse 표시 여부 (Free=true, Pro=false)
 }
 
 struct StitchOptions: Record {
@@ -345,34 +346,37 @@ public class TimelapseCreatorModule: Module {
       }
       image.draw(in: drawRect)
 
-      let wmFontSize = 22.0 * scale
-      let wmFont = UIFont.boldSystemFont(ofSize: wmFontSize)
-      let wmPaddingL: CGFloat = 16 * scale
-      let wmPaddingB: CGFloat = 16 * scale
-      let logoSize: CGFloat = 28 * scale
-      let gap: CGFloat = 8 * scale
-      let wmText = "FocusTimelapse"
-      let wmAttrs: [NSAttributedString.Key: Any] = [
-        .font: wmFont,
-        .foregroundColor: UIColor.white.withAlphaComponent(0.9),
-      ]
-      let wmTextSize = (wmText as NSString).size(withAttributes: wmAttrs)
-      let totalH = max(logoSize, wmTextSize.height)
-      let baseY = CGFloat(height) - wmPaddingB - totalH
+      // 좌하단 logo + FocusTimelapse 워터마크 — showAppMark=true 일 때만 (Free 사용자)
+      if meta.showAppMark {
+        let wmFontSize = 22.0 * scale
+        let wmFont = UIFont.boldSystemFont(ofSize: wmFontSize)
+        let wmPaddingL: CGFloat = 16 * scale
+        let wmPaddingB: CGFloat = 16 * scale
+        let logoSize: CGFloat = 28 * scale
+        let gap: CGFloat = 8 * scale
+        let wmText = "FocusTimelapse"
+        let wmAttrs: [NSAttributedString.Key: Any] = [
+          .font: wmFont,
+          .foregroundColor: UIColor.white.withAlphaComponent(0.9),
+        ]
+        let wmTextSize = (wmText as NSString).size(withAttributes: wmAttrs)
+        let totalH = max(logoSize, wmTextSize.height)
+        let baseY = CGFloat(height) - wmPaddingB - totalH
 
-      var logoW: CGFloat = logoSize
-      if !meta.logoPath.isEmpty {
-        let path = meta.logoPath.replacingOccurrences(of: "file://", with: "")
-        if let logo = UIImage(contentsOfFile: path) {
-          let logoAspect = logo.size.width / max(1, logo.size.height)
-          logoW = logoSize * logoAspect
-          let logoRect = CGRect(x: wmPaddingL, y: baseY + (totalH - logoSize) / 2, width: logoW, height: logoSize)
-          logo.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
+        var logoW: CGFloat = logoSize
+        if !meta.logoPath.isEmpty {
+          let path = meta.logoPath.replacingOccurrences(of: "file://", with: "")
+          if let logo = UIImage(contentsOfFile: path) {
+            let logoAspect = logo.size.width / max(1, logo.size.height)
+            logoW = logoSize * logoAspect
+            let logoRect = CGRect(x: wmPaddingL, y: baseY + (totalH - logoSize) / 2, width: logoW, height: logoSize)
+            logo.draw(in: logoRect, blendMode: .normal, alpha: 0.9)
+          }
         }
+        let textX = meta.logoPath.isEmpty ? wmPaddingL : (wmPaddingL + logoW + gap)
+        let textY = baseY + (totalH - wmTextSize.height) / 2
+        (wmText as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: wmAttrs)
       }
-      let textX = meta.logoPath.isEmpty ? wmPaddingL : (wmPaddingL + logoW + gap)
-      let textY = baseY + (totalH - wmTextSize.height) / 2
-      (wmText as NSString).draw(at: CGPoint(x: textX, y: textY), withAttributes: wmAttrs)
 
       let overlayFontSize: CGFloat = 24 * scale
       let overlayFont = UIFont.boldSystemFont(ofSize: overlayFontSize)

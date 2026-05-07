@@ -25,6 +25,7 @@ export type StitchOverlayMeta = {
   outputSec: number;
   streak?: number;
   logoPath?: string;
+  showAppMark?: boolean;  // 좌하단 logo + FocusTimelapse 워터마크 표시 여부 (Free=true, Pro=false)
 };
 
 export type StitchOptions = {

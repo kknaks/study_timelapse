@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
 import { updateSession } from '../src/api/sessions';
 import { CAPTURE_TUNING } from '../src/constants/captureTuning';
+import { useSubscription } from '../src/hooks/useSubscription';
 
 const RESOLUTIONS: Record<string, [number, number]> = {
   '9:16': [720, 1280],
@@ -84,6 +85,7 @@ export default function SavingScreen() {
 
   const [steps, setSteps] = useState<Step[]>(buildSteps);
   const [finished, setFinished] = useState(false);
+  const { showWatermark } = useSubscription();
 
   const setActive = (idx: number) =>
     setSteps(prev => prev.map((s, i) =>
@@ -156,6 +158,7 @@ export default function SavingScreen() {
             outputSec: outputSeconds,
             streak,
             logoPath,
+            showAppMark: showWatermark,  // Free=true (워터마크 표시), Pro/Trial=false (제거)
           },
         });
       } finally {
