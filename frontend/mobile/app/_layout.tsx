@@ -60,6 +60,9 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="paywall" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding/terms" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
+        <Stack.Screen name="legal/privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="legal/refund" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
     </QueryClientProvider>
