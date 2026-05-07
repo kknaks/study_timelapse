@@ -9,10 +9,13 @@ import { COLORS } from '../src/constants';
 import type { User, WeeklyStats } from '../src/types';
 import { useEffect } from 'react';
 import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
+import { useSubscription } from '../src/hooks/useSubscription';
+import { TrialExpiringBanner } from '../src/components/TrialExpiringBanner';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { isReady, isLoggedIn } = useAuth();
+  const { bannerAlert } = useSubscription();
 
   useEffect(() => {
     if (isReady && !isLoggedIn) {
@@ -46,6 +49,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Trial 만료 배너 — banner_alert 24h/1h 시 표시. 나중에 주석 처리 가능 */}
+      <TrialExpiringBanner
+        bannerAlert={bannerAlert}
+        onUpgrade={() => router.push('/paywall')}
+      />
       <View style={styles.content}>
         {/* Logo */}
         <View style={styles.logoArea}>
