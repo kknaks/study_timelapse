@@ -54,6 +54,14 @@ struct StitchOverlayMeta: Record {
   @Field var logoPath: String = ""
 }
 
+struct WatermarkOptions: Record {
+  @Field var text: String = ""          // empty = no watermark
+  @Field var position: String = "bottom-right"
+  @Field var fontSize: Double = 24
+  @Field var opacity: Double = 0.7
+  @Field var color: String = "#FFFFFF"
+}
+
 struct StitchOptions: Record {
   @Field var captureDir: String = ""
   @Field var outputPath: String = ""
@@ -62,6 +70,7 @@ struct StitchOptions: Record {
   @Field var outputFps: Int = 30
   @Field var overlayStyle: String = "none"
   @Field var overlayMeta: StitchOverlayMeta = StitchOverlayMeta()
+  @Field var watermark: WatermarkOptions = WatermarkOptions()
 }
 
 // MARK: - Module
@@ -278,7 +287,7 @@ public class TimelapseCreatorModule: Module {
         guard let imgData = try? Data(contentsOf: fileURL),
               let uiImage = UIImage(data: imgData) else { return nil }
 
-        let frameImage: UIImage
+        var frameImage: UIImage
         if options.overlayStyle != "none" {
           frameImage = burnInOverlay(
             image: uiImage,
@@ -290,6 +299,10 @@ public class TimelapseCreatorModule: Module {
           )
         } else {
           frameImage = resizedImage(uiImage, width: outW, height: outH)
+        }
+
+        if !options.watermark.text.isEmpty {
+          frameImage = burnInWatermarkText(image: frameImage, width: outW, height: outH, watermark: options.watermark)
         }
 
         return makePixelBuffer(from: frameImage, width: outW, height: outH)
@@ -466,6 +479,63 @@ public class TimelapseCreatorModule: Module {
     image.draw(in: CGRect(x: 0, y: 0, width: width, height: height))
     UIGraphicsPopContext()
     return buffer
+  }
+
+  // MARK: - Watermark Burn-in
+
+  private func colorFromHex(_ hex: String) -> UIColor {
+    var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+    if h.hasPrefix("#") { h = String(h.dropFirst()) }
+    guard h.count == 6, let rgb = UInt64(h, radix: 16) else { return .white }
+    return UIColor(
+      red: CGFloat((rgb >> 16) & 0xFF) / 255.0,
+      green: CGFloat((rgb >> 8) & 0xFF) / 255.0,
+      blue: CGFloat(rgb & 0xFF) / 255.0,
+      alpha: 1.0
+    )
+  }
+
+  private func burnInWatermarkText(image: UIImage, width: Int, height: Int, watermark: WatermarkOptions) -> UIImage {
+    let size = CGSize(width: width, height: height)
+    // Use min dimension so watermark stays proportional across 9:16 / 1:1 / 16:9
+    let scale = CGFloat(min(width, height)) / 390.0
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { _ in
+      image.draw(in: CGRect(origin: .zero, size: size))
+
+      let fontSize = CGFloat(watermark.fontSize) * scale
+      let font = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+      let baseColor = colorFromHex(watermark.color)
+      let textColor = baseColor.withAlphaComponent(CGFloat(watermark.opacity))
+
+      let shadow = NSShadow()
+      shadow.shadowColor = UIColor.black.withAlphaComponent(0.55)
+      shadow.shadowOffset = CGSize(width: 0, height: 1 * scale)
+      shadow.shadowBlurRadius = 3 * scale
+
+      let attrs: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: textColor,
+        .shadow: shadow,
+      ]
+
+      let text = watermark.text as NSString
+      let textSize = text.size(withAttributes: [.font: font])
+      let padding: CGFloat = 16 * scale
+      let y = CGFloat(height) - padding - textSize.height
+
+      let x: CGFloat
+      switch watermark.position {
+      case "bottom-left":
+        x = padding
+      case "bottom-center":
+        x = (CGFloat(width) - textSize.width) / 2
+      default: // bottom-right
+        x = CGFloat(width) - padding - textSize.width
+      }
+
+      text.draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+    }
   }
 
   // MARK: - Drawing Helpers

@@ -8,10 +8,13 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { createSession } from '../src/api/sessions';
+import { s } from '../src/i18n/subscription';
+import axios from 'axios';
 import Slider from '@react-native-community/slider';
 import { COLORS, ASPECT_RATIOS } from '../src/constants';
 import type { CreateSessionRequest, Session } from '../src/types';
@@ -50,6 +53,10 @@ export default function SessionSetupScreen() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
   const [timerMode, setTimerMode] = useState<TimerMode>('countdown');
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [quotaModal, setQuotaModal] = useState<{ visible: boolean; resetsAt: string }>({
+    visible: false,
+    resetsAt: '',
+  });
 
   const mutation = useMutation({
     mutationFn: (data: CreateSessionRequest) => createSession(data),
@@ -66,9 +73,17 @@ export default function SessionSetupScreen() {
         },
       });
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const code = error.response?.data?.error_code ?? error.response?.data?.detail;
+        if (status === 403 && code === 'DAILY_QUOTA_EXCEEDED') {
+          const resetsAt = error.response?.data?.daily_quota_resets_at ?? '자정';
+          setQuotaModal({ visible: true, resetsAt });
+          return;
+        }
+      }
       Alert.alert('Error', 'Failed to create session. Please try again.');
-      console.error('Create session error:', error);
     },
   });
 
@@ -268,6 +283,43 @@ export default function SessionSetupScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* 일일 한도 초과 모달 */}
+      <Modal
+        visible={quotaModal.visible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuotaModal((q) => ({ ...q, visible: false }))}
+      >
+        <TouchableOpacity
+          style={styles.modalBg}
+          activeOpacity={1}
+          onPress={() => setQuotaModal((q) => ({ ...q, visible: false }))}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{s.quota.exceededTitle}</Text>
+            <Text style={styles.modalText}>{s.quota.exceeded(quotaModal.resetsAt)}</Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={() => setQuotaModal((q) => ({ ...q, visible: false }))}
+              >
+                <Text style={styles.modalBtnCancelText}>{s.quota.dismissButton}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnUpgrade]}
+                onPress={() => {
+                  setQuotaModal((q) => ({ ...q, visible: false }));
+                  router.push('/paywall');
+                }}
+              >
+                <Text style={styles.modalBtnUpgradeText}>{s.quota.upgradeButton}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -504,4 +556,22 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCard: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 4 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
+  modalText: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 22 },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  modalBtnCancel: { backgroundColor: '#F5F5F5' },
+  modalBtnCancelText: { color: COLORS.text, fontSize: 15, fontWeight: '600' },
+  modalBtnUpgrade: { backgroundColor: '#1a1a1a' },
+  modalBtnUpgradeText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

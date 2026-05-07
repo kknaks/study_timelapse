@@ -26,7 +26,13 @@ async def login_google(
 ) -> dict:
     """Google id_token을 검증하고 JWT를 발급한다."""
     try:
-        result = await auth_service.login_with_google(db, request.id_token)
+        result = await auth_service.login_with_google(
+            db,
+            request.id_token,
+            terms_agreed=request.terms_agreed,
+            privacy_agreed=request.privacy_agreed,
+            timezone_str=request.timezone,
+        )
         return {
             "success": True,
             "data": {
@@ -49,7 +55,14 @@ async def login_apple(
 ) -> dict:
     """Apple identity_token을 검증하고 JWT를 발급한다."""
     try:
-        result = await auth_service.login_with_apple(db, request.identity_token, request.name)
+        result = await auth_service.login_with_apple(
+            db,
+            request.identity_token,
+            name=request.name,
+            terms_agreed=request.terms_agreed,
+            privacy_agreed=request.privacy_agreed,
+            timezone_str=request.timezone,
+        )
         return {
             "success": True,
             "data": {

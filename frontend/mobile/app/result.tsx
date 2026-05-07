@@ -13,6 +13,7 @@ import { getMe } from '../src/api/user';
 import { COLORS } from '../src/constants';
 import { buildScaledLayout } from '../src/constants/overlayLayout';
 import { formatGoalLabel } from '../src/utils/timeFormat';
+import { useSubscription } from '../src/hooks/useSubscription';
 
 type OverlayStyle = 'none' | 'timer-up' | 'timer-down' | 'progress' | 'streak';
 
@@ -113,15 +114,16 @@ export default function ResultScreen() {
     queryFn: () => getMe().then((r) => r.data),
   });
   const streak = (userData as any)?.data?.streak ?? (userData as any)?.streak ?? 0;
+  const { showWatermark, showProgressBar } = useSubscription();
 
   // RN 오버레이 SSOT — vidW 기준 scale (native와 동일: × vidW/390)
   const SL = buildScaledLayout(vidW || 390);
 
-  const overlayOptions: { key: OverlayStyle; label: string }[] = [
+  const overlayOptions: { key: OverlayStyle; label: string; proOnly?: boolean }[] = [
     { key: 'none', label: 'None' },
     { key: 'timer-up', label: 'Count Up' },
     { key: 'timer-down', label: 'Count Down' },
-    { key: 'progress', label: 'Progress Bar' }, // TODO(monetization): if (!user.is_pro) Progress bar 자물쇠 표시
+    { key: 'progress', label: 'Progress Bar', proOnly: true },
     { key: 'streak', label: 'Streak' },
   ];
 
@@ -189,7 +191,7 @@ export default function ResultScreen() {
               )}
             </View>
 
-            {/* RN 오버레이 시뮬: 워터마크 항상 + 선택된 스타일 (video timeline 에 sync) */}
+            {/* RN 오버레이: Free/Expired/Cancelled → 워터마크 표시, Trial/Pro → 숨김 */}
             <View pointerEvents="none" style={{
               position: 'absolute',
               left: offsetX,
@@ -198,14 +200,16 @@ export default function ResultScreen() {
               height: vidH,
               overflow: 'hidden',
             }}>
-              <View style={[styles.watermark, {
-                bottom: SL.watermark.paddingBottom,
-                left: SL.watermark.paddingLeft,
-                gap: SL.watermark.gap,
-              }]}>
-                <Image source={require('../assets/logo.png')} style={{ width: SL.watermark.logoSize * (232 / 186), height: SL.watermark.logoSize }} resizeMode="contain" />
-                <Text style={[styles.watermarkText, { fontSize: SL.watermark.fontSize }]}>FocusTimelapse</Text>
-              </View>
+              {showWatermark && (
+                <View style={[styles.watermark, {
+                  bottom: SL.watermark.paddingBottom,
+                  left: SL.watermark.paddingLeft,
+                  gap: SL.watermark.gap,
+                }]}>
+                  <Image source={require('../assets/logo.png')} style={{ width: SL.watermark.logoSize * (232 / 186), height: SL.watermark.logoSize }} resizeMode="contain" />
+                  <Text style={[styles.watermarkText, { fontSize: SL.watermark.fontSize }]}>FocusTimelapse</Text>
+                </View>
+              )}
 
               {(overlayStyle === 'timer-up' || overlayStyle === 'timer-down' || overlayStyle === 'progress' || overlayStyle === 'streak') && (
                 <View style={[styles.topRightOverlay, {
@@ -245,24 +249,43 @@ export default function ResultScreen() {
       <View style={styles.bottomCard}>
         <Text style={styles.sectionLabel}>OVERLAY STYLE</Text>
         <View style={styles.overlayRow}>
-          {overlayOptions.map((opt) => (
-            <TouchableOpacity
-              key={opt.key}
-              style={[styles.overlayBtn, overlayStyle === opt.key && styles.overlayBtnActive]}
-              onPress={() => setOverlayStyle(opt.key)}
-            >
-              <Text style={[styles.overlayBtnText, overlayStyle === opt.key && styles.overlayBtnTextActive]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {overlayOptions.map((opt) => {
+            const locked = opt.proOnly && !showProgressBar;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[
+                  styles.overlayBtn,
+                  overlayStyle === opt.key && styles.overlayBtnActive,
+                  locked && styles.overlayBtnLocked,
+                ]}
+                onPress={() => {
+                  if (locked) {
+                    router.push('/paywall');
+                    return;
+                  }
+                  setOverlayStyle(opt.key);
+                }}
+              >
+                <Text style={[
+                  styles.overlayBtnText,
+                  overlayStyle === opt.key && styles.overlayBtnTextActive,
+                  locked && styles.overlayBtnTextLocked,
+                ]}>
+                  {opt.label}{locked ? ' (Pro)' : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveText}>Save to Gallery</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
-          <Text style={styles.upgradeText}>Remove Watermark (Upgrade)</Text>
-        </TouchableOpacity>
+        {showWatermark && (
+          <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
+            <Text style={styles.upgradeText}>Remove Watermark (Upgrade)</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -339,4 +362,6 @@ const styles = StyleSheet.create({
   saveText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   upgradeButton: { alignItems: 'center', paddingVertical: 4 },
   upgradeText: { color: '#4A90E2', fontSize: 15, fontWeight: '500' },
+  overlayBtnLocked: { backgroundColor: '#E8E8E8', opacity: 0.7 },
+  overlayBtnTextLocked: { color: '#999' },
 });

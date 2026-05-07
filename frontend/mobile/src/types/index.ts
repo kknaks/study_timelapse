@@ -1,12 +1,25 @@
+import type { SubscriptionStatus, BannerAlert } from './subscription';
+
 export interface User {
   id: string;
   name?: string;
   streak: number;
   longest_streak: number;
   total_focus_time: number;
-  subscription_status: 'free' | 'trial' | 'pro';
+  // V1 fields (deprecated — use subscription_status instead)
+  subscription_status: SubscriptionStatus;
+  /** @deprecated Use subscription_status */
   is_pro: boolean;
+  // V2 fields
+  trial_start_date: string | null;
   pro_until: string | null;
+  timezone: string | null;
+  terms_agreed_at: string | null;
+  privacy_agreed_at: string | null;
+  daily_session_count: number;
+  daily_quota: number | null;
+  daily_quota_resets_at: string | null;
+  banner_alert: BannerAlert;
 }
 
 export interface Session {

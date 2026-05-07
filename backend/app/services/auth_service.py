@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import date, datetime
 
 import httpx
 import jwt as pyjwt
@@ -12,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.user import User
+from app.repositories.subscription_event import SubscriptionEventRepository
 from app.services.jwt_service import create_token_pair
+from app.services.subscription import apply_lazy_expiry
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,9 @@ async def get_or_create_user(
     provider_id: str,
     email: str | None = None,
     name: str | None = None,
+    terms_agreed: bool = False,
+    privacy_agreed: bool = False,
+    timezone_str: str = "UTC",
 ) -> tuple[User, bool]:
     """provider_id로 유저 조회 또는 생성. (user, is_new) 반환."""
     stmt = select(User).where(User.provider_id == provider_id)
@@ -124,27 +130,49 @@ async def get_or_create_user(
     user = result.scalar_one_or_none()
 
     if user:
-        # 기존 유저: 이메일/이름 업데이트 (있으면)
         if email and not user.email:
             user.email = email
         if name and not user.name:
             user.name = name
         return user, False
 
-    # 새 유저 생성
+    now_utc = datetime.utcnow()
+    today_utc = date.today()
+
     user = User(
         id=uuid.uuid4(),
         provider=provider,
         provider_id=provider_id,
         email=email,
         name=name,
+        subscription_status="trial",
+        trial_start_date=today_utc,
+        is_pro=True,
+        timezone=timezone_str,
+        terms_agreed_at=now_utc if terms_agreed else None,
+        privacy_agreed_at=now_utc if privacy_agreed else None,
     )
     db.add(user)
     await db.flush()
+
+    event_repo = SubscriptionEventRepository(db)
+    await event_repo.create(
+        user_id=user.id,
+        event_type="trial_started",
+        source="system",
+        plan="monthly",
+    )
+
     return user, True
 
 
-async def login_with_google(db: AsyncSession, id_token_str: str) -> dict:
+async def login_with_google(
+    db: AsyncSession,
+    id_token_str: str,
+    terms_agreed: bool = False,
+    privacy_agreed: bool = False,
+    timezone_str: str = "UTC",
+) -> dict:
     """Google 로그인 처리."""
     user_info = await verify_google_token(id_token_str)
     user, is_new = await get_or_create_user(
@@ -153,7 +181,13 @@ async def login_with_google(db: AsyncSession, id_token_str: str) -> dict:
         provider_id=user_info["provider_id"],
         email=user_info["email"],
         name=user_info["name"],
+        terms_agreed=terms_agreed,
+        privacy_agreed=privacy_agreed,
+        timezone_str=timezone_str,
     )
+    if not is_new:
+        event_repo = SubscriptionEventRepository(db)
+        await apply_lazy_expiry(user, db, event_repo)
     tokens = create_token_pair(str(user.id))
     return {
         "tokens": tokens,
@@ -168,7 +202,12 @@ async def login_with_google(db: AsyncSession, id_token_str: str) -> dict:
 
 
 async def login_with_apple(
-    db: AsyncSession, identity_token: str, name: str | None = None
+    db: AsyncSession,
+    identity_token: str,
+    name: str | None = None,
+    terms_agreed: bool = False,
+    privacy_agreed: bool = False,
+    timezone_str: str = "UTC",
 ) -> dict:
     """Apple 로그인 처리."""
     user_info = await verify_apple_token(identity_token)
@@ -178,7 +217,13 @@ async def login_with_apple(
         provider_id=user_info["provider_id"],
         email=user_info["email"],
         name=name or user_info["name"],
+        terms_agreed=terms_agreed,
+        privacy_agreed=privacy_agreed,
+        timezone_str=timezone_str,
     )
+    if not is_new:
+        event_repo = SubscriptionEventRepository(db)
+        await apply_lazy_expiry(user, db, event_repo)
     tokens = create_token_pair(str(user.id))
     return {
         "tokens": tokens,

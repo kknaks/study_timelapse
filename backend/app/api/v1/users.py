@@ -1,12 +1,21 @@
+"""유저 API 라우터."""
+
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.daily_focus import DailyFocus
 from app.models.user import User
-from app.schemas.user import ProfileUpdateRequest, StreakUpdateRequest, UserResponse
+from app.repositories.subscription_event import SubscriptionEventRepository
+from app.schemas.user import ProfileUpdateRequest, StreakUpdateRequest, UserResponseV2
+from app.services import subscription as sub_service
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -18,11 +27,29 @@ router = APIRouter(prefix="/users", tags=["Users"])
 )
 async def get_me(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """현재 로그인된 유저의 정보를 반환한다."""
+    """현재 로그인된 유저의 정보를 반환한다 (구독 상태 + 일일 한도 + 배너 포함)."""
+    event_repo = SubscriptionEventRepository(db)
+    await sub_service.apply_lazy_expiry(current_user, db, event_repo)
+
+    try:
+        tz = ZoneInfo(current_user.timezone)
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = ZoneInfo("UTC")
+    today_local = datetime.now(tz).date()
+    result = await db.execute(
+        select(DailyFocus).where(
+            DailyFocus.user_id == current_user.id,
+            DailyFocus.date == today_local,
+        )
+    )
+    daily = result.scalar_one_or_none()
+    daily_session_count = daily.session_count if daily else 0
+
     return {
         "success": True,
-        "data": UserResponse(
+        "data": UserResponseV2(
             id=str(current_user.id),
             provider=current_user.provider,
             email=current_user.email,
@@ -34,6 +61,13 @@ async def get_me(
             trial_start_date=current_user.trial_start_date,
             is_pro=current_user.is_pro,
             pro_until=current_user.pro_until,
+            timezone=current_user.timezone,
+            terms_agreed_at=current_user.terms_agreed_at,
+            privacy_agreed_at=current_user.privacy_agreed_at,
+            daily_session_count=daily_session_count,
+            daily_quota=sub_service.compute_daily_quota(current_user),
+            daily_quota_resets_at=sub_service.compute_daily_quota_resets_at(current_user),
+            banner_alert=sub_service.compute_banner_alert(current_user),
             created_at=current_user.created_at,
             updated_at=current_user.updated_at,
         ).model_dump(mode="json"),
@@ -53,7 +87,6 @@ async def update_profile(
     """유저의 닉네임을 업데이트한다."""
     name = request.name.strip()
     if not name:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="Name cannot be empty")
     current_user.name = name
     await db.flush()

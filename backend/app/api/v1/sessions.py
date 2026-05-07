@@ -1,7 +1,10 @@
+"""세션 API 라우터."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -9,10 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.exceptions import DailyQuotaExceededError
 from app.models.daily_focus import DailyFocus
 from app.models.session import FocusSession
 from app.models.user import User
 from app.schemas.session import SessionCreateRequest, SessionResponse, SessionUpdateRequest
+from app.services import subscription as sub_service
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
@@ -42,6 +47,26 @@ async def create_session(
             status_code=422,
             detail="aspect_ratio must be 9:16, 16:9, 1:1, 4:5, or 3:4",
         )
+
+    # 일일 한도 체크 (Free/Expired/Cancelled만료후 사용자)
+    quota = sub_service.compute_daily_quota(current_user)
+    if quota > 0:
+        try:
+            tz = ZoneInfo(current_user.timezone)
+        except (ZoneInfoNotFoundError, KeyError):
+            tz = ZoneInfo("UTC")
+        today_local = datetime.now(tz).date()
+        result = await db.execute(
+            select(DailyFocus).where(
+                DailyFocus.user_id == current_user.id,
+                DailyFocus.date == today_local,
+            )
+        )
+        daily = result.scalar_one_or_none()
+        if daily and daily.session_count >= quota:
+            raise DailyQuotaExceededError(
+                sub_service.compute_daily_quota_resets_at(current_user)
+            )
 
     # timezone-aware → naive (DB는 TIMESTAMP WITHOUT TIME ZONE)
     st = request.start_time
@@ -111,7 +136,6 @@ async def update_session(
             calculated = int((session.end_time - session.start_time).total_seconds())
             session.duration = max(0, calculated)
     elif request.duration is not None:
-        # end_time 없으면 프론트가 보낸 duration 사용 (fallback)
         session.duration = request.duration
     if request.status is not None:
         session.status = request.status
@@ -194,7 +218,12 @@ async def _update_daily_focus(
     db: AsyncSession, user: User, duration: int
 ) -> None:
     """일별 포커스 통계를 업데이트하고 streak을 계산한다."""
-    today = date.today()
+    try:
+        tz = ZoneInfo(user.timezone)
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = ZoneInfo("UTC")
+    today = datetime.now(tz).date()
+
     stmt = select(DailyFocus).where(
         DailyFocus.user_id == user.id,
         DailyFocus.date == today,

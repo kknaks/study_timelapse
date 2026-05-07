@@ -6,6 +6,8 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { loginWithGoogle } from '../src/api/auth';
 import { tokenStore } from '../src/auth/tokenStore';
 import { useAuth } from '../src/auth/AuthContext';
+import { TermsAgreementCheckbox } from '../src/components/TermsAgreementCheckbox';
+import { ls } from '../src/i18n/subscription';
 import { useState } from 'react';
 import Constants from 'expo-constants';
 
@@ -20,10 +22,25 @@ export default function LoginScreen() {
   const queryClient = useQueryClient();
   const { setLoggedIn } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [termsAgreed, setTermsAgreed] = useState(false);
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const canSignIn = termsAgreed && privacyAgreed;
+
+  function detectTimezone(): string {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  }
 
   const handleGoogleSignIn = async () => {
+    if (!canSignIn) {
+      Alert.alert('', ls.validationMessage);
+      return;
+    }
     try {
       setIsSigningIn(true);
       await GoogleSignin.hasPlayServices();
@@ -31,7 +48,12 @@ export default function LoginScreen() {
       const idToken = userInfo.data?.idToken;
       if (!idToken) throw new Error('No ID token received');
 
-      const res = await loginWithGoogle(idToken);
+      const res = await loginWithGoogle({
+        id_token: idToken,
+        terms_agreed: true,
+        privacy_agreed: true,
+        timezone: detectTimezone(),
+      });
       const { access_token, refresh_token } = res.data.data.tokens;
       await tokenStore.saveTokens(access_token, refresh_token);
       setLoggedIn(true);
@@ -61,13 +83,20 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Turn your focus into content.</Text>
         </View>
 
+        <TermsAgreementCheckbox
+          termsAgreed={termsAgreed}
+          privacyAgreed={privacyAgreed}
+          onTermsChange={setTermsAgreed}
+          onPrivacyChange={setPrivacyAgreed}
+        />
+
         <TouchableOpacity
-          style={styles.googleButton}
+          style={[styles.googleButton, !canSignIn && styles.googleButtonDisabled]}
           onPress={handleGoogleSignIn}
-          disabled={isSigningIn}
+          disabled={isSigningIn || !canSignIn}
           activeOpacity={0.8}
         >
-          <Text style={styles.googleButtonText}>
+          <Text style={[styles.googleButtonText, !canSignIn && styles.googleButtonTextDisabled]}>
             {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
           </Text>
         </TouchableOpacity>
@@ -128,10 +157,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
   },
+  googleButtonDisabled: {
+    opacity: 0.4,
+  },
   googleButtonText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#1a1a1a',
+  },
+  googleButtonTextDisabled: {
+    color: '#888',
   },
   versionText: {
     fontSize: 12,

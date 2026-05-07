@@ -7,6 +7,9 @@ class GoogleLoginRequest(BaseModel):
     """Google 로그인 요청."""
 
     id_token: str
+    terms_agreed: bool = False
+    privacy_agreed: bool = False
+    timezone: str = "UTC"
 
 
 class AppleLoginRequest(BaseModel):
@@ -14,6 +17,9 @@ class AppleLoginRequest(BaseModel):
 
     identity_token: str
     name: str | None = None  # Apple은 첫 로그인 시만 이름 제공
+    terms_agreed: bool = False
+    privacy_agreed: bool = False
+    timezone: str = "UTC"
 
 
 class RefreshTokenRequest(BaseModel):

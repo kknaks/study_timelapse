@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     apple_client_id: str = "com.focustimelapse.app"
     apple_team_id: str = ""
 
+    # Debug (stage only) — ALLOW_DEBUG_SUBSCRIPTION=1 설정 시 debug 라우터 등록
+    allow_debug_subscription: bool = False
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

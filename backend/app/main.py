@@ -24,6 +24,11 @@ app.add_middleware(
 app.add_exception_handler(AppError, app_exception_handler)
 app.include_router(v1_router, prefix="/api")
 
+if settings.allow_debug_subscription:
+    from app.api.v1.admin.debug import router as debug_router
+
+    app.include_router(debug_router)
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

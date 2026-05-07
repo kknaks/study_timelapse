@@ -19,6 +19,9 @@ def _make_fake_user() -> User:
     user.total_focus_time = 0
     user.streak = 0
     user.longest_streak = 0
+    user.subscription_status = "free"
+    user.timezone = "UTC"
+    user.pro_until = None
     return user
 
 
@@ -36,6 +39,12 @@ class _FakeDb:
             if hasattr(obj, "created_at") and obj.created_at is None:
                 obj.created_at = datetime.now(tz=UTC).replace(tzinfo=None)
         self._pending.clear()
+
+    async def execute(self, stmt) -> MagicMock:
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        result.scalars.return_value.all.return_value = []
+        return result
 
 
 @pytest.fixture

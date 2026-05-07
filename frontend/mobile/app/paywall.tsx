@@ -1,37 +1,97 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../src/auth/AuthContext';
+import { mockPurchase } from '../src/api/subscription';
+import { useSubscription } from '../src/hooks/useSubscription';
+import { s } from '../src/i18n/subscription';
+import axios from 'axios';
 
-type FeatureRow = {
-  label: string;
-  free: string;
-  pro: string;
-};
+type FeatureRow = { label: string; free: string; pro: string };
 
 const FEATURES: FeatureRow[] = [
-  { label: 'Daily Sessions',    free: '3 / day',    pro: 'Unlimited' },
-  { label: 'Watermark',         free: 'Always on',  pro: 'Remove' },
-  { label: 'Export Resolution', free: '720p',        pro: '1080p' },
-  { label: 'Overlay Styles',    free: 'All',         pro: 'All + more' },
-  { label: 'Streak Backup',     free: '—',           pro: 'Cloud sync' },
-  { label: 'Priority Support',  free: '—',           pro: 'Included' },
+  { label: '일일 횟수',      free: s.paywall.featureDaily_free,       pro: s.paywall.featureDaily_pro },
+  { label: '워터마크',        free: s.paywall.featureWatermark_free,   pro: s.paywall.featureWatermark_pro },
+  { label: '프로그레스바',    free: s.paywall.featureProgressBar_free, pro: s.paywall.featureProgressBar_pro },
+  { label: '가격',            free: s.paywall.featurePrice_free,       pro: s.paywall.featurePrice_pro },
 ];
 
 export default function PaywallScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { isLoggedIn } = useAuth();
+  const { user } = useSubscription();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubscribe = () => {
-    // TODO: RevenueCat 연동 시 구현
-    console.log('Subscribe tapped — coming soon');
-  };
+  // 가입 시 무조건 동의 방식 채택 — 이미 동의한 사용자는 재노출 불필요.
+  // terms_agreed_at 이 null 인 경우(비정상 케이스): /legal/terms 로 redirect 처리는
+  // backend 의 402/403 TERMS_NOT_AGREED 응답에서 catch.
+  const termsAlreadyAgreed = !!user?.terms_agreed_at;
 
-  const handleRestore = () => {
-    // TODO: RevenueCat 연동 시 구현
-    console.log('Restore tapped — coming soon');
+  // adr-13: 미인증 사용자는 로그인 화면으로 redirect
+  if (!isLoggedIn) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+            <Text style={styles.closeIcon}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.centerBox}>
+          <Text style={styles.heroTitle}>{s.paywall.loginRequired}</Text>
+          <TouchableOpacity
+            style={styles.ctaButton}
+            onPress={() => router.replace('/login')}
+          >
+            <Text style={styles.ctaText}>로그인</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const handleSubscribe = async () => {
+    setLoading(true);
+    try {
+      const res = await mockPurchase('monthly');
+      const data = res.data?.data ?? (res.data as unknown as { success: boolean; idempotent: boolean });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+
+      if (data.idempotent) {
+        Alert.alert('', s.paywall.alreadySubscribed, [
+          { text: '확인', onPress: () => router.replace('/') },
+        ]);
+      } else {
+        Alert.alert('', s.paywall.subscribed, [
+          { text: '확인', onPress: () => router.replace('/') },
+        ]);
+      }
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const code = err.response?.data?.error_code ?? err.response?.data?.detail;
+
+        if ((status === 402 || status === 403) && code === 'TERMS_NOT_AGREED') {
+          // T-010 약관 화면으로 redirect (화면 준비 전까지 alert fallback)
+          Alert.alert('약관 동의 필요', s.paywall.termsNotAgreed, [
+            { text: '확인', onPress: () => router.push('/terms') },
+          ]);
+          return;
+        }
+        if (status === 400 && code === 'INVALID_PLAN') {
+          Alert.alert('', s.paywall.invalidPlan);
+          return;
+        }
+      }
+      Alert.alert('오류', '구독 처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
           <Text style={styles.closeIcon}>✕</Text>
@@ -42,15 +102,12 @@ export default function PaywallScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <Text style={styles.heroLabel}>FOCUSTIMELAPSE</Text>
-          <Text style={styles.heroTitle}>Go Pro</Text>
-          <Text style={styles.heroSubtitle}>
-            Unlock the full experience.{'\n'}No limits. No watermark.
-          </Text>
+          <Text style={styles.heroTitle}>{s.paywall.title}</Text>
+          <Text style={styles.heroSubtitle}>{s.paywall.subtitle}</Text>
         </View>
 
         {/* Feature Table */}
         <View style={styles.table}>
-          {/* Column headers */}
           <View style={styles.tableHeader}>
             <View style={styles.featureCol} />
             <View style={styles.planCol}>
@@ -62,11 +119,7 @@ export default function PaywallScreen() {
               </View>
             </View>
           </View>
-
-          {/* Divider */}
           <View style={styles.divider} />
-
-          {/* Rows */}
           {FEATURES.map((f, i) => (
             <View key={f.label} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
               <View style={styles.featureCol}>
@@ -82,33 +135,24 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {/* Pricing */}
-        <View style={styles.pricingRow}>
-          <View style={styles.pricingCard}>
-            <Text style={styles.pricingPeriod}>Monthly</Text>
-            <Text style={styles.pricingPrice}>$2.99</Text>
-            <Text style={styles.pricingNote}>/ month</Text>
-          </View>
-          <View style={[styles.pricingCard, styles.pricingCardHighlight]}>
-            <View style={styles.saveBadge}><Text style={styles.saveBadgeText}>BEST VALUE</Text></View>
-            <Text style={[styles.pricingPeriod, { color: '#FFF' }]}>Yearly</Text>
-            <Text style={[styles.pricingPrice, { color: '#FFF' }]}>$19.99</Text>
-            <Text style={[styles.pricingNote, { color: 'rgba(255,255,255,0.6)' }]}>/ year</Text>
-          </View>
-        </View>
+        {/* Trial note */}
+        <Text style={styles.trialNote}>{s.paywall.featureTrial}</Text>
 
         {/* CTA */}
-        <TouchableOpacity style={styles.ctaButton} onPress={handleSubscribe}>
-          <Text style={styles.ctaText}>Start Free Trial</Text>
-        </TouchableOpacity>
-        <Text style={styles.trialNote}>7-day free trial · Cancel anytime</Text>
-
-        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
-          <Text style={styles.restoreText}>Restore Purchase</Text>
+        <TouchableOpacity
+          style={[styles.ctaButton, loading && styles.ctaButtonDisabled]}
+          onPress={handleSubscribe}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#1a1a1a" />
+          ) : (
+            <Text style={styles.ctaText}>{s.paywall.ctaSubscribe}</Text>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.legalText}>
-          Subscription auto-renews. Cancel at any time in App Store settings.
+          구독은 언제든지 취소 가능합니다. 실제 결제는 Apple/Google 스토어 연동 후 적용됩니다.
         </Text>
       </ScrollView>
     </View>
@@ -127,9 +171,10 @@ const styles = StyleSheet.create({
   closeButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   closeIcon: { color: 'rgba(255,255,255,0.5)', fontSize: 18 },
 
+  centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 24 },
+
   scroll: { paddingHorizontal: 24, paddingBottom: 48 },
 
-  // Hero
   hero: { alignItems: 'center', paddingVertical: 32 },
   heroLabel: {
     color: 'rgba(255,255,255,0.4)',
@@ -146,12 +191,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // Table
   table: {
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#252525',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   tableHeader: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 16 },
   featureCol: { flex: 2 },
@@ -171,43 +215,22 @@ const styles = StyleSheet.create({
   freeValue: { color: 'rgba(255,255,255,0.35)', fontSize: 13, textAlign: 'center' },
   proValue: { color: '#FFF', fontSize: 13, fontWeight: '600', textAlign: 'center' },
 
-  // Pricing
-  pricingRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  pricingCard: {
-    flex: 1,
-    backgroundColor: '#252525',
-    borderRadius: 16,
-    padding: 18,
-    alignItems: 'center',
-    gap: 4,
+  trialNote: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
   },
-  pricingCardHighlight: { backgroundColor: '#FFF', position: 'relative' },
-  saveBadge: {
-    position: 'absolute',
-    top: -10,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  saveBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  pricingPeriod: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '500', marginTop: 8 },
-  pricingPrice: { color: '#FFF', fontSize: 28, fontWeight: '800' },
-  pricingNote: { color: 'rgba(255,255,255,0.4)', fontSize: 12 },
 
-  // CTA
   ctaButton: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 16,
   },
+  ctaButtonDisabled: { opacity: 0.6 },
   ctaText: { color: '#1a1a1a', fontSize: 16, fontWeight: '700' },
-  trialNote: { color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginBottom: 20 },
-
-  restoreButton: { alignItems: 'center', paddingVertical: 8, marginBottom: 24 },
-  restoreText: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
 
   legalText: {
     color: 'rgba(255,255,255,0.25)',

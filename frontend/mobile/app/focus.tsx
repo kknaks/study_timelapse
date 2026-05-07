@@ -23,6 +23,7 @@ import { formatTimerDisplay } from '../src/utils/timeFormat';
 import { CAPTURE_TUNING } from '../src/constants/captureTuning';
 import { estimateOutputSec } from '../src/utils/captureSchedule';
 import TimelapseCreatorModule from '../modules/timelapse-creator/src/TimelapseCreatorModule';
+import { useSubscription } from '../src/hooks/useSubscription';
 
 const captureTimelapseFramePlugin = VisionCameraProxy.initFrameProcessorPlugin('captureTimelapseFrame', {});
 // 진단: plugin 등록 여부 즉시 확인
@@ -59,6 +60,7 @@ export default function FocusScreen() {
   const timerMode = params.timerMode ?? 'countdown';
 
   const { hasPermission: hasCameraPermission, requestPermission: requestCameraPermission } = useCameraPermission();
+  const { showProgressBar } = useSubscription();
 
   const [isRecording, setIsRecording] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -394,8 +396,8 @@ export default function FocusScreen() {
           </View>
         </View>
 
-        {/* 인디케이터: 결과 영상 예상 길이 (adr-07) */}
-        {hasStarted && elapsed > 0 && (
+        {/* 인디케이터: Trial/Pro 에게만 결과 영상 예상 길이 노출 (policy-01) */}
+        {hasStarted && elapsed > 0 && showProgressBar && (
           <View style={styles.indicatorRow}>
             <Text style={styles.indicatorText}>
               정지 시 결과 영상 약 {Math.round(estimatedOutputSec)}초

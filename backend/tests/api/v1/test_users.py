@@ -33,6 +33,9 @@ def _make_fake_user(*, is_pro: bool = False, pro_until=None) -> User:
     user.trial_start_date = None
     user.is_pro = is_pro
     user.pro_until = pro_until
+    user.timezone = "UTC"
+    user.terms_agreed_at = None
+    user.privacy_agreed_at = None
     user.created_at = datetime.now(tz=UTC).replace(tzinfo=None)
     user.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
     return user
@@ -41,6 +44,11 @@ def _make_fake_user(*, is_pro: bool = False, pro_until=None) -> User:
 class _FakeDb:
     async def flush(self) -> None:
         pass
+
+    async def execute(self, stmt) -> MagicMock:
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        return result
 
 
 @pytest.fixture
