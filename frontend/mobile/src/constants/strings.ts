@@ -21,7 +21,7 @@ export const s = {
     loginRequired: 'Login required to purchase',
   },
   trial: {
-    badge: (days: number) => `Trial: ${days}d left`,
+    badge: (_days: number) => `Trial`,
     expiring24h: 'Your trial ends in 24 hours',
     expiring1h: 'Your trial ends in 1 hour',
     upgradeNow: 'Subscribe Pro',

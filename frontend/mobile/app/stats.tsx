@@ -419,7 +419,7 @@ export default function StatsScreen() {
 
             {/* Upgrade */}
             <View style={styles.upgradeBox}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={styles.upgradeTitle}>✦ Upgrade to Pro</Text>
                 {subscriptionStatus === 'trial' && (
                   <SubscriptionBadge daysRemaining={trialDaysRemaining} />
