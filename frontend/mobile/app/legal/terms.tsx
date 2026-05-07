@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { termsOfService } from '../../src/legal/contents';
-import { ls } from '../../src/i18n/subscription';
+import { ls } from '../../src/constants/strings';
 
 export default function TermsScreen() {
   const router = useRouter();

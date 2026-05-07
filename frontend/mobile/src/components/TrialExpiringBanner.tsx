@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import type { BannerAlert } from '../types/subscription';
-import { s } from '../i18n/subscription';
+import { s } from '../constants/strings';
 
 interface Props {
   bannerAlert: BannerAlert;

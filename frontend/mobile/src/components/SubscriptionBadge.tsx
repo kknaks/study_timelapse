@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { s } from '../i18n/subscription';
+import { s } from '../constants/strings';
 
 interface Props {
   daysRemaining: number;

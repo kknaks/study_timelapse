@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../src/auth/AuthContext';
 import { mockPurchase } from '../src/api/subscription';
 import { useSubscription } from '../src/hooks/useSubscription';
-import { s } from '../src/i18n/subscription';
+import { s } from '../src/constants/strings';
 import axios from 'axios';
 
 type FeatureRow = { label: string; free: string; pro: string };

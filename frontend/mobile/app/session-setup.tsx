@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import { createSession } from '../src/api/sessions';
-import { s } from '../src/i18n/subscription';
+import { s } from '../src/constants/strings';
 import axios from 'axios';
 import Slider from '@react-native-community/slider';
 import { COLORS, ASPECT_RATIOS } from '../src/constants';
