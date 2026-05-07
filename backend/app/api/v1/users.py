@@ -97,7 +97,7 @@ async def update_terms_agree(
     now = datetime.utcnow()
     current_user.terms_agreed_at = now
     current_user.privacy_agreed_at = now
-    await db.flush()
+    # flush 제거 — session.begin() 컨텍스트가 자동 commit (get_db dependency)
 
     try:
         tz = ZoneInfo(current_user.timezone)
