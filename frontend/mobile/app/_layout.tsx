@@ -29,15 +29,16 @@ function RouteGuard() {
   const user = data?.data;
   const inOnboarding = segments[0] === 'onboarding';
   const inLogin = segments[0] === 'login';
+  const inLegal = segments[0] === 'legal';
 
   useEffect(() => {
     if (!isReady || !isLoggedIn) return;
-    if (inOnboarding || inLogin) return;
+    if (inOnboarding || inLogin || inLegal) return;
     if (!user) return;
     if (user.terms_agreed_at === null) {
       router.replace('/onboarding/terms');
     }
-  }, [isReady, isLoggedIn, user?.terms_agreed_at, inOnboarding, inLogin]);
+  }, [isReady, isLoggedIn, user?.terms_agreed_at, inOnboarding, inLogin, inLegal]);
 
   return null;
 }
