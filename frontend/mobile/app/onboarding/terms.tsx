@@ -27,8 +27,11 @@ export default function OnboardingTermsScreen() {
       await agreeToTerms();
       queryClient.invalidateQueries({ queryKey: ['me'] });
       router.replace('/');
-    } catch {
-      Alert.alert('Error', 'Failed to save your agreement. Please try again.');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.error_code || e?.response?.data?.detail || e?.message || 'Unknown';
+      console.error('[onboarding] agreeToTerms failed:', status, e?.response?.data, e?.message);
+      Alert.alert('Error', `[${status ?? '???'}] ${detail}`);
     } finally {
       setIsSubmitting(false);
     }
