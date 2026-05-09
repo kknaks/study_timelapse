@@ -10,11 +10,21 @@ function unwrapUser(res: unknown): User | null {
   return ('data' in r && r.data ? r.data : r) as User;
 }
 
-function trialDaysRemaining(trialStartDate: string | null): number {
-  if (!trialStartDate) return 0;
-  const start = new Date(trialStartDate).getTime();
-  const end = start + 7 * 24 * 60 * 60 * 1000;
-  const remaining = Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
+export function trialDaysRemaining(
+  trialStartDate: string | null,
+  subscriptionStatus: SubscriptionStatus,
+  proUntil: string | null,
+): number {
+  // Phase 1: trial_start_date is set — compute from trial_start_date + 7d
+  // Phase 2 new user: trial_start_date is NULL, RevenueCat trial end = pro_until
+  const trialEndMs = trialStartDate
+    ? new Date(trialStartDate).getTime() + 7 * 24 * 60 * 60 * 1000
+    : subscriptionStatus === 'trial' && proUntil
+      ? new Date(proUntil).getTime()
+      : null;
+
+  if (!trialEndMs) return 0;
+  const remaining = Math.ceil((trialEndMs - Date.now()) / (24 * 60 * 60 * 1000));
   return Math.max(0, remaining);
 }
 
@@ -49,7 +59,7 @@ export function useSubscription() {
     dailySessionCount: user?.daily_session_count ?? 0,
     dailyQuotaResetsAt: user?.daily_quota_resets_at ?? null,
     bannerAlert: user?.banner_alert ?? null,
-    trialDaysRemaining: trialDaysRemaining(user?.trial_start_date ?? null),
+    trialDaysRemaining: trialDaysRemaining(user?.trial_start_date ?? null, status, user?.pro_until ?? null),
     graceUntil,
     isGracePeriod,
     graceUntilApproaching,

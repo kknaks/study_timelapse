@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../src/auth/AuthContext';
 import { mockPurchase, verifySubscription } from '../src/api/subscription';
@@ -36,6 +36,8 @@ export default function PaywallScreen() {
   const { user } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [introEligible, setIntroEligible] = useState(false);
+  const { source } = useLocalSearchParams<{ source?: string }>();
+  const isOnboarding = source === 'onboarding';
 
   // All hooks must be called before any conditional return (Rules of Hooks)
   useEffect(() => {
@@ -57,12 +59,20 @@ export default function PaywallScreen() {
       .catch(() => setIntroEligible(false));
   }, [isLoggedIn]);
 
+  const handleClose = () => {
+    if (isOnboarding) {
+      router.replace('/');
+    } else {
+      router.back();
+    }
+  };
+
   // adr-13: 미인증 사용자는 로그인 화면으로 redirect
   if (!isLoggedIn) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
             <Text style={styles.closeIcon}>✕</Text>
           </TouchableOpacity>
         </View>
@@ -159,7 +169,7 @@ export default function PaywallScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
           <Text style={styles.closeIcon}>✕</Text>
         </TouchableOpacity>
       </View>
@@ -168,8 +178,17 @@ export default function PaywallScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <Text style={styles.heroLabel}>FOCUSTIMELAPSE</Text>
-          <Text style={styles.heroTitle}>{s.paywall.title}</Text>
-          <Text style={styles.heroSubtitle}>{s.paywall.subtitle}</Text>
+          {isOnboarding ? (
+            <>
+              <Text style={styles.heroTitle}>{'Welcome.\nTry 7 Days Free.'}</Text>
+              <Text style={styles.onboardingSourceLabel}>from onboarding</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.heroTitle}>{s.paywall.title}</Text>
+              <Text style={styles.heroSubtitle}>{s.paywall.subtitle}</Text>
+            </>
+          )}
         </View>
 
         {/* Feature Table */}
@@ -257,6 +276,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  onboardingSourceLabel: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 11,
+    letterSpacing: 0.5,
+    marginTop: 4,
   },
 
   table: {

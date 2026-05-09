@@ -28,7 +28,7 @@ export default function OnboardingTermsScreen() {
       // invalidate + active query refetch 끝까지 await (race condition 방지)
       // 안 그러면 RouteGuard가 stale data로 다시 onboarding redirect
       await queryClient.invalidateQueries({ queryKey: ['me'] });
-      router.replace('/');
+      router.replace('/onboarding/trial-intro');
     } catch (e: any) {
       const status = e?.response?.status;
       const detail = e?.response?.data?.error_code || e?.response?.data?.detail || e?.message || 'Unknown';
