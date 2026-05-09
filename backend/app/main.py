@@ -29,6 +29,11 @@ if settings.allow_debug_subscription:
 
     app.include_router(debug_router)
 
+if settings.revenuecat_webhook_auth_token:
+    from app.api.v1.subscription import webhook_router
+
+    app.include_router(webhook_router, prefix="/api")
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

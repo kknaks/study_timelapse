@@ -17,7 +17,8 @@ class SubscriptionEvent(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('trial_started','trial_expired','purchased',"
-            "'renewed','expired','cancelled','refunded')",
+            "'renewed','expired','cancelled','refunded',"
+            "'cancel_scheduled','billing_issue','sync')",
             name="event_type",
         ),
         CheckConstraint(
@@ -49,6 +50,8 @@ class SubscriptionEvent(Base):
         DateTime, nullable=False, server_default=func.now()
     )
     raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    event_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    transaction_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )

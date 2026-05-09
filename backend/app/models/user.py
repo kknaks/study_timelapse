@@ -40,6 +40,7 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(
         String(50), nullable=False, default="UTC", server_default="UTC"
     )
+    grace_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

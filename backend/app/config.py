@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # Debug (stage only) — ALLOW_DEBUG_SUBSCRIPTION=1 설정 시 debug 라우터 등록
     allow_debug_subscription: bool = False
 
+    # RevenueCat (Phase 2) — 미설정 시 webhook 라우터 미등록, verify/sync 503 응답
+    revenuecat_api_key: str = ""
+    revenuecat_webhook_auth_token: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

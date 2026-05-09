@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,9 @@ class SubscriptionEventRepository:
         amount_cents: int | None = None,
         currency: str | None = "USD",
         raw_payload: dict | None = None,
+        event_id: str | None = None,
+        transaction_id: str | None = None,
+        occurred_at: datetime | None = None,
     ) -> SubscriptionEvent:
         event = SubscriptionEvent(
             user_id=user_id,
@@ -32,7 +36,11 @@ class SubscriptionEventRepository:
             amount_cents=amount_cents,
             currency=currency,
             raw_payload=raw_payload,
+            event_id=event_id,
+            transaction_id=transaction_id,
         )
+        if occurred_at is not None:
+            event.occurred_at = occurred_at
         self._db.add(event)
         await self._db.flush()
         return event
@@ -48,3 +56,21 @@ class SubscriptionEventRepository:
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def exists_by_event_id(self, event_id: str) -> bool:
+        stmt = (
+            select(SubscriptionEvent.id)
+            .where(SubscriptionEvent.event_id == event_id)
+            .limit(1)
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def exists_by_transaction_id(self, transaction_id: str) -> bool:
+        stmt = (
+            select(SubscriptionEvent.id)
+            .where(SubscriptionEvent.transaction_id == transaction_id)
+            .limit(1)
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar_one_or_none() is not None

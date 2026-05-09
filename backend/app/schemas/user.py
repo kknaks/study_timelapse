@@ -39,6 +39,7 @@ class UserResponseV2(BaseModel):
     trial_start_date: date | None = None
     is_pro: bool = False
     pro_until: datetime | None = None
+    grace_until: datetime | None = None
     timezone: str = "UTC"
     terms_agreed_at: datetime | None = None
     privacy_agreed_at: datetime | None = None

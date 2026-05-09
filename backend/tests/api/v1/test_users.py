@@ -22,7 +22,7 @@ from app.main import app
 from app.models.user import User
 
 
-def _make_fake_user(*, is_pro: bool = False, pro_until=None) -> User:
+def _make_fake_user(*, is_pro: bool = False, pro_until=None, grace_until=None) -> User:
     user = MagicMock(spec=User)
     user.id = uuid.uuid4()
     user.provider = "google"
@@ -35,6 +35,7 @@ def _make_fake_user(*, is_pro: bool = False, pro_until=None) -> User:
     user.trial_start_date = None
     user.is_pro = is_pro
     user.pro_until = pro_until
+    user.grace_until = grace_until
     user.timezone = "UTC"
     user.terms_agreed_at = None
     user.privacy_agreed_at = None
