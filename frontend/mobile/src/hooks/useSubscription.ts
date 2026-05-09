@@ -29,6 +29,13 @@ export function useSubscription() {
   const active = isActivePlan(status);
   const freeEquiv = isFreeEquivalent(status);
 
+  const graceUntil: string | null = user?.grace_until ?? null;
+  const isGracePeriod = graceUntil ? new Date(graceUntil) > new Date() : false;
+  const graceUntilApproaching =
+    graceUntil
+      ? new Date(graceUntil).getTime() - Date.now() < 24 * 60 * 60 * 1000 && isGracePeriod
+      : false;
+
   return {
     user,
     isLoading,
@@ -43,5 +50,8 @@ export function useSubscription() {
     dailyQuotaResetsAt: user?.daily_quota_resets_at ?? null,
     bannerAlert: user?.banner_alert ?? null,
     trialDaysRemaining: trialDaysRemaining(user?.trial_start_date ?? null),
+    graceUntil,
+    isGracePeriod,
+    graceUntilApproaching,
   };
 }

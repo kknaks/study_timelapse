@@ -2,9 +2,10 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getMe } from '../src/api/user';
 import type { User } from '../src/types';
+import { configurePurchases, loginRevenueCat } from '../src/lib/purchases';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +20,7 @@ function RouteGuard() {
   const { isReady, isLoggedIn } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const rcLoggedInRef = useRef(false);
 
   const { data } = useQuery({
     queryKey: ['me'],
@@ -30,6 +32,13 @@ function RouteGuard() {
   const inOnboarding = segments[0] === 'onboarding';
   const inLogin = segments[0] === 'login';
   const inLegal = segments[0] === 'legal';
+
+  // auto-restore: call RevenueCat logIn when existing token + user is loaded
+  useEffect(() => {
+    if (!isLoggedIn || !user?.id || rcLoggedInRef.current) return;
+    rcLoggedInRef.current = true;
+    void loginRevenueCat(user.id);
+  }, [isLoggedIn, user?.id]);
 
   useEffect(() => {
     if (!isReady || !isLoggedIn) return;
@@ -44,6 +53,10 @@ function RouteGuard() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    configurePurchases();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <QueryClientProvider client={queryClient}>

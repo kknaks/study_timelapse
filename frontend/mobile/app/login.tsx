@@ -8,6 +8,7 @@ import { tokenStore } from '../src/auth/tokenStore';
 import { useAuth } from '../src/auth/AuthContext';
 import { useState } from 'react';
 import Constants from 'expo-constants';
+import { loginRevenueCat } from '../src/lib/purchases';
 
 GoogleSignin.configure({
   iosClientId: '804697996965-2nen6lpvc0pgt2vas6vbai5hl9i4ufjk.apps.googleusercontent.com',
@@ -47,6 +48,7 @@ export default function LoginScreen() {
       });
       const { access_token, refresh_token } = res.data.data.tokens;
       await tokenStore.saveTokens(access_token, refresh_token);
+      void loginRevenueCat(res.data.data.user.id);
       setLoggedIn(true);
       queryClient.invalidateQueries();
       if (res.data.data.user.is_new) {

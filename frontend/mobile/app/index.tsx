@@ -11,11 +11,12 @@ import { useEffect } from 'react';
 import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
 import { useSubscription } from '../src/hooks/useSubscription';
 import { TrialExpiringBanner } from '../src/components/TrialExpiringBanner';
+import { GraceWarningBanner } from '../src/components/GraceWarningBanner';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { isReady, isLoggedIn } = useAuth();
-  const { bannerAlert } = useSubscription();
+  const { bannerAlert, isGracePeriod, graceUntil } = useSubscription();
 
   useEffect(() => {
     if (isReady && !isLoggedIn) {
@@ -49,6 +50,10 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Grace period 배너 — 결제 수단 확인 필요 시 표시 */}
+      {isGracePeriod && graceUntil ? (
+        <GraceWarningBanner expiresAt={graceUntil} />
+      ) : null}
       {/* Trial 만료 배너 — banner_alert 24h/1h 시 표시. 나중에 주석 처리 가능 */}
       <TrialExpiringBanner
         bannerAlert={bannerAlert}

@@ -23,6 +23,7 @@ import type { User, WeeklyStats } from '../src/types';
 import { formatDurationCompact, formatWeeklyHours } from '../src/utils/timeFormat';
 import { useSubscription } from '../src/hooks/useSubscription';
 import { SubscriptionBadge } from '../src/components/SubscriptionBadge';
+import { syncSubscription } from '../src/api/subscription';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_NAMES = [
@@ -60,6 +61,8 @@ export default function StatsScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [timerAlert, setTimerAlert] = useState(true);
   const [editingName, setEditingName] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const lastSyncRef = useRef<number>(0);
   const { status: subscriptionStatus, trialDaysRemaining } = useSubscription();
   const [nameInput, setNameInput] = useState('');
   const cellRefs = useRef<Map<string, View>>(new Map());
@@ -76,6 +79,26 @@ export default function StatsScreen() {
   });
 
   const { setLoggedIn } = useAuth();
+
+  const handleSyncSubscription = async () => {
+    const now = Date.now();
+    const COOLDOWN_MS = 30_000;
+    if (now - lastSyncRef.current < COOLDOWN_MS) {
+      Alert.alert('', 'Please wait 30 seconds before syncing again.');
+      return;
+    }
+    setSyncing(true);
+    lastSyncRef.current = now;
+    try {
+      await syncSubscription();
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      Alert.alert('', 'Subscription status updated.');
+    } catch {
+      Alert.alert('', 'Failed to sync. Please try again later.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -430,6 +453,19 @@ export default function StatsScreen() {
                 <Text style={styles.upgradeBtnText}>Upgrade Now →</Text>
               </TouchableOpacity>
             </View>
+
+            <View style={styles.settingsDivider} />
+
+            {/* 구독 상태 새로고침 */}
+            <TouchableOpacity
+              style={[styles.syncRow, syncing && styles.syncRowDisabled]}
+              onPress={handleSyncSubscription}
+              disabled={syncing}
+            >
+              <Text style={styles.syncText}>
+                {syncing ? 'Syncing...' : 'Refresh Subscription Status'}
+              </Text>
+            </TouchableOpacity>
 
             <View style={styles.settingsDivider} />
 
@@ -855,6 +891,18 @@ const styles = StyleSheet.create({
   settingsSaveText: { fontSize: 13, fontWeight: '600', color: '#1a1a1a' },
   settingsCancelText: { fontSize: 13, color: COLORS.textSecondary },
   settingsEditText: { fontSize: 12, color: COLORS.textSecondary },
+  syncRow: {
+    paddingVertical: 4,
+    alignItems: 'center' as const,
+  },
+  syncRowDisabled: {
+    opacity: 0.4,
+  },
+  syncText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1a1a',
+  },
   signOutRow: {
     paddingVertical: 4,
     alignItems: 'center' as const,

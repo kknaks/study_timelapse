@@ -1,12 +1,24 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../src/auth/AuthContext';
-import { mockPurchase } from '../src/api/subscription';
+import { mockPurchase, verifySubscription } from '../src/api/subscription';
+import { isRevenueCatConfigured } from '../src/lib/purchases';
 import { useSubscription } from '../src/hooks/useSubscription';
 import { s } from '../src/constants/strings';
 import axios from 'axios';
+
+// react-native-purchases is native-only; guarded below
+let Purchases: typeof import('react-native-purchases').default | null = null;
+let INTRO_ELIGIBILITY_STATUS: typeof import('react-native-purchases').INTRO_ELIGIBILITY_STATUS | null = null;
+if (Platform.OS !== 'web') {
+  const rcModule = require('react-native-purchases');
+  Purchases = rcModule.default;
+  INTRO_ELIGIBILITY_STATUS = rcModule.INTRO_ELIGIBILITY_STATUS;
+}
+
+const MONTHLY_PRODUCT_ID = 'com.studytimelapse.monthly';
 
 type FeatureRow = { label: string; free: string; pro: string };
 
@@ -23,11 +35,27 @@ export default function PaywallScreen() {
   const { isLoggedIn } = useAuth();
   const { user } = useSubscription();
   const [loading, setLoading] = useState(false);
+  const [introEligible, setIntroEligible] = useState(false);
 
-  // 가입 시 무조건 동의 방식 채택 — 이미 동의한 사용자는 재노출 불필요.
-  // terms_agreed_at 이 null 인 경우(비정상 케이스): /legal/terms 로 redirect 처리는
-  // backend 의 402/403 TERMS_NOT_AGREED 응답에서 catch.
-  const termsAlreadyAgreed = !!user?.terms_agreed_at;
+  // All hooks must be called before any conditional return (Rules of Hooks)
+  useEffect(() => {
+    if (!isLoggedIn || Platform.OS === 'web' || !Purchases || !isRevenueCatConfigured()) return;
+
+    Purchases.getOfferings()
+      .then((offerings) => {
+        const current = offerings.current;
+        if (!current) return;
+
+        const productIds = current.availablePackages.map((p) => p.product.identifier);
+        return Purchases!.checkTrialOrIntroductoryPriceEligibility(productIds).then((eligibilityMap) => {
+          const result = eligibilityMap[MONTHLY_PRODUCT_ID];
+          setIntroEligible(
+            result?.status === INTRO_ELIGIBILITY_STATUS!.INTRO_ELIGIBILITY_STATUS_ELIGIBLE,
+          );
+        });
+      })
+      .catch(() => setIntroEligible(false));
+  }, [isLoggedIn]);
 
   // adr-13: 미인증 사용자는 로그인 화면으로 redirect
   if (!isLoggedIn) {
@@ -54,26 +82,64 @@ export default function PaywallScreen() {
   const handleSubscribe = async () => {
     setLoading(true);
     try {
-      const res = await mockPurchase('monthly');
-      const data = res.data?.data ?? (res.data as unknown as { success: boolean; idempotent: boolean });
-      await queryClient.invalidateQueries({ queryKey: ['me'] });
-
-      if (data.idempotent) {
-        Alert.alert('', s.paywall.alreadySubscribed, [
-          { text: '확인', onPress: () => router.replace('/') },
-        ]);
-      } else {
-        Alert.alert('', s.paywall.subscribed, [
-          { text: '확인', onPress: () => router.replace('/') },
-        ]);
+      // RC not configured (staging mode): fall back to mock-purchase
+      if (Platform.OS === 'web' || !Purchases || !isRevenueCatConfigured()) {
+        const res = await mockPurchase('monthly');
+        const data = res.data?.data ?? (res.data as unknown as { success: boolean; idempotent: boolean });
+        await queryClient.invalidateQueries({ queryKey: ['me'] });
+        if (data.idempotent) {
+          Alert.alert('', s.paywall.alreadySubscribed, [{ text: '확인', onPress: () => router.replace('/') }]);
+        } else {
+          Alert.alert('', s.paywall.subscribed, [{ text: '확인', onPress: () => router.replace('/') }]);
+        }
+        return;
       }
-    } catch (err) {
+
+      // Phase 2: RevenueCat SDK 구매 플로우
+      const offerings = await Purchases.getOfferings();
+      const monthlyPackage = offerings.current?.availablePackages.find(
+        (p) => p.product.identifier === MONTHLY_PRODUCT_ID,
+      );
+      if (!monthlyPackage) {
+        Alert.alert('오류', '상품 정보를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.');
+        return;
+      }
+
+      const { customerInfo, transaction } = await Purchases.purchasePackage(monthlyPackage);
+      const transactionId = transaction?.transactionIdentifier ?? customerInfo.originalAppUserId;
+
+      // verify with backend (adr-15 A: 1회 재시도)
+      const verifyPayload = {
+        app_user_id: user!.id,
+        transaction_id: transactionId,
+        product_identifier: MONTHLY_PRODUCT_ID,
+      };
+      try {
+        await verifySubscription(verifyPayload);
+      } catch {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await verifySubscription(verifyPayload);
+        } catch {
+          // 재시도도 실패 → webhook 이 이후 갱신. 사용자에게 안내 후 닫기
+          Alert.alert('', '결제 처리 중입니다. 잠시 후 자동으로 구독이 적용됩니다.');
+          await queryClient.invalidateQueries({ queryKey: ['me'] });
+          router.dismiss();
+          return;
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      Alert.alert('', s.paywall.subscribed, [{ text: '확인', onPress: () => router.replace('/') }]);
+    } catch (err: any) {
+      // purchasePackage: 사용자 취소 → 무시
+      if (err?.userCancelled === true) return;
+
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;
         const code = err.response?.data?.error_code ?? err.response?.data?.detail;
 
         if ((status === 402 || status === 403) && code === 'TERMS_NOT_AGREED') {
-          // T-010 약관 화면으로 redirect (화면 준비 전까지 alert fallback)
           Alert.alert('약관 동의 필요', s.paywall.termsNotAgreed, [
             { text: '확인', onPress: () => router.push('/terms') },
           ]);
@@ -135,8 +201,10 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {/* Trial note */}
-        <Text style={styles.trialNote}>{s.paywall.featureTrial}</Text>
+        {/* Trial note — introductory offer 대상자에게만 표시 */}
+        {introEligible ? (
+          <Text style={styles.trialNote}>{s.paywall.featureTrial}</Text>
+        ) : null}
 
         {/* CTA */}
         <TouchableOpacity

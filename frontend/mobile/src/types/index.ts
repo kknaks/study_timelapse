@@ -13,6 +13,7 @@ export interface User {
   // V2 fields
   trial_start_date: string | null;
   pro_until: string | null;
+  grace_until: string | null;
   timezone: string | null;
   terms_agreed_at: string | null;
   privacy_agreed_at: string | null;
