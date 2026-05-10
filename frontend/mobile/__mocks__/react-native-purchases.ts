@@ -30,7 +30,7 @@ const Purchases = {
       availablePackages: [
         {
           identifier: '$rc_monthly',
-          product: { identifier: 'com.studytimelapse.monthly' },
+          product: { identifier: 'com.kknaks.studytimelapse.monthly' },
         },
       ],
     },
@@ -38,13 +38,13 @@ const Purchases = {
   }),
 
   purchasePackage: jest.fn().mockResolvedValue({
-    productIdentifier: 'com.studytimelapse.monthly',
+    productIdentifier: 'com.kknaks.studytimelapse.monthly',
     customerInfo: {
       originalAppUserId: 'mock-user-id',
       entitlements: {
         active: {
           pro_access: {
-            productIdentifier: 'com.studytimelapse.monthly',
+            productIdentifier: 'com.kknaks.studytimelapse.monthly',
             isActive: true,
           },
         },
@@ -52,14 +52,14 @@ const Purchases = {
     },
     transaction: {
       transactionIdentifier: 'mock-transaction-id',
-      productIdentifier: 'com.studytimelapse.monthly',
+      productIdentifier: 'com.kknaks.studytimelapse.monthly',
       purchaseDate: new Date().toISOString(),
       purchaseToken: null,
     },
   }),
 
   checkTrialOrIntroductoryPriceEligibility: jest.fn().mockResolvedValue({
-    'com.studytimelapse.monthly': {
+    'com.kknaks.studytimelapse.monthly': {
       status: INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE,
       description: 'Eligible',
     },

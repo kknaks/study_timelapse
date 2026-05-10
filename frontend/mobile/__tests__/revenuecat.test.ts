@@ -78,7 +78,7 @@ describe('verifySubscription', () => {
     const payload = {
       app_user_id: 'user-uuid-123',
       transaction_id: 'rc-transaction-456',
-      product_identifier: 'com.studytimelapse.monthly',
+      product_identifier: 'com.kknaks.studytimelapse.monthly',
     };
     await verifySubscription(payload);
 
@@ -91,7 +91,7 @@ describe('verifySubscription', () => {
     await verifySubscription({
       app_user_id: 'u1',
       transaction_id: 'txn1',
-      product_identifier: 'com.studytimelapse.monthly',
+      product_identifier: 'com.kknaks.studytimelapse.monthly',
     });
 
     const calledWith = mockPost.mock.calls[0][1];

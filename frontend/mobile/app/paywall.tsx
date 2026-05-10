@@ -18,7 +18,7 @@ if (Platform.OS !== 'web') {
   INTRO_ELIGIBILITY_STATUS = rcModule.INTRO_ELIGIBILITY_STATUS;
 }
 
-const MONTHLY_PRODUCT_ID = 'com.studytimelapse.monthly';
+const MONTHLY_PRODUCT_ID = 'com.kknaks.studytimelapse.monthly';
 
 type FeatureRow = { label: string; free: string; pro: string };
 
