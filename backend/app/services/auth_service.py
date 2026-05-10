@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 import httpx
 import jwt as pyjwt
@@ -137,7 +137,6 @@ async def get_or_create_user(
         return user, False
 
     now_utc = datetime.utcnow()
-    today_utc = date.today()
 
     user = User(
         id=uuid.uuid4(),
@@ -145,23 +144,15 @@ async def get_or_create_user(
         provider_id=provider_id,
         email=email,
         name=name,
-        subscription_status="trial",
-        trial_start_date=today_utc,
-        is_pro=True,
+        subscription_status="free",
+        trial_start_date=None,
+        is_pro=False,
         timezone=timezone_str,
         terms_agreed_at=now_utc if terms_agreed else None,
         privacy_agreed_at=now_utc if privacy_agreed else None,
     )
     db.add(user)
     await db.flush()
-
-    event_repo = SubscriptionEventRepository(db)
-    await event_repo.create(
-        user_id=user.id,
-        event_type="trial_started",
-        source="system",
-        plan="monthly",
-    )
 
     return user, True
 
