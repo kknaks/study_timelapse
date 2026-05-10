@@ -13,6 +13,7 @@ sources:
 related_to:
   - "[[spec-04-subscription-api]]"
   - "[[spec-05-subscription-data-model]]"
+  - "[[spec-06-revenuecat-integration]]"
 tags: [spec, payment, subscription, state-machine, trial, timezone]
 ---
 

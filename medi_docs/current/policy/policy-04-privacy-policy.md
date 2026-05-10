@@ -4,14 +4,18 @@ type: policy
 title: 개인정보처리방침 (초안 — 법무 검토 전)
 status: draft
 created: 2026-05-06
-updated: 2026-05-07
+updated: 2026-05-09
 sources:
   - "[[plan-03-payment-roadmap]]"
+  - "[[plan-04-revenuecat-roadmap]]"
   - "[[adr-13-anonymous-paywall-and-terms]]"
+  - "[[adr-16-introductory-offer-and-auto-renewal]]"
+  - "[[adr-17-refund-policy-store-delegation]]"
 related_to:
   - "[[policy-03-terms-of-service]]"
   - "[[policy-05-subscription-refund]]"
 tags: [policy, payment, legal, privacy, draft]
+legal_review: pending
 ---
 
 # 개인정보처리방침 (초안 — 법무 검토 전)
@@ -100,8 +104,8 @@ tags: [policy, payment, legal, privacy, draft]
 |---------|---------|---------|-------|
 | **Apple Inc.** | OAuth 인증 토큰 | 소셜 로그인 처리 | 1, 2 |
 | **Google LLC** | OAuth 인증 토큰 | 소셜 로그인 처리 | 1, 2 |
-| **RevenueCat Inc.** | 사용자 식별자(UUID), 구독 이벤트 | 결제 처리 및 영수증 검증 | **2 부터** |
-| **[TBD: 클라우드 서버 호스팅사]** | 서버 내 저장 데이터 | 서비스 인프라 운영 | 1, 2 |
+| **RevenueCat Inc.** | 사용자 식별자(UUID), 구독 이벤트, 영수증 메타데이터 | 결제 처리·영수증 검증·구독 상태 관리 | **2 부터** |
+| **AWS (Amazon Web Services, Inc.)** — ap-northeast-2 (서울) 리전 | 서버 내 저장 데이터 | 서비스 인프라 운영 | 1, 2 |
 
 > **국외 이전**: Apple (미국), Google (미국), RevenueCat (미국) 에 데이터가 이전됩니다. 각 사의 개인정보처리방침을 병행 확인하십시오.
 
@@ -113,7 +117,10 @@ Phase 2 부터 RevenueCat Inc. (미국)에 구독 처리 목적으로 개인정�
 
 | 이전 대상 | 국가 | 이전 항목 | 이전 목적 | 보유 기간 |
 |---------|------|---------|---------|---------|
-| RevenueCat Inc. | 미국 | 사용자 UUID, 구독 이벤트 | 결제 처리 및 영수증 검증 | RevenueCat 정책에 따름 |
+| RevenueCat Inc. | 미국 | 사용자 UUID, 구독 이벤트, 영수증 메타데이터 | 결제 처리·영수증 검증·구독 상태 관리 | RevenueCat 정책에 따름 |
+| Apple Inc. | 미국 | OAuth 인증 토큰, 인앱 결제 영수증 | 소셜 로그인·결제 처리 (Phase 2 스토어 환불 위임 포함) | Apple 정책에 따름 |
+| Google LLC | 미국 | OAuth 인증 토큰, 인앱 결제 영수증 | 소셜 로그인·결제 처리 (Phase 2 스토어 환불 위임 포함) | Google 정책에 따름 |
+| AWS (Amazon Web Services, Inc.) | 미국 — 한국 리전(ap-northeast-2) 처리 | 서버 내 저장 데이터 | 서비스 인프라 운영 | 서비스 탈퇴 시 삭제 / 법적 보존 기간 |
 
 > [법무 검토 항목] EU/EEA 사용자 대상 서비스 시 GDPR 준수 여부 별도 검토 필요.
 
@@ -138,7 +145,7 @@ Phase 2 부터 RevenueCat Inc. (미국)에 구독 처리 목적으로 개인정�
 ## 제7조 (쿠키·트래킹)
 
 - **모바일 앱 특성상 쿠키 미사용**
-- 앱 내 분석 도구: [TBD: 분석 SDK 사용 여부 결정 (Amplitude, Firebase 등)]
+- 앱 내 분석 도구: **미도입.** 별도 분석 SDK 를 사용하지 않으며, RevenueCat 결제 데이터와 자체 서버 로그만 사용합니다.
 - 광고 추적 (IDFA/GAID): 현재 미사용. 사용 시 별도 동의 획득.
 
 ---
@@ -167,6 +174,8 @@ Phase 2 부터 RevenueCat Inc. (미국)에 구독 처리 목적으로 개인정�
 
 ## 부칙
 
-- **시행일**: [TBD: Phase 2 출시일]
-- **최종 수정일**: 2026-05-07 (초안)
-- **버전**: v0.1 (초안)
+- **시행일**: 2026-05-31 (Phase 2 출시 목표일 기준. 변경 시 별도 고지)
+- **최종 수정일**: 2026-05-09 (Phase 2 RevenueCat 데이터 처리 위탁·국외 이전 항목 보강)
+- **버전**: v0.2 (초안)
+
+> **주의**: 이 문서는 초안입니다. 실제 서비스에 적용 전 반드시 법무 검토를 받으십시오.

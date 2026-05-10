@@ -4,15 +4,20 @@ type: policy
 title: 구독 환불 정책 (초안 — 법무 검토 전)
 status: draft
 created: 2026-05-06
-updated: 2026-05-07
+updated: 2026-05-09
 sources:
   - "[[plan-03-payment-roadmap]]"
+  - "[[plan-04-revenuecat-roadmap]]"
   - "[[adr-13-anonymous-paywall-and-terms]]"
+  - "[[adr-17-refund-policy-store-delegation]]"
+  - "[[adr-19-grace-period-handling]]"
+  - "[[adr-21-cancel-vs-refund-state-transition]]"
 related_to:
   - "[[policy-03-terms-of-service]]"
   - "[[policy-04-privacy-policy]]"
   - "[[policy-02-trial]]"
 tags: [policy, payment, legal, refund, subscription, draft]
+legal_review: pending
 ---
 
 # 구독 환불 정책 (초안 — 법무 검토 전)
@@ -54,9 +59,10 @@ study_timelapse Pro 구독 환불 정책 초안. Phase 1 mock-purchase 에서는
 ## 제3조 (자동 갱신)
 
 - **Phase 2 부터 적용**: 구독 만료 전 자동으로 구독료가 청구됩니다.
-- **갱신 24시간 전**: 앱 내 알림으로 갱신 예정 사실 안내
-- **해지**: 언제든지 Apple App Store 또는 Google Play Store 의 구독 관리 화면에서 해지 가능
-- 해지 후에도 현재 구독 기간 만료 시까지 Pro 기능 이용 가능 (`cancelled` 상태 — policy-02 참조)
+- **14일 전 사전 고지**: 갱신일 14일 전 앱 내 알림으로 갱신 예정 사실을 고지합니다. (한국 전자상거래법 의무)
+- **갱신 24시간 전**: 갱신 24시간 전 자동 결제 처리.
+- **해지**: 언제든지 Apple App Store 또는 Google Play Store 의 구독 관리 화면에서 해지 가능. 갱신일 24시간 전까지 해지해야 다음 주기 결제가 발생하지 않습니다.
+- **해지 후 기능**: 해지 후에도 현재 구독 기간 만료 시까지 Pro 기능 이용 가능. (adr-21: 자발적 취소 = `cancelled` 상태 + `pro_until` 까지 Pro 유지)
 
 ---
 
@@ -89,21 +95,43 @@ study_timelapse Pro 구독 환불 정책 초안. Phase 1 mock-purchase 에서는
 
 ### 5-2. 환불 절차 (Phase 2)
 
+**환불은 Apple App Store 또는 Google Play Store 정책에 따라 처리됩니다. 회사는 직접 환불을 수행하지 않습니다.** (adr-17 D-PLAN-2-4 A)
+
 1. **Apple App Store 구독**: App Store → [본인 계정] → [구독] → 환불 신청
    - 또는 reportaproblem.apple.com 에서 신청
 2. **Google Play Store 구독**: Google Play → [주문 내역] → 환불 요청
-3. **회사 직접 요청**: support@summerstar.example *(예시)* 로 환불 요청 시 각 스토어에 대리 신청 지원
+3. **환불 문의**: 환불 관련 문의는 각 스토어 고객센터를 통해 진행하십시오. 회사 고객지원 (support@summerstar.example *(예시)*) 으로 문의 시 스토어 안내를 제공합니다.
 
-> 각 플랫폼(Apple/Google)의 환불 정책이 우선 적용됩니다.
+### 5-3. 환불 처리 후 서비스 상태
+
+| 사유 | subscription_status | Pro 기능 |
+|------|---------------------|---------|
+| **스토어 환불 처리** | `cancelled` 즉시 전환 | Pro 권한 즉시 박탈 |
+| **자발적 취소** (갱신 안 함) | `cancelled` 기록 | `pro_until` 만료일까지 Pro 유지 |
+
+> 스토어에서 환불 처리 시 RevenueCat `REFUND` 이벤트가 수신되며, 회사 서비스 내 Pro 권한이 즉시 해제됩니다. (adr-21)
 
 ---
 
 ## 제6조 (부분 환불·잔여 일수)
 
-- **Phase 2 기준**: 구독 기간 중 해지 시 잔여 일수에 대한 **일할 계산 환불은 현재 비제공** 원칙.
-  - 이유: Apple/Google 인앱 결제 구조상 일할 환불이 스토어 정책에 따라 결정됨.
+- **일할 환불 비제공**: 구독 기간 중 자발적 해지 시 잔여 일수에 대한 일할 계산 환불은 제공하지 않습니다. (adr-17 D-PLAN-2-4 A, TBD-5 확정)
+  - 이유: Apple/Google 인앱 결제 구조상 일할 환불 처리 주체는 스토어이며, 회사는 직접 개입하지 않습니다.
   - 해지 후에도 현재 구독 기간 만료 시까지 Pro 기능 이용 가능.
-- **[TBD: 법무 검토 후]** 서비스 장애로 인한 서비스 불능 기간에 대한 일할 보상 정책 수립 검토.
+- **서비스 장애 보상**: 회사 귀책 서비스 장애에 대한 보상 정책은 법무 검토 후 별도 수립.
+
+## 제6조의2 (결제 수단 문제 — Grace Period)
+
+결제 갱신 실패(카드 만료, 한도 초과 등) 시 Apple/Google이 부여하는 grace period 동안 Pro 기능이 유지됩니다. (adr-19)
+
+| 플랫폼 | Grace Period 최대 기간 |
+|--------|----------------------|
+| Apple App Store | 최대 16일 |
+| Google Play Store | 최대 30일 |
+
+- **Grace period 중**: Pro 기능 유지. 앱 내 "결제 수단을 업데이트해주세요" 안내 배너 표시.
+- **Grace period 내 결제 수단 업데이트 시**: 갱신 성공, Pro 계속 유지.
+- **Grace period 만료 후 미업데이트 시**: `subscription_status='expired'` 전환, Pro 기능 해제.
 
 ---
 
@@ -120,15 +148,15 @@ study_timelapse Pro 구독 환불 정책 초안. Phase 1 mock-purchase 에서는
 
 1. **1차**: 고객지원 이메일 (support@summerstar.example *(예시)*) 로 문의
 2. **2차**: 한국소비자원 (www.kca.go.kr) 또는 전자문서·전자거래 분쟁조정위원회에 조정 신청
-3. **3차**: 법원 — 준거법 대한민국법, 관할 법원 [TBD: 회사 소재지 관할 법원]
+3. **3차**: 법원 — 준거법 대한민국법, 관할 법원은 **서울중앙지방법원**으로 합니다.
 
 ---
 
 ## 부칙
 
-- **시행일**: [TBD: Phase 2 실제 결제 도입 시]
-- **최종 수정일**: 2026-05-07 (초안)
-- **버전**: v0.1 (초안)
+- **시행일**: 2026-05-31 (Phase 2 출시 목표일 기준. 변경 시 별도 고지)
+- **최종 수정일**: 2026-05-09 (스토어 위임 환불·grace period·취소 상태 전환 조항 갱신)
+- **버전**: v0.2 (초안)
 
 ---
 

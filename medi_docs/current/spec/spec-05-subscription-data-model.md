@@ -14,6 +14,7 @@ sources:
 related_to:
   - "[[spec-03-subscription-state-machine]]"
   - "[[spec-04-subscription-api]]"
+  - "[[spec-06-revenuecat-integration]]"
 tags: [spec, payment, subscription, data-model, alembic, database]
 ---
 

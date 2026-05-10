@@ -4,16 +4,20 @@ type: policy
 title: 이용약관 (초안 — 법무 검토 전)
 status: draft
 created: 2026-05-06
-updated: 2026-05-07
+updated: 2026-05-09
 sources:
   - "[[plan-03-payment-roadmap]]"
+  - "[[plan-04-revenuecat-roadmap]]"
   - "[[adr-13-anonymous-paywall-and-terms]]"
+  - "[[adr-16-introductory-offer-and-auto-renewal]]"
+  - "[[adr-17-refund-policy-store-delegation]]"
 related_to:
   - "[[policy-01-daily-quota]]"
   - "[[policy-02-trial]]"
   - "[[policy-04-privacy-policy]]"
   - "[[policy-05-subscription-refund]]"
 tags: [policy, payment, legal, terms, draft]
+legal_review: pending
 ---
 
 # 이용약관 (초안 — 법무 검토 전)
@@ -91,11 +95,28 @@ study_timelapse 서비스 이용약관 초안. 한국 약관규제법·전자상
 
 ## 제7조 (유료 서비스)
 
-1. **구독 플랜**: 현재 Pro 구독 (월 $1.99) 1종. [TBD: Phase 2 에서 연 플랜 추가 여부 재검토]
+1. **구독 플랜**: 현재 Pro 구독 (월 $1.99) 1종. (연간 플랜은 Phase 2 이후 재검토)
 2. **Phase 1 결제**: 테스트 목적의 내부 결제 흐름으로, 실제 결제가 발생하지 않습니다. 정식 결제는 Phase 2 에서 App Store / Google Play 를 통해 이루어집니다.
-3. **자동 갱신**: Phase 2 부터 적용. 구독 만료 전 자동 갱신되며, 갱신 24시간 전 알림 제공.
-4. **구독 해지**: [TBD: Phase 2 App Store / Google Play 구독 관리 방법 안내]
-5. **환불**: 별도 구독 환불 정책 (policy-05-subscription-refund) 을 따릅니다.
+3. **자동 갱신**: Phase 2 부터 적용. 상세 내용은 아래 [자동 갱신 안내] 참조.
+4. **구독 해지**: Apple App Store 또는 Google Play Store 의 구독 관리 화면에서 직접 해지할 수 있습니다. 해지 후에도 현재 구독 기간 만료 시까지 Pro 기능 이용 가능합니다.
+5. **환불**: 환불은 Apple App Store / Google Play Store 의 환불 정책에 따라 처리됩니다. 회사는 직접 환불을 수행하지 않습니다. 자세한 내용은 별도 구독 환불 정책 (policy-05-subscription-refund) 을 참조하십시오.
+
+---
+
+### [자동 갱신 안내]
+
+본 서비스의 유료 구독(Pro)은 다음과 같이 자동 갱신됩니다:
+
+| 항목 | 내용 |
+|------|------|
+| 갱신 주기 | 매월 (구매일 기준) |
+| 갱신 금액 | USD $1.99 (스토어 환율에 따라 원화 청구) |
+| 갱신 시점 | 매월 만료 24시간 전 자동 결제 |
+| 사전 고지 | 갱신일 **14일 전** 앱 내 알림으로 안내 (한국 전자상거래법 의무) |
+| 취소 방법 | Apple App Store / Google Play 의 구독 관리 화면에서 직접 취소 |
+| 취소 시점 | 갱신일 24시간 전까지 취소해야 다음 주기 결제가 발생하지 않음 |
+
+> **한국 전자상거래법 고지**: 본 서비스는 전자상거래 등에서의 소비자보호에 관한 법률에 따라 자동 결제 갱신일 14일 전에 앱 내 알림으로 갱신 예정 사실을 고지합니다.
 
 ---
 
@@ -111,15 +132,16 @@ study_timelapse 서비스 이용약관 초안. 한국 약관규제법·전자상
 ## 제9조 (분쟁 해결)
 
 1. **준거법**: 이 약관은 대한민국 법률에 따라 해석됩니다.
-2. **관할 법원**: 분쟁 발생 시 회사 소재지 관할 법원을 전속 관할로 합니다. [TBD: 회사 소재지 확정 후 법원명 명시]
+2. **관할 법원**: 분쟁 발생 시 **서울중앙지방법원**을 전속 관할로 합니다.
 3. **분쟁 조정**: 소비자와 회사 간 분쟁은 한국소비자원 또는 전자문서·전자거래 분쟁조정위원회에 조정을 신청할 수 있습니다.
 
 ---
 
 ## 부칙
 
-- **시행일**: [TBD: Phase 2 출시일]
-- **최종 수정일**: 2026-05-07 (초안)
+- **시행일**: 2026-05-31 (Phase 2 출시 목표일 기준. 변경 시 별도 고지)
+- **자동 갱신 14일 사전 고지 시작**: 2026-05-17
+- **최종 수정일**: 2026-05-09 (Phase 2 자동 갱신·환불 조항 갱신)
 - **연락처**: support@summerstar.example *(예시 — 정식 도메인 등록 후 교체)*
 - **회사 정보**:
   - 회사명: Summer Star company

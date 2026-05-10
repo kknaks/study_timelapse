@@ -13,6 +13,7 @@ sources:
 related_to:
   - "[[spec-03-subscription-state-machine]]"
   - "[[spec-05-subscription-data-model]]"
+  - "[[spec-06-revenuecat-integration]]"
 tags: [spec, payment, subscription, api, rest, mock-purchase]
 ---
 
