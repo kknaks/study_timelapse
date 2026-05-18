@@ -128,7 +128,7 @@ export default function ResultScreen() {
   ];
 
   const handleSave = () => {
-    router.push({
+    router.replace({
       pathname: '/saving',
       params: {
         overlayStyle,
