@@ -83,19 +83,20 @@ stopCapture(): Promise<CaptureResult>
 interface StitchOptions {
   captureDir: string;       // 캡처 디렉토리 (frame_NNNNN.jpg 시퀀스)
   outputPath: string;       // 출력 MP4 경로
-  outputSec: number;        // 목표 출력 길이
-  outputFps: number;        // 출력 FPS
-  aspectRatio: string;      // 해상도 결정용
-  overlayStyle: 'none' | 'timer' | 'progress' | 'streak';
+  width: number;            // 출력 해상도 너비 (호출측에서 aspectRatio 기반 사전 계산)
+  height: number;           // 출력 해상도 높이
+  outputFps: number;        // 출력 FPS (D-SPEC-2-3: 30 고정)
+  overlayStyle: 'none' | 'timer-up' | 'timer-down' | 'progress' | 'streak';
+  // 'timer-up': 경과시간 카운트업, 'timer-down': 남은시간 카운트다운
   overlayMeta: {
     recordingSec: number;
     goalSec: number;
+    outputSec: number;      // 목표 출력 길이
     streak: number;
-    timerMode: 'countdown' | 'countup';
     logoPath?: string;
-    overlayLayoutJson?: string;
+    showAppMark: boolean;   // 워터마크 표시 여부 (Free=true, Pro/Trial=false)
   };
-  // D-SPEC-2-1: 'none' 이면 오버레이 없이 preview stitch, 기타면 burn-in
+  // D-SPEC-2-1: 'none' 이면 timer/progress/streak 없이 stitch (logo는 showAppMark로 별도 제어)
 }
 
 // 타임랩스 합성 (generating + saving 양쪽에서 호출)

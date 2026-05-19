@@ -169,6 +169,7 @@ export default function SavingScreen() {
       // ── Step 2: 갤러리 저장 ──
       setActive(idx);
       await MediaLibrary.saveToLibraryAsync(finalPath);
+      FileSystem.deleteAsync(finalPath, { idempotent: true }).catch(() => {});
 
       // 세션 업데이트
       if (sessionId) {

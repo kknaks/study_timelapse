@@ -81,7 +81,7 @@ focus → generating → preview → saving → done 전체 흐름의 상태·�
 | from | event | to | side effects |
 |---|---|---|---|
 | `permission_check` | `system_permission_denied` | `failed` | E4: 권한 거절 메시지 |
-| `recording` | `system_appstate_background` | `cancelled` | captureTimer 정지, idle timer 재활성, captures/ 5분 TTL 시작, 알림 (adr-06) |
+| `recording` | `system_appstate_background` | `paused` | captureTimer 일시정지, 로컬 알림 (adr-06). 포그라운드 복귀 후 resume 버튼으로 재개 가능 |
 | `recording` | `system_disk_low` | `generating` | E3: 경고 후 현재 캡처 장수로 stitch 진행 |
 | `recording` | `system_min_duration_violation` | `recording` | E7: 10초 미만 정지 시도 → 알림 후 recording 유지 |
 | `generating` | `system_stitch_failed` | `failed` | captures/ 5분 TTL 유지 (재시도 가능) |
@@ -145,16 +145,16 @@ focus → generating → preview → saving → done 전체 흐름의 상태·�
 
 | 현재 상태 | 백그라운드 진입 시 동작 | 복귀 시 동작 |
 |---|---|---|
-| `recording` | 즉시 cancelled + captureTimer 정지 + 로컬 알림 | ready 상태. 타임랩스 생성하려면 새 세션 시작 or 5분 TTL 내 재시도 |
-| `paused` | 즉시 cancelled + 로컬 알림 | 동일 |
+| `recording` | captureTimer 일시정지 + 로컬 알림 | `paused` 상태. 포그라운드 복귀 후 resume 버튼으로 재개 가능 |
+| `paused` | 처리 없음 (`isRecording=false` 조건으로 AppState 핸들러 미실행) | 그대로 유지 |
 | `generating` | 계속 진행 (백그라운드 앱 처리 허용, 카메라 미사용) | 진행 중 표시 |
 | `saving` | 계속 진행 (동일) | 진행 중 표시 |
 | `preview` | no-op (캡처 없음) | 그대로 유지 |
 | `done` / `failed` / `cancelled` | no-op | 그대로 유지 |
 
-**화면 잠금 시**: recording/paused → cancelled (카메라 렌즈 차단). idle timer 비활성(adr-06)으로 녹화 중 화면 꺼짐 방지 → 화면 잠금 전까지는 카메라 유지.
+**화면 잠금 시**: `expo-keep-awake` 의 `activateKeepAwakeAsync` 로 녹화 중 화면 자동 잠금 방지. 사용자가 수동 잠금 시 AppState 'inactive' → recording → paused 처리.
 
-**E1 전화 수신**: iOS `AVAudioSession` interruption → AppState 'inactive' 전환으로 처리됨 (recording → cancelled 동일 경로).
+**E1 전화 수신**: iOS AppState 'inactive' 전환 → recording → paused 처리 (AppState 핸들러 `isRecording` 조건 통과 시).
 
 ---
 
@@ -191,7 +191,7 @@ stateDiagram-v2
     recording --> stop_confirming : user_stop_request
     recording --> generating : system_goal_reached
     recording --> generating : system_disk_low(E3)
-    recording --> cancelled : system_appstate_background(adr-06)
+    recording --> paused : system_appstate_background(adr-06)
 
     paused --> recording : user_resume
     paused --> stop_confirming : user_stop_request
